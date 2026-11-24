@@ -22,6 +22,7 @@ addEventListener('keydown',e=>{
     return;
   }
   if(S.mode==='remove'){if(k==='escape')cancelSalvage();return;}
+  if(S.mode==='swap'){if(k==='escape')closeSwap(true);return;}
   if(S.mode==='play'){
     if(k>='1'&&k<='9'){const i=+k-1;if(DECK.hand[i])selectCard(DECK.hand[i].uid);}
     if(k==='q')castNova();

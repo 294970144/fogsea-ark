@@ -41,8 +41,8 @@ function initRun(){
 }
 function mkCard(id){return {uid:DECK.uid++,id};}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=irand(0,i);const t=a[i];a[i]=a[j];a[j]=t;}}
-function drawOne(){
-  if(DECK.hand.length>=DECK.max)return false;
+function drawOne(cap){
+  if(DECK.hand.length>=(cap===undefined?DECK.max:cap))return false;
   if(!DECK.draw.length){
     if(!DECK.discard.length)return false;
     DECK.draw=DECK.discard;DECK.discard=[];shuffle(DECK.draw);
@@ -50,7 +50,7 @@ function drawOne(){
   DECK.hand.push(DECK.draw.pop());S.handDirty=true;return true;
 }
 function drawToFull(){let n=0;while(DECK.hand.length<DECK.max&&drawOne())n++;if(n)sfx('draw');return n;}
-function drawN(n){let c=0;for(let i=0;i<n;i++){if(drawOne())c++;else break;}if(c)sfx('draw');return c;}
+function drawN(n,cap){let c=0;for(let i=0;i<n;i++){if(drawOne(cap))c++;else break;}if(c)sfx('draw');return c;}
 function afford(def){for(const k in def.cost)if(res[k]<def.cost[k])return false;return true;}
 function payCost(def){for(const k in def.cost)res[k]-=def.cost[k];refreshRes();}
 function cardTotal(id){

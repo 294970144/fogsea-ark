@@ -83,6 +83,7 @@ function sfx(n){
     case 'draw':noise(.05,.1,3000,'highpass');tone(700,1000,.06,'sine',.06);break;
     case 'card':tone(420,660,.09,'triangle',.13);noise(.05,.1,2000,'highpass');break;
     case 'salvage':tone(500,180,.22,'sawtooth',.14);noise(.18,.18,900);break;
+    case 'swap':tone(420,700,.1,'sine',.12);tone(700,980,.09,'sine',.08,.06);break;
     case 'heal':[523,784,1046].forEach((f,i)=>tone(f,f,.2,'sine',.12,i*.06));break;
     case 'repair':tone(220,180,.05,'triangle',.2);tone(260,220,.05,'triangle',.2,.09);tone(880,1100,.12,'sine',.1,.18);break;
     case 'coreHit':tone(120,50,.2,'triangle',.3);tone(1200,900,.08,'square',.06);break;

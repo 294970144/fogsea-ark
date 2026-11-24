@@ -79,32 +79,37 @@
 <div class="overlay show" id="menu">
   <div class="scrim"></div>
   <div id="menuPanel">
-    <h1 id="gameTitle">雾海方舟</h1>
-    <div id="gameSub">孤灯不灭</div>
-    <div class="tagRow">
-      <span class="tag">昼夜回合</span><span class="tag">七夜</span>
+    <div class="menuHead">
+      <h1 id="gameTitle">雾海方舟</h1>
+      <div id="gameSub">孤灯不灭</div>
+      <div class="tagRow">
+        <span class="tag">昼夜回合</span><span class="tag">七夜</span>
+      </div>
     </div>
-    <div class="secT">雾潮强度</div>
-    <div id="diffRow"></div>
-    <div class="secT">文明传承</div>
-    <div id="emberRow">
-      <span id="emberCount"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 4-4 6-4 11a4 4 0 008 0c0-2-1-3-1-5 2 1 4 3 4 6a7 7 0 01-14 0C5 8 11 6 12 2z"/></svg><span id="emberNum">0</span> 火种</span>
-      <span id="bestChip"></span>
+    <div class="menuScroll">
+      <div class="secT">雾潮强度</div>
+      <div id="diffRow"></div>
+      <div class="secT">文明传承</div>
+      <div id="emberRow">
+        <span id="emberCount"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 4-4 6-4 11a4 4 0 008 0c0-2-1-3-1-5 2 1 4 3 4 6a7 7 0 01-14 0C5 8 11 6 12 2z"/></svg><span id="emberNum">0</span> 火种</span>
+        <span id="bestChip"></span>
+      </div>
+      <div id="blessList"></div>
+      <div class="secT">操作</div>
+      <div id="ctrlGrid">
+        <div><span class="kb">WASD</span>移动</div>
+        <div><span class="kb">自动</span>挥刃 / 采集</div>
+        <div><span class="kb">拖拽/长按</span>卡牌落地</div>
+        <div><span class="kb">点击</span>选牌再点地</div>
+        <div><span class="kb">空格</span>冲刺<span class="kb">N</span>入夜</div>
+        <div><span class="kb">Q</span>雾爆<span class="kb">F</span>修复</div>
+      </div>
     </div>
-    <div id="blessList"></div>
-    <div class="secT">操作</div>
-    <div id="ctrlGrid">
-      <div><span class="kb">WASD</span>移动</div>
-      <div><span class="kb">自动</span>挥刃 / 采集</div>
-      <div><span class="kb">拖拽/长按</span>卡牌落地</div>
-      <div><span class="kb">点击</span>选牌再点地</div>
-      <div><span class="kb">空格</span>冲刺</div>
-      <div><span class="kb">Q</span>雾爆 · <span class="kb">F</span>修复</div>
-      <div><span class="kb">N</span>提前入夜</div>
+    <div class="menuFoot">
+      <button id="startBtn">启 航</button>
+      <button class="mBtn book" id="btnCodexMenu">图鉴</button>
+      <div id="menuFootNote">黎明抽牌 · 白昼构筑 · 夜晚瞬发</div>
     </div>
-    <button id="startBtn">启 航</button>
-    <button class="mBtn book" id="btnCodexMenu">图鉴</button>
-    <div id="menuFoot">黎明抽牌 · 白昼构筑 · 夜晚瞬发</div>
   </div>
 </div>
 
@@ -128,6 +133,18 @@
     </div>
     <div id="rmList"></div>
     <div class="rmFoot"><button class="skipBtn" id="rmCancel" style="margin:0">取消</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="swapOv" role="dialog" aria-modal="true">
+  <div class="scrim"></div>
+  <div id="removeBox">
+    <div class="rmHead">
+      <h2 id="swapTitle">手牌已满</h2>
+      <p id="swapSub"></p>
+    </div>
+    <div id="swapList"></div>
+    <div class="rmFoot"><button class="skipBtn" id="swapSkip" style="margin:0">跳过</button></div>
   </div>
 </div>
 

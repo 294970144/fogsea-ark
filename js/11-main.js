@@ -4,7 +4,7 @@ function showOv(id,on){$(id).classList.toggle('show',on);}
 function startRun(){
   auInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
   clearInterval(emberTimer);codexOpen=false;
-  ['codexOv','menu','endOv','pauseOv','dawnOv','removeOv'].forEach(id=>showOv(id,false));
+  ['codexOv','menu','endOv','pauseOv','dawnOv','removeOv','swapOv'].forEach(id=>showOv(id,false));
   initRun();S.mode='play';
   UI.hud.classList.remove('hidden');refreshStacks();
   banner('第 1 日','拖动卡牌到地面筑防','');sfx('dawn');
@@ -21,7 +21,7 @@ function skipToNight(){
 }
 function toTitle(){
   S.mode='menu';codexOpen=false;
-  ['pauseOv','endOv','dawnOv','removeOv','codexOv'].forEach(id=>showOv(id,false));
+  ['pauseOv','endOv','dawnOv','removeOv','swapOv','codexOv'].forEach(id=>showOv(id,false));
   UI.hud.classList.add('hidden');initRun();S.nightAmt=.55;refreshMenu();showOv('menu',true);auPhase(false);
 }
 function refreshMenu(){

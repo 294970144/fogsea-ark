@@ -122,6 +122,9 @@ function syncHand(force){
   });
   setTxt(UI.drawN,DECK.draw.length);setTxt(UI.discN,DECK.discard.length);
   setTxt(UI.handN,DECK.hand.length+'/'+DECK.max);setTxt(UI.recN,DECK.recycle+'%');
+  const over=DECK.hand.length>DECK.max;
+  const chip=UI.handN.parentNode;
+  if(chip._over!==over){chip._over=over;chip.classList.toggle('over',over);}
 }
 
 /* ---------------- 出牌 ---------------- */
@@ -220,6 +223,8 @@ function applyInstant(def,tx,ty){
     puff(P.x,P.y,18,'#8fe3d0',2,.7,3);floater(P.x,P.y,'无敌 4s','#8fe3d0',true);sfx('heal');
   }else if(def.id==='tactic'){
     const n=drawN(2);floater(P.x,P.y,'抽 '+n+' 张','#c9a8ff',true);
+    if(n<2&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
+      offerSwap(Math.min(2-n,DECK.hand.length),'战术重整 · 手牌已满');
   }else if(def.id==='surge'){
     P.en=P.maxEn;P.dashCd=0;ring(P.x,P.y,'rgba(87,230,255,.9)',.2,1.6,.4);
     puff(P.x,P.y,16,'#57e6ff',2.5,.6,3);sfx('nova');
@@ -281,6 +286,42 @@ function confirmSalvage(id,rate){
 }
 function cancelSalvage(){S.pendingSalvage=null;S.mode='play';showOv('removeOv',false);}
 $('rmCancel').addEventListener('click',cancelSalvage);
+
+/* 手牌已满：换牌或跳过 */
+function offerSwap(n,reason){
+  if(n<=0||!DECK.hand.length)return;
+  S.swapLeft=n;S.swapReason=reason||'手牌已满';S.mode='swap';renderSwap();showOv('swapOv',true);sfx('page');
+}
+function renderSwap(){
+  $('swapTitle').textContent='手牌已满';
+  $('swapSub').textContent=`${S.swapReason} · 选择一张手牌弃置并补抽 1 张，或跳过（剩余 ${S.swapLeft} 次）`;
+  const list=$('swapList');list.innerHTML='';
+  DECK.hand.forEach(c=>{
+    const d=CDEFS[c.id];
+    const el=document.createElement('button');
+    el.className='rmItem';
+    el.innerHTML=`<span class="ri" style="color:${d.color}">${svg(d.icon,17)}</span>
+      <span class="rt"><b>${d.name}</b><span>${costStr(d.cost)}</span></span>
+      <span class="rf">弃置<br>补抽</span>`;
+    el.addEventListener('click',()=>doSwap(c.uid));
+    list.appendChild(el);
+  });
+}
+function doSwap(uid){
+  const i=DECK.hand.findIndex(c=>c.uid===uid);if(i<0)return;
+  const old=DECK.hand.splice(i,1)[0];
+  DECK.discard.push(old);
+  drawOne();
+  S.swapLeft--;S.handDirty=true;
+  puff(P.x,P.y,8,'#57e6ff',1.8,.5,2.5);sfx('swap');
+  if(S.swapLeft>0&&DECK.hand.length)renderSwap();
+  else closeSwap(true);
+}
+function closeSwap(playSfx){
+  showOv('swapOv',false);S.mode='play';S.swapLeft=0;hideCardInfo();
+  if(playSfx)sfx('ui');
+}
+$('swapSkip').addEventListener('click',()=>closeSwap(true));
 
 /* ---------------- 粒子 ---------------- */
 const partPool=[];

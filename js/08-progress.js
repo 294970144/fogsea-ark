@@ -18,7 +18,9 @@ function renderDawn(){
   if(S.dawnStep===0){
     $('dawnStep').textContent='1 / 2 · 拾获卡牌';
     t.className='dawnTitle';t.textContent=`第 ${S.day} 日 · 黎明`;
-    sub.innerHTML=`选择一张加入牌库 <span class="kb-hint">（1 / 2 / 3）</span> · 手牌 ${DECK.hand.length}/${DECK.max}`;
+    const fullHand=DECK.hand.length>=DECK.max;
+    sub.innerHTML=`选择一张加入牌库 <span class="kb-hint">（1 / 2 / 3）</span> · 手牌 ${DECK.hand.length}/${DECK.max}`+
+      (fullHand?' <i style="color:var(--cyan);font-style:normal">手牌已满 · 新牌入牌库，本日可换牌</i>':'');
     S.dawnCards.forEach((id,i)=>{
       const d=CDEFS[id],own=cardTotal(id);
       const el=document.createElement('button');
@@ -73,10 +75,19 @@ function skipDawn(){
 }
 function finishDawn(){
   showOv('dawnOv',false);S.mode='play';
-  const n=drawToFull()+drawN(P.bonusDraw);
+  const before=DECK.hand.length;
+  const full=drawToFull();
+  const cap=Math.min(HAND_CAP,DECK.max+P.bonusDraw);
+  const extra=drawN(P.bonusDraw,cap);
+  const n=full+extra;
+  const hasCards=DECK.draw.length+DECK.discard.length>0;
+  let blocked=P.bonusDraw-extra;
+  if(before>=DECK.max&&blocked===0&&hasCards)blocked=1;
   S.handDirty=true;
   banner(`第 ${S.day} 日`,'黎明 · 抽 '+n+' 张','');
   if(n)toast('抽入 '+n+' 张牌','good');
+  if(blocked>0&&DECK.hand.length>=DECK.max&&hasCards)
+    offerSwap(Math.min(blocked,DECK.hand.length),'黎明抽牌 · 手牌已满');
 }
 $('dawnSkip').addEventListener('click',skipDawn);
 
