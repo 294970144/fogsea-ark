@@ -1,0 +1,93 @@
+'use strict';
+/* ---------------- 输入 ---------------- */
+const keys={};
+let mouseX=W/2,mouseY=H/2,mouseWorld=[CEN,CEN],mouseActive=false;
+let stickVec=[0,0];
+let holdTimer=null;
+const HOLD_MS=180;
+function clearHold(){if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}}
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(codexOpen){
+    if(k==='escape'){e.preventDefault();closeCodex();}
+    else if(k==='arrowdown'||k==='arrowup'){e.preventDefault();cxMove(k==='arrowdown'?1:-1);}
+    return;
+  }
+  if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k)&&S.mode!=='menu')e.preventDefault();
+  if(e.repeat){keys[k]=true;return;}
+  keys[k]=true;
+  if(S.mode==='dawn'){
+    if(['1','2','3'].includes(k))pickDawn(+k-1);
+    if(k==='escape')skipDawn();
+    return;
+  }
+  if(S.mode==='remove'){if(k==='escape')cancelSalvage();return;}
+  if(S.mode==='play'){
+    if(k>='1'&&k<='9'){const i=+k-1;if(DECK.hand[i])selectCard(DECK.hand[i].uid);}
+    if(k==='q')castNova();
+    if(k===' ')tryDash();
+    if(k==='f')tryRepair();
+    if(k==='n')skipToNight();
+    if(k==='escape'){if(S.aimUid)clearAim();else pauseGame();}
+    if(k==='p')pauseGame();
+    if(k==='m')setMuted(!save.muted);
+  }else if(S.mode==='pause'&&(k==='escape'||k==='p'))resumeGame();
+  else if(S.mode==='menu'&&k==='enter')startRun();
+});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;endDrag(false);});
+addEventListener('pointermove',e=>{
+  mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
+  if(S.dragUid){
+    if(!S.dragMoved&&Math.hypot(mouseX-S.dragStart[0],mouseY-S.dragStart[1])>7){
+      S.dragMoved=true;showDragCard(S.dragUid);
+    }
+    if(S.dragMoved)moveDragCard(mouseX,mouseY);
+  }
+},{passive:true});
+cv.addEventListener('pointerdown',e=>{
+  auInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
+  mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;updateMouseWorld();
+  if(S.mode!=='play'||codexOpen)return;
+  if(e.button===2){clearAim();return;}
+  if(S.aimUid){const uid=S.aimUid;tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}
+});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{e.preventDefault();cam.tz=clamp(cam.tz-Math.sign(e.deltaY)*.12,.9,1.9);},{passive:false});
+addEventListener('pointerup',e=>{
+  if(!S.dragUid)return;
+  const uid=S.dragUid,moved=S.dragMoved;
+  const overCanvas=document.elementFromPoint(e.clientX,e.clientY)===cv;
+  mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
+  endDrag(true);
+  if(S.mode!=='play')return;
+  if(moved){
+    if(overCanvas){updateMouseWorld();tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}
+    else selectCard(uid);
+  }else{
+    if(S.aimUid===uid)clearAim();else selectCard(uid);
+  }
+});
+addEventListener('pointercancel',()=>endDrag(true));
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.mode==='play'&&!codexOpen)pauseGame();});
+function updateMouseWorld(){
+  const cp=proj(cam.x,cam.y);
+  mouseWorld=unproj((mouseX-W/2)/cam.z+cp[0],(mouseY-H/2)/cam.z+cp[1]);
+}
+if(isTouch){
+  const stick=$('stick'),knob=$('knob');let sid=null,so=[0,0];
+  stick.addEventListener('pointerdown',e=>{sid=e.pointerId;const r=stick.getBoundingClientRect();
+    so=[r.left+r.width/2,r.top+r.height/2];try{stick.setPointerCapture(sid);}catch(err){}e.preventDefault();});
+  stick.addEventListener('pointermove',e=>{
+    if(e.pointerId!==sid)return;
+    let dx=e.clientX-so[0],dy=e.clientY-so[1];const m=Math.hypot(dx,dy),max=42;
+    if(m>max){dx*=max/m;dy*=max/m;}
+    knob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;
+    stickVec=[dx/max,dy/max];
+  });
+  const end=e=>{if(e.pointerId!==sid)return;sid=null;stickVec=[0,0];knob.style.transform='translate(-50%,-50%)';};
+  stick.addEventListener('pointerup',end);stick.addEventListener('pointercancel',end);
+  $('btnDash').addEventListener('pointerdown',e=>{e.preventDefault();auInit();tryDash();});
+  $('btnNova').addEventListener('pointerdown',e=>{e.preventDefault();auInit();castNova();});
+}
+
