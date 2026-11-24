@@ -340,7 +340,7 @@ function render(){
     ctx.fillStyle=f.col;ctx.fillText(f.txt,p[0],p[1]-34-(1-t)*22);ctx.globalAlpha=1;
   }
   ctx.restore();
-  const night=S.mode==='menu'?.55:S.nightAmt;
+  const night=(S.mode==='menu'||S.mode==='prep')?.55:S.nightAmt;
   if(night>0.02){
     ctx.fillStyle=`rgba(5,9,22,${.52*night})`;ctx.fillRect(0,0,W,H);
     ctx.globalCompositeOperation='lighter';

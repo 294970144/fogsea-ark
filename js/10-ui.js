@@ -18,7 +18,7 @@ function cacheUI(){
 function setTxt(el,v){if(el&&el._t!==v){el._t=v;el.textContent=v;}}
 function setBar(el,fill,r){const v=clamp(r,0,1).toFixed(3);if(el._v!==v){el._v=v;fill.style.transform=`scaleX(${v})`;}}
 function syncHUD(){
-  if(S.mode==='menu')return;
+  if(S.mode==='menu'||S.mode==='prep')return;
   const night=S.phase==='night';
   const showNight=S.mode==='play'&&!night;
   if(UI.nightBtn._s!==showNight){UI.nightBtn._s=showNight;UI.nightBtn.style.display=showNight?'':'none';}

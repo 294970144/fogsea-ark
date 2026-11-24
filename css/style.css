@@ -180,24 +180,29 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .overlay.show{opacity:1;pointer-events:auto}
 .scrim{position:absolute;inset:0;background:rgba(4,9,15,.74);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 
-#menu{justify-content:flex-start}
+#menu{justify-content:flex-start;align-items:flex-start}
 #menu .scrim{background:linear-gradient(100deg,rgba(5,11,18,.94) 0%,rgba(5,11,18,.86) 34%,rgba(5,11,18,.35) 62%,rgba(5,11,18,.1) 100%);backdrop-filter:none}
-#menuPanel{position:relative;width:min(430px,94vw);max-height:94vh;padding:22px 26px 18px;margin-left:4vw;
-  display:flex;flex-direction:column;overflow:hidden;
+#menuPanel{position:relative;width:min(470px,94vw);max-height:94vh;height:0;margin:6vh 0 0 4vw;
+  overflow:hidden;transition:height .3s cubic-bezier(.2,.8,.2,1);
   background:var(--panel2);border:1px solid var(--line);border-radius:18px;box-shadow:0 20px 70px rgba(0,0,0,.6)}
-#menuPanel::before{content:'';position:absolute;top:0;left:24px;right:24px;height:2px;background:linear-gradient(90deg,transparent,var(--amber),var(--ember),transparent)}
-.menuHead{flex:none}
+#menuPanel::before{content:'';position:absolute;top:0;left:24px;right:24px;height:2px;background:linear-gradient(90deg,transparent,var(--amber),var(--ember),transparent);z-index:2}
+.menuView{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;padding:22px 26px 18px;
+  opacity:0;transform:translateX(100%);pointer-events:none;
+  transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1)}
+#menuPanel[data-view="title"] .menuView[data-view="title"],
+#menuPanel[data-view="prep"] .menuView[data-view="prep"]{opacity:1;transform:translateX(0);pointer-events:auto}
+#menuPanel[data-view="prep"] .menuView[data-view="title"]{transform:translateX(-100%)}
+#menuPanel[data-view="title"] .menuView[data-view="prep"]{transform:translateX(100%)}
+.menuHead,.prepHead{flex:none}
 .menuScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;margin:0 -6px;padding:0 6px;
   scrollbar-width:thin;scrollbar-color:var(--ember) rgba(143,227,208,.06)}
 .menuScroll::-webkit-scrollbar{width:6px}
 .menuScroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--amber),var(--ember));border-radius:8px}
-.menuFoot{flex:none;display:flex;flex-direction:column}
+.menuFoot,.prepFoot{flex:none;display:flex;flex-direction:column}
 #gameTitle{font-family:var(--disp);font-size:clamp(42px,7vw,58px);line-height:1.05;color:var(--amber);letter-spacing:6px;
   text-shadow:0 0 30px rgba(255,180,84,.55),0 3px 6px rgba(0,0,0,.8)}
 #gameSub{font-family:var(--disp);font-size:16px;color:var(--mist);letter-spacing:4px;margin-top:2px}
-.tagRow{display:flex;flex-wrap:wrap;gap:6px;margin:11px 0 4px}
-.tag{font-size:11px;font-weight:700;padding:3px 10px;border-radius:14px;border:1px solid var(--line2);color:var(--mist);background:rgba(143,227,208,.07)}
-.tag.hot{border-color:rgba(255,180,84,.5);color:var(--amber);background:rgba(255,180,84,.08)}
+.prepHead h2{font-family:var(--disp);font-size:30px;letter-spacing:5px;color:var(--amber);margin:0}
 .secT{font-size:12px;font-weight:900;letter-spacing:3px;color:var(--dim);margin:15px 0 8px;display:flex;align-items:center;gap:8px}
 .secT::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
 #diffRow{display:flex;gap:8px}
@@ -226,13 +231,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 #ctrlGrid{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px;font-size:12px;color:var(--dim)}
 #ctrlGrid div{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;white-space:nowrap}
 #ctrlGrid div .kb+.kb{margin-left:-3px}
-#startBtn{width:100%;margin-top:16px;padding:14px;border-radius:13px;font-size:19px;font-weight:900;letter-spacing:8px;color:#1a0e04;
+#startBtn,#launchBtn{width:100%;margin-top:16px;padding:14px;border-radius:13px;font-size:19px;font-weight:900;letter-spacing:8px;color:#1a0e04;
   background:linear-gradient(135deg,var(--amber),var(--ember));box-shadow:0 6px 26px rgba(255,138,61,.4);transition:all .15s;position:relative;overflow:hidden}
-#startBtn:hover{transform:translateY(-2px);box-shadow:0 10px 34px rgba(255,138,61,.6)}
-#startBtn::after{content:'';position:absolute;top:0;left:-80%;width:50%;height:100%;transform:skewX(-25deg);
+#startBtn:hover,#launchBtn:hover{transform:translateY(-2px);box-shadow:0 10px 34px rgba(255,138,61,.6)}
+#startBtn::after,#launchBtn::after{content:'';position:absolute;top:0;left:-80%;width:50%;height:100%;transform:skewX(-25deg);
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:shine 2.8s infinite}
 @keyframes shine{0%,60%{left:-80%}100%{left:130%}}
-#menuFootNote{margin-top:9px;font-size:11px;color:var(--dim2);text-align:center;letter-spacing:2px}
 
 /* 黎明 / 拆解 */
 #dawnOv .scrim,#removeOv .scrim{background:rgba(4,9,15,.82)}
@@ -390,31 +394,29 @@ body.touch .kb-hint{display:none}
 @media (max-width:1200px){:root{--cw:92px;--ch:136px}.hcDesc{font-size:8.5px}}
 /* 视口偏矮：压缩菜单纵向占用，避免面板溢出被裁 */
 @media (max-height:880px){
-  #menuPanel{padding:18px 26px 16px}
+  .menuView{padding:18px 26px 16px}
   #gameTitle{font-size:clamp(34px,5.4vw,44px);letter-spacing:4px}
   #gameSub{font-size:14px;letter-spacing:3px}
-  .tagRow{margin:8px 0 2px}
+  .prepHead h2{font-size:26px;letter-spacing:4px}
   .secT{margin:10px 0 6px}
   .blessRow{padding:5px 10px;margin-bottom:5px}
   .blessInfo span{font-size:10px}
-  #startBtn{margin-top:12px;padding:11px;font-size:17px;letter-spacing:6px}
+  #startBtn,#launchBtn{margin-top:12px;padding:11px;font-size:17px;letter-spacing:6px}
   .mBtn{padding:9px;margin-top:7px;font-size:14px}
-  #menuFootNote{margin-top:7px}
 }
 @media (max-height:720px){
   #gameTitle{font-size:clamp(30px,4.6vw,38px)}
   #gameSub{font-size:13px}
-  .tagRow{display:none}
+  .prepHead h2{font-size:23px;letter-spacing:3px}
   .secT{margin:8px 0 5px}
   .blessRow{padding:4px 9px;margin-bottom:4px}
   .blessInfo b{font-size:12px}
   #ctrlGrid{font-size:11px;gap:3px 10px}
-  #startBtn{padding:9px;font-size:16px}
+  #startBtn,#launchBtn{padding:9px;font-size:16px}
   .mBtn{padding:7px;font-size:13px}
-  #menuFootNote{display:none}
 }
 @media (max-height:640px){
-  #menuPanel{padding:12px 20px 12px}
+  .menuView{padding:12px 20px 12px}
   #gameTitle{font-size:26px;letter-spacing:3px}
   #gameSub{font-size:12px;letter-spacing:2px}
   .secT{font-size:11px;margin:7px 0 4px}
@@ -427,11 +429,11 @@ body.touch .kb-hint{display:none}
   #ctrlGrid{font-size:10.5px;gap:2px 8px}
   #ctrlGrid div{gap:5px}
   .kb{font-size:9px;min-width:14px;padding:0 3px}
-  #startBtn{padding:7px;font-size:15px;letter-spacing:4px;margin-top:8px}
+  #startBtn,#launchBtn{padding:7px;font-size:15px;letter-spacing:4px;margin-top:8px}
   .mBtn{padding:6px;font-size:12.5px;margin-top:5px;letter-spacing:2px}
 }
 @media (max-height:520px){
-  #menuPanel{padding:9px 16px 9px}
+  .menuView{padding:9px 16px 9px}
   #gameTitle{font-size:21px;letter-spacing:2px}
   #gameSub{font-size:11px}
   .secT{font-size:10px;margin:5px 0 3px;letter-spacing:2px}
@@ -446,14 +448,14 @@ body.touch .kb-hint{display:none}
   #emberCount{font-size:14px}
   #ctrlGrid{font-size:10px;gap:1px 8px}
   .kb{font-size:8.5px;min-width:13px;padding:0 3px}
-  #startBtn{padding:6px;font-size:14px;letter-spacing:3px;margin-top:6px}
+  #startBtn,#launchBtn{padding:6px;font-size:14px;letter-spacing:3px;margin-top:6px}
   .mBtn{padding:5px;font-size:11.5px;margin-top:4px}
 }
 @media (max-height:460px){
-  #menuPanel{padding:6px 12px 6px}
+  .menuView{padding:6px 12px 6px}
   #gameTitle{font-size:18px;letter-spacing:2px}
   #gameSub{font-size:10px;letter-spacing:1px}
-  .tagRow{display:none}
+  .prepHead h2{font-size:18px;letter-spacing:2px}
   .secT{font-size:9px;margin:4px 0 2px;letter-spacing:1px}
   .diffBtn{padding:2px 3px;font-size:10px;border-radius:7px}
   .diffBtn small{font-size:8px}
@@ -466,13 +468,14 @@ body.touch .kb-hint{display:none}
   .blessInfo span{font-size:8px}
   #ctrlGrid{font-size:9px;gap:0 6px}
   .kb{font-size:8px;min-width:12px;padding:0 2px}
-  #startBtn{padding:5px;font-size:13px;letter-spacing:2px;margin-top:4px;border-radius:9px}
+  #startBtn,#launchBtn{padding:5px;font-size:13px;letter-spacing:2px;margin-top:4px;border-radius:9px}
   .mBtn{padding:4px;font-size:11px;margin-top:3px;border-radius:8px}
 }
 @media (max-width:900px){
   :root{--cw:78px;--ch:116px}
-  #menuPanel{margin:0 auto;padding:20px}
-  #menu{justify-content:center}
+  #menuPanel{margin:6vh 0 0 4vw}
+  .menuView{padding:20px}
+  #menu{justify-content:flex-start;align-items:flex-start}
   #menu .scrim{background:rgba(5,11,18,.84)}
   #playerPanel{width:172px;padding:8px 10px;top:64px;left:10px;bottom:auto}
   #ppStacks{max-width:110px}

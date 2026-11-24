@@ -1,10 +1,35 @@
 'use strict';
 /* ---------------- 流程 ---------------- */
+const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','removeOv','swapOv'];
 function showOv(id,on){$(id).classList.toggle('show',on);}
+function closeOverlays(except){OVERLAYS.forEach(id=>{if(id!==except)showOv(id,false);});}
+function blurFocus(){const el=document.activeElement;if(el&&el.blur)el.blur();}
+function menuViewHeight(el){
+  const pos=el.style.position,min=el.style.minHeight;
+  el.style.position='static';el.style.minHeight='0';
+  const h=el.scrollHeight;
+  el.style.position=pos;el.style.minHeight=min;
+  return h;
+}
+function setMenuView(view,focus=true){
+  const panel=$('menuPanel');
+  panel.dataset.view=view;
+  const el=panel.querySelector(`.menuView[data-view="${view}"]`);
+  panel.style.height=Math.min(menuViewHeight(el),innerHeight*.94)+'px';
+  if(focus)$(view==='prep'?'launchBtn':'startBtn').focus();
+}
+function openPrep(){
+  const view={x:cam.x,y:cam.y,z:cam.z,elapsed:S.elapsed,nightAmt:S.nightAmt};
+  initRun();
+  Object.assign(cam,{x:view.x,y:view.y,z:view.z});
+  S.elapsed=view.elapsed;S.nightAmt=view.nightAmt;
+  clearInterval(emberTimer);codexOpen=false;blurFocus();closeOverlays('menu');showOv('menu',true);
+  S.mode='prep';
+  UI.hud.classList.add('hidden');refreshPrep();setMenuView('prep');sfx('ui');
+}
 function startRun(){
-  auInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
-  clearInterval(emberTimer);codexOpen=false;
-  ['codexOv','menu','endOv','pauseOv','dawnOv','removeOv','swapOv'].forEach(id=>showOv(id,false));
+  blurFocus();auInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
+  clearInterval(emberTimer);codexOpen=false;closeOverlays();
   initRun();S.mode='play';
   UI.hud.classList.remove('hidden');refreshStacks();
   banner('第 1 日','拖动卡牌到地面筑防','');sfx('dawn');
@@ -20,18 +45,17 @@ function skipToNight(){
   S.timeLeft=0;startNight();
 }
 function toTitle(){
-  S.mode='menu';codexOpen=false;
-  ['pauseOv','endOv','dawnOv','removeOv','swapOv','codexOv'].forEach(id=>showOv(id,false));
-  UI.hud.classList.add('hidden');initRun();S.nightAmt=.55;refreshMenu();showOv('menu',true);auPhase(false);
+  S.mode='menu';codexOpen=false;blurFocus();closeOverlays();
+  UI.hud.classList.add('hidden');initRun();S.nightAmt=.55;refreshPrep();showOv('menu',true);setMenuView('title');auPhase(false);
 }
-function refreshMenu(){
+function refreshPrep(){
   $('emberNum').textContent=save.embers;
   $('bestChip').textContent=save.best.nights>0?`${save.best.nights} 夜 · ${save.best.kills} 击杀`:'尚无记录';
   const dr=$('diffRow');
   if(!dr.children.length){
     dr.innerHTML=Object.entries(DIFFS).map(([k,d])=>`<button class="diffBtn" data-d="${k}">${d.name}<small>${d.sub}</small></button>`).join('');
     dr.querySelectorAll('.diffBtn').forEach(el=>el.addEventListener('click',()=>{
-      save.diff=el.dataset.d;persist();refreshMenu();sfx('ui');}));
+      save.diff=el.dataset.d;persist();refreshPrep();sfx('ui');}));
   }
   dr.querySelectorAll('.diffBtn').forEach(el=>el.classList.toggle('sel',el.dataset.d===save.diff));
   const bl=$('blessList');
@@ -46,7 +70,7 @@ function refreshMenu(){
   bl.querySelectorAll('.buyBtn').forEach(el=>el.addEventListener('click',()=>{
     const k=el.dataset.k,b=BLESS[k],lv=save.bless[k];
     if(lv>=b.max||save.embers<b.costs[lv])return;
-    save.embers-=b.costs[lv];save.bless[k]++;persist();sfx('level');refreshMenu();
+    save.embers-=b.costs[lv];save.bless[k]++;persist();sfx('level');refreshPrep();
   }));
 }
 
@@ -56,7 +80,7 @@ function loop(now){
   requestAnimationFrame(loop);
   const dt=Math.min((now-lastT)/1000,1/30);lastT=now;
   if(codexOpen){S.elapsed+=dt*.35;render();cxDrawPreview(dt);return;}
-  if(S.mode==='menu'){
+  if(S.mode==='menu'||S.mode==='prep'){
     S.elapsed+=dt;
     const a=S.elapsed*.12;
     cam.x=CEN+Math.cos(a)*5;cam.y=CEN+Math.sin(a)*5;cam.z=lerp(cam.z,1.15,dt*2);
@@ -100,11 +124,14 @@ $('btnSpeed').addEventListener('click',()=>{
   auInit();S.speed=S.speed===1?2:1;
   $('btnSpeed').textContent=S.speed+'×';$('btnSpeed').classList.toggle('warnState',S.speed===2);sfx('ui');});
 $('btnResume').addEventListener('click',resumeGame);
-$('btnRestart').addEventListener('click',()=>{showOv('pauseOv',false);startRun();});
+$('btnRestart').addEventListener('click',openPrep);
 $('btnToTitle').addEventListener('click',toTitle);
-$('btnAgain').addEventListener('click',()=>{clearInterval(emberTimer);startRun();});
-$('btnTitle2').addEventListener('click',()=>{clearInterval(emberTimer);toTitle();});
-$('startBtn').addEventListener('click',startRun);
+$('btnAgain').addEventListener('click',openPrep);
+$('btnTitle2').addEventListener('click',toTitle);
+$('startBtn').addEventListener('click',openPrep);
+$('launchBtn').addEventListener('click',startRun);
+$('btnPrepBack').addEventListener('click',toTitle);
 $('repairBtn').addEventListener('click',tryRepair);
-initRun();S.nightAmt=.55;refreshMenu();refreshStacks();
+initRun();S.nightAmt=.55;refreshPrep();refreshStacks();setMenuView('title',false);
+addEventListener('resize',()=>setMenuView($('menuPanel').dataset.view||'title',false));
 requestAnimationFrame(loop);

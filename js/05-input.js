@@ -13,7 +13,7 @@ addEventListener('keydown',e=>{
     else if(k==='arrowdown'||k==='arrowup'){e.preventDefault();cxMove(k==='arrowdown'?1:-1);}
     return;
   }
-  if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k)&&S.mode!=='menu')e.preventDefault();
+  if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k)&&S.mode!=='menu'&&S.mode!=='prep')e.preventDefault();
   if(e.repeat){keys[k]=true;return;}
   keys[k]=true;
   if(S.mode==='dawn'){
@@ -33,7 +33,11 @@ addEventListener('keydown',e=>{
     if(k==='p')pauseGame();
     if(k==='m')setMuted(!save.muted);
   }else if(S.mode==='pause'&&(k==='escape'||k==='p'))resumeGame();
-  else if(S.mode==='menu'&&k==='enter')startRun();
+  else if(S.mode==='menu'&&k==='enter'&&e.target===document.body){e.preventDefault();openPrep();}
+  else if(S.mode==='prep'){
+    if(k==='escape'){e.preventDefault();toTitle();}
+    else if(k==='enter'&&e.target===document.body){e.preventDefault();startRun();}
+  }
 });
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;endDrag(false);});
