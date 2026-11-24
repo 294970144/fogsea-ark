@@ -1,0 +1,7 @@
+# 非游戏内容：依赖、截图、素材与工作区数据
+node_modules/
+package.json
+package-lock.json
+shots/
+vibe_images/
+.workbuddy/
