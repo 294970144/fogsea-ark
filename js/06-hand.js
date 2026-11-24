@@ -17,17 +17,17 @@ function renderHand(){
     const def=CDEFS[c.id];
     const el=document.createElement('div');
     el.className='hcard';el.dataset.uid=c.uid;
-    el.innerHTML=cardInner(def,i<9?i+1:'');
+    el.innerHTML=cardInner(def,i<10?(i===9?'0':String(i+1)):'');
     el.addEventListener('pointerdown',e=>{
       if(S.mode!=='play')return;
       e.preventDefault();auInit();
-      S.dragUid=c.uid;S.dragMoved=false;S.dragStart=[e.clientX,e.clientY];
+      const pid=e.pointerId,uid=c.uid;
+      S.dragUid=uid;S.dragMoved=false;S.dragStart=[e.clientX,e.clientY];S.dragPointerId=pid;
       mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
       clearHold();
-      const uid=c.uid;
       holdTimer=setTimeout(()=>{
         holdTimer=null;
-        if(S.dragUid!==uid||S.dragMoved||S.mode!=='play')return;
+        if(S.dragUid!==uid||S.dragPointerId!==pid||S.dragMoved||S.mode!=='play')return;
         S.dragMoved=true;showDragCard(uid);moveDragCard(mouseX,mouseY);sfx('card');
       },HOLD_MS);
     });
@@ -92,10 +92,10 @@ function drawDragBuild(){
   }catch(err){}finally{ctx=main;}
 }
 function moveDragCard(x,y){const el=$('dragCard');el.style.left=x+'px';el.style.top=y+'px';}
-function endDrag(clearSel){
+function endDrag(){
   clearHold();
   const uid=S.dragUid;
-  S.dragUid=null;S.dragMoved=false;dragBuildType=null;
+  S.dragUid=null;S.dragMoved=false;S.dragStart=[0,0];S.dragPointerId=null;dragBuildType=null;
   $('dragCard').style.display='none';
   if(uid){const h=document.querySelector(`.hcard[data-uid="${uid}"]`);if(h)h.classList.remove('drag');}
 }
@@ -189,8 +189,8 @@ function playCard(uid,tx,ty){
   if(def.id==='expand'){
     DECK.max=Math.min(HAND_CAP,DECK.max+1);
     floater(P.x,P.y,'手牌上限 '+DECK.max,'#ffb454',true);
-    drawN(1);
     if(DECK.max>=HAND_CAP){purgeCard('expand');toast('手牌已达上限 10 · 扩容牌退场','good');}
+    drawN(1);
   }
   S.handDirty=true;
   return true;
@@ -280,7 +280,8 @@ function confirmSalvage(id,rate){
     ['salvage5','salvage10','salvage20'].forEach(purgeCard);
     toast('回收率已达 80% · 拆解牌退场','good');
   }
-  S.pendingSalvage=null;S.mode='play';S.handDirty=true;
+  S.stats.played++;bumpSeen('play',sc.id);
+  S.pendingSalvage=null;S.mode='play';S.handDirty=true;S.aimUid=null;
   showOv('removeOv',false);hideCardInfo();
   puff(P.x,P.y,14,'#6fe08a',2.5,.6,3);sfx('salvage');
 }
@@ -309,9 +310,14 @@ function renderSwap(){
 }
 function doSwap(uid){
   const i=DECK.hand.findIndex(c=>c.uid===uid);if(i<0)return;
+  const cap=DECK.hand.length; // 换牌前手牌数：晨读超额手牌也能补满到原数量
+  if(!DECK.draw.length&&!DECK.discard.length){toast('牌库已空，无法补抽','warn');sfx('deny');return;}
   const old=DECK.hand.splice(i,1)[0];
   DECK.discard.push(old);
-  drawOne();
+  if(!drawOne(cap)){
+    DECK.discard.pop();DECK.hand.splice(i,0,old);
+    toast('补抽失败 · 已保留原手牌','warn');sfx('deny');return;
+  }
   S.swapLeft--;S.handDirty=true;
   puff(P.x,P.y,8,'#57e6ff',1.8,.5,2.5);sfx('swap');
   if(S.swapLeft>0&&DECK.hand.length)renderSwap();

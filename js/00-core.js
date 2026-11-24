@@ -20,14 +20,18 @@ let codexOpen=false,codexReturn='menu';
 const SAVE_KEY='arkmist_v3';
 let save={embers:0,bless:{blade:0,iron:0,stock:0},best:{nights:0,kills:0,wins:0},
   seen:{foe:{},build:{},card:{},play:{}},diff:'std',muted:false};
-try{
-  const s=localStorage.getItem(SAVE_KEY)||localStorage.getItem('arkmist_v2')||localStorage.getItem('arkmist_v1');
-  if(s){const p=JSON.parse(s),ps=p.seen||{};
-    save={...save,...p,bless:{...save.bless,...p.bless},best:{...save.best,...p.best},
-      seen:{foe:{...(ps.foe||{})},build:{...(ps.build||{})},card:{...(ps.card||{})},play:{...(ps.play||{})}}};}
-}catch(e){}
-function persist(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(save));}catch(e){}}
-function bumpSeen(k,id){save.seen[k][id]=(save.seen[k][id]||0)+1;}
+function persist(){
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify(save));return true;}
+  catch(e){
+    if(!persist._warned){
+      persist._warned=true;
+      if(typeof console!=='undefined'&&console.warn)console.warn('存档写入失败',e);
+      if(typeof toast==='function')toast('存档写入失败 · 进度可能未保存','warn');
+    }
+    return false;
+  }
+}
+function bumpSeen(k,id){if(!save.seen[k])save.seen[k]={};save.seen[k][id]=(save.seen[k][id]||0)+1;}
 const DIFFS={
   calm:{name:'平缓',sub:'温柔',hp:.8,dmg:.75,count:.8,ember:.8},
   std:{name:'标准',sub:'试炼',hp:1,dmg:1,count:1,ember:1},
@@ -38,6 +42,32 @@ const BLESS={
   iron:{name:'坚韧',desc:'每级 +15 生命',max:5,costs:[4,7,10,14,18],icon:'heart',color:'#ff8a3d'},
   stock:{name:'仓廪',desc:'每级 +20 初始木石',max:3,costs:[5,9,14],icon:'box',color:'#8fe3d0'}
 };
+// 存档加载必须在 DIFFS / BLESS 定义之后：按白名单逐项校验，非法值回退默认
+function loadSave(){
+  const s=localStorage.getItem(SAVE_KEY)||localStorage.getItem('arkmist_v2')||localStorage.getItem('arkmist_v1');
+  if(!s)return;
+  let p;
+  try{p=JSON.parse(s);}catch(e){return;}
+  if(!p||typeof p!=='object'||Array.isArray(p))return;
+  if(Number.isFinite(p.embers)&&p.embers>=0)save.embers=Math.floor(p.embers);
+  if(typeof p.muted==='boolean')save.muted=p.muted;
+  if(typeof p.diff==='string'&&DIFFS[p.diff])save.diff=p.diff;
+  if(p.bless&&typeof p.bless==='object')for(const k in BLESS){
+    const v=p.bless[k];
+    if(Number.isInteger(v)&&v>=0&&v<=BLESS[k].max)save.bless[k]=v;
+  }
+  if(p.best&&typeof p.best==='object')for(const k of ['nights','kills','wins']){
+    const v=p.best[k];
+    if(Number.isInteger(v)&&v>=0)save.best[k]=v;
+  }
+  if(p.seen&&typeof p.seen==='object')for(const k of ['foe','build','card','play']){
+    const src=p.seen[k];if(!src||typeof src!=='object')continue;
+    const dst={};
+    for(const id in src){const v=src[id];if(Number.isFinite(v)&&v>=0)dst[id]=v;}
+    save.seen[k]=dst;
+  }
+}
+loadSave();
 const ICONS={
 sword:'<path d="M4 20L18 6M18 6l2-2-4 0-2 2M14 4l6 6M6 16l2 2"/>',
 heart:'<path d="M12 21C5 15 2 11 2 7.5A4.5 4.5 0 0112 5a4.5 4.5 0 0110 2.5c0 3.5-3 7.5-10 13.5z"/>',

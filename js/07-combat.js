@@ -70,8 +70,8 @@ function hitNode(n){
     n.alive=false;rebuildSolids();rebuildTileCost();fieldDirty=true;
     const amt=Math.round((n.type==='crys'?irand(3,5):irand(4,6))*P.gather);
     const type=n.type==='tree'?'wood':n.type==='rock'?'stone':'crys';
-    const drops=Math.min(amt,8);
-    for(let i=0;i<drops;i++)dropPickup(n.x,n.y,type,Math.ceil(amt/drops));
+    const drops=Math.min(amt,8),q=Math.floor(amt/drops),r=amt%drops;
+    for(let i=0;i<drops;i++)dropPickup(n.x,n.y,type,q+(i<r?1:0));
     gainXP(3);puff(n.x,n.y,10,cols[n.type],3,.6,3);
   }
 }
@@ -103,8 +103,9 @@ function damagePlayer(dmg,src){
   }
 }
 function damageCore(dmg){
-  core.hp-=dmg*DIFFS[save.diff].dmg;core.flash=.3;sfx('coreHit');shake(3);
-  if(core.hp<=0&&S.mode==='play'){core.hp=0;loseRun();}
+  if(S.mode!=='play')return;
+  core.hp=Math.max(0,core.hp-dmg*DIFFS[save.diff].dmg);core.flash=.3;sfx('coreHit');shake(3);
+  if(core.hp<=0)loseRun();
 }
 function damageBuild(b,dmg){
   b.hp-=dmg*DIFFS[save.diff].dmg;b.flash=.15;
@@ -128,7 +129,8 @@ function tryDash(){
 function castNova(){
   if(S.mode!=='play'||P.downed||P.en<60)return;
   P.en-=60;
-  const R=3.1*(1+.12*(P.stacks.nova||0)),dmg=30*P.novaMult;
+  // 个人测试作弊：暂停时键入 l3131 可整体放大雾爆（不新增任何页面元素）
+  const R=novaRadius(),dmg=novaDmgValue();
   ring(P.x,P.y,'rgba(87,230,255,.9)',.3,R,.5);ring(P.x,P.y,'rgba(160,107,255,.7)',.2,R*.7,.4);
   puff(P.x,P.y,26,'#57e6ff',5,.6,3.5);
   for(const f of foes){
@@ -180,7 +182,7 @@ function freeSpawnNear(x,y){
 }
 function spawnFoe(type,x,y,elite){
   const d=FOES[type],mult=DIFFS[save.diff];
-  const hpM=mult.hp*(1+(S.day-1)*.13)*(elite?1.6:1);
+  const hpM=mult.hp*dayScale(S.day)*(elite?1.6:1);
   const[fx,fy]=type==='boss'?[x,y]:freeSpawnNear(x,y);
   foes.push({type,x:fx,y:fy,hp:d.hp*hpM,max:d.hp*hpM,spd:d.spd*rand(.9,1.1),dmg:d.dmg,r:d.r,
     xp:elite?d.xp*2:d.xp,coreDmg:d.coreDmg,atkCd:rand(.5,1.2),retarget:0,target:'core',kx:0,ky:0,flash:0,
@@ -189,8 +191,8 @@ function spawnFoe(type,x,y,elite){
 }
 function pickFoeType(){
   const day=S.day,bag=[['crawler',10]];
-  if(day>=2)bag.push(['spitter',2+day]);
-  if(day>=3)bag.push(['brute',1+day*.8]);
+  if(day>=2)bag.push(['spitter',2+effDay(day)]);
+  if(day>=3)bag.push(['brute',1+effDay(day)*.8]);
   let tot=0;bag.forEach(b=>tot+=b[1]);
   let r=rand(tot);
   for(const[t,w]of bag){r-=w;if(r<=0)return t;}
@@ -198,21 +200,19 @@ function pickFoeType(){
 }
 function startNight(){
   S.phase='night';S.nightKilled=0;S.spawnT=1.4;
-  const mult=DIFFS[save.diff];
-  S.nightTotal=Math.round((6+S.day*4.2)*mult.count);
-  if(S.day===MAX_NIGHT)S.nightTotal=Math.round(S.nightTotal*.7)+1;
+  const mult=DIFFS[save.diff],isBossNight=S.day%MAX_NIGHT===0;
+  S.nightTotal=Math.round((6+4.2*effDay(S.day))*mult.count);
+  if(isBossNight)S.nightTotal=Math.round(S.nightTotal*.7)+1;
   S.toSpawn=S.nightTotal;
-  if(S.day===MAX_NIGHT){
+  if(isBossNight){
     const p=edgeSpawns[irand(0,edgeSpawns.length-1)];
     warns.push({x:p[0],y:p[1],t:1.6,types:['boss'],boss:true});S.toSpawn--;
-    banner('第七夜 · 雾潮之主','','danger');sfx('boss');
+    banner(`第 ${S.day} 夜 · 雾潮之主`,'','danger');sfx('boss');
   }else{banner(`第 ${S.day} 夜`,'仅可使用瞬发牌','night');sfx('horn');}
   auPhase(true);S.handDirty=true;
   if(!S.hints.night){S.hints.night=true;toast('夜晚：构筑牌封存，瞬发可用','warn');}
 }
-function dawn(){
-  S.stats.nights=S.day;
-  if(S.day>=MAX_NIGHT){winRun();return;}
+function enterNextDay(){
   S.day++;S.phase='day';S.timeLeft=DAY_LEN;
   core.hp=Math.min(core.max,core.hp+40);
   if(!P.downed)healPlayer(P.maxHp*.25);
@@ -228,6 +228,13 @@ function dawn(){
   if(regrew){rebuildSolids();rebuildTileCost();fieldDirty=true;}
   auPhase(false);sfx('dawn');
   openDawn();
+}
+function dawn(){
+  if(S.mode!=='play')return;
+  if(core.hp<=0){loseRun();return;}
+  S.stats.nights=S.day;
+  if(!S.endless&&S.day>=MAX_NIGHT){winRun();return;}
+  enterNextDay();
 }
 const _dir=[0,0];
 function updateFoes(dt){
@@ -272,7 +279,11 @@ function updateFoes(dt){
           f.fireCd=2.3;
           shots.push({x:f.x,y:f.y,vx:gx*6.5,vy:gy*6.5,type:'fog',dmg:f.dmg,life:2.5,z:12});sfx('warn');
         }
-        if(d<=reach&&f.atkCd<=0){f.atkCd=1.2;damagePlayer(f.dmg,f);}
+        if(d<=reach&&f.atkCd<=0){
+          f.atkCd=1.2;
+          if(f.target==='player')damagePlayer(f.dmg,f);
+          else{damageCore(f.coreDmg);puff(core.x,core.y,4,'#ff8a3d',1.5,.3,2);}
+        }
       }else if(d<=reach){
         if(f.atkCd<=0){
           f.atkCd=f.boss?1.4:1.0;
@@ -310,7 +321,7 @@ function updateFoes(dt){
     f.kx*=Math.pow(.0015,dt);f.ky*=Math.pow(.0015,dt);
     if(f.boss){
       f.spawnCd-=dt;f.stompCd-=dt;
-      if(f.spawnCd<=0&&foes.length<44){
+      if(f.spawnCd<=0&&foes.length<FOE_CAP){
         f.spawnCd=6;for(let i=0;i<2;i++)spawnFoe('crawler',f.x+rand(-1,1),f.y+rand(-1,1));
         sfx('boss');ring(f.x,f.y,'rgba(160,107,255,.6)',.5,2,.5);
       }
@@ -320,6 +331,7 @@ function updateFoes(dt){
     }
   }
   for(let i=foes.length-1;i>=0;i--)if(foes[i].dead)foes.splice(i,1);
+  rebuildFoeGrid(); // 敌人移动后重建，箭塔索敌与弹体碰撞才不会查到旧坐标
 }
 function updateBuilds(dt){
   for(const b of builds){
@@ -347,30 +359,52 @@ function updateBuilds(dt){
     }
   }
 }
+function shotStepHit(s){
+  if(s.type==='arrow'||s.type==='wave'){
+    let dead=false;
+    forFoes(s.x,s.y,1.2,f=>{
+      if(dead||f.dead)return;
+      if(dist(s.x,s.y,f.x,f.y)<f.r+.22){
+        if(s.type==='wave'){
+          if(!s.hitSet)s.hitSet=new Set();
+          if(s.hitSet.has(f))return; // 同一目标只结算一次穿透
+          s.hitSet.add(f);
+        }
+        damageFoe(f,s.dmg,Math.atan2(s.vy,s.vx),false);
+        if(s.type==='wave'){s.pierce--;if(s.pierce<=0)dead=true;}else dead=true;
+      }
+    });
+    return dead;
+  }
+  if(s.type==='cannon'){
+    let boom=false;
+    forFoes(s.x,s.y,1.2,f=>{if(boom||f.dead)return;if(dist(s.x,s.y,f.x,f.y)<f.r+.3)boom=true;});
+    if(boom){
+      ring(s.x,s.y,'rgba(87,230,255,.9)',.2,1.5,.4);puff(s.x,s.y,14,'#57e6ff',3.5,.5,3);
+      for(const o of foes){if(o.dead)continue;if(dist(s.x,s.y,o.x,o.y)<1.5+o.r)damageFoe(o,s.dmg,Math.atan2(o.y-s.y,o.x-s.x),false);}
+      sfx('boom');shake(3);return true;
+    }
+    return false;
+  }
+  if(s.type==='fog'){
+    if(!P.downed&&P.ifr<=0&&dist(s.x,s.y,P.x,P.y)<.45){damagePlayer(s.dmg);return true;}
+    if(dist(s.x,s.y,core.x,core.y)<core.r+.1){damageCore(8);puff(s.x,s.y,5,'#a06bff',2,.4,2);return true;}
+    let hit=false;
+    forSolids(s.x,s.y,.9,o=>{if(hit||o.kind!==1)return;if(dist(s.x,s.y,o.x,o.y)<o.r+.15){damageBuild(o.obj,8);hit=true;}});
+    return hit;
+  }
+  return false;
+}
 function updateShots(dt){
   for(let i=shots.length-1;i>=0;i--){
-    const s=shots[i];s.x+=s.vx*dt;s.y+=s.vy*dt;s.life-=dt;
-    let dead=s.life<=0||!walk(s.x,s.y);
-    if(!dead&&(s.type==='arrow'||s.type==='wave')){
-      forFoes(s.x,s.y,1.2,f=>{
-        if(dead||f.dead)return;
-        if(dist(s.x,s.y,f.x,f.y)<f.r+.22){
-          damageFoe(f,s.dmg,Math.atan2(s.vy,s.vx),false);
-          if(s.type==='wave'){s.pierce--;if(s.pierce<=0)dead=true;}else dead=true;
-        }
-      });
-    }else if(!dead&&s.type==='cannon'){
-      let boom=false;
-      forFoes(s.x,s.y,1.2,f=>{if(boom||f.dead)return;if(dist(s.x,s.y,f.x,f.y)<f.r+.3)boom=true;});
-      if(boom){
-        dead=true;ring(s.x,s.y,'rgba(87,230,255,.9)',.2,1.5,.4);puff(s.x,s.y,14,'#57e6ff',3.5,.5,3);
-        for(const o of foes){if(o.dead)continue;if(dist(s.x,s.y,o.x,o.y)<1.5+o.r)damageFoe(o,s.dmg,Math.atan2(o.y-s.y,o.x-s.x),false);}
-        sfx('boom');shake(3);
-      }
-    }else if(!dead&&s.type==='fog'){
-      if(!P.downed&&P.ifr<=0&&dist(s.x,s.y,P.x,P.y)<.45){damagePlayer(s.dmg);dead=true;}
-      else if(dist(s.x,s.y,core.x,core.y)<core.r+.1){damageCore(8);dead=true;puff(s.x,s.y,5,'#a06bff',2,.4,2);}
-      else forSolids(s.x,s.y,.9,o=>{if(dead||o.kind!==1)return;if(dist(s.x,s.y,o.x,o.y)<o.r+.15){damageBuild(o.obj,8);dead=true;}});
+    const s=shots[i];
+    const steps=Math.min(8,Math.max(1,Math.ceil(Math.hypot(s.vx,s.vy)*dt/.25)));
+    const sx=s.vx*dt/steps,sy=s.vy*dt/steps,st=dt/steps;
+    let dead=false;
+    for(let k=0;k<steps&&!dead;k++){
+      s.x+=sx;s.y+=sy;s.life-=st;
+      if(s.life<=0||!walk(s.x,s.y)){dead=true;break;}
+      dead=shotStepHit(s);
     }
     if(dead){if(s.type==='fog')puff(s.x,s.y,4,'#a06bff',1.5,.3,2);shots.splice(i,1);}
   }
@@ -413,7 +447,7 @@ function update(dt){
     if(!P.downed&&dist(P.x,P.y,core.x,core.y)<3)healPlayer(dt*2);
   }else{
     S.nightAmt=Math.min(1,S.nightAmt+dt*.4);S.spawnT-=dt;
-    if(S.spawnT<=0&&S.toSpawn>0&&foes.length+warns.length*4<42){
+    if(S.spawnT<=0&&S.toSpawn>0&&foes.length+warns.length*4<FOE_CAP){
       const n=Math.min(S.toSpawn,irand(2,2+Math.floor(S.day/2)),5);
       const pts=Math.random()<.4?2:1;let made=0;
       for(let p=0;p<pts&&made<n;p++){
@@ -430,6 +464,7 @@ function update(dt){
         puff(w.x,w.y,8,'#a06bff',2,.5,3);warns.splice(i,1);}
     }
     if(S.toSpawn<=0&&warns.length===0&&foes.length===0)dawn();
+    if(S.mode!=='play')return; // 判胜/判负/黎明确定的同一帧不再推进战斗
   }
   if(P.downed){
     P.respT-=dt;

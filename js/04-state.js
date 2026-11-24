@@ -4,9 +4,18 @@ const P={},res={wood:0,stone:0,crys:0};
 const DECK={draw:[],hand:[],discard:[],max:5,recycle:0,uid:1};
 const S={mode:'menu',phase:'day',day:1,timeLeft:70,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,
   speed:1,hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,stats:null,hints:{},elapsed:0,
-  aimUid:null,dragUid:null,dragMoved:false,dragStart:[0,0],handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],
+  aimUid:null,dragUid:null,dragMoved:false,dragStart:[0,0],dragPointerId:null,
+  endless:false,endlessBase:null,settled:null,handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],
   pendingSalvage:null,bonusDrawPending:0};
-const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=80;
+const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=80,FOE_CAP=44;
+/* 个人测试作弊码（仅个人测试用，不在页面呈现任何入口或文案）
+   暂停时键入 l3131 切换：雾爆伤害 ×10（提升至 1000%）、范围 ×10（提升 1000%）。 */
+const CHEAT={code:'l3131',buf:'',on:false,dmg:10,rad:10};
+const novaDmgValue=()=>30*P.novaMult*(CHEAT.on?CHEAT.dmg:1);
+const novaRadius=()=>3.1*(1+.12*(P.stacks.nova||0))*(CHEAT.on?CHEAT.rad:1);
+// 无尽段难度渐近封顶；day<=MAX_NIGHT 时必须与原公式逐值恒等
+const effDay=day=>day<=MAX_NIGHT?day:MAX_NIGHT+5*(1-Math.exp(-(day-MAX_NIGHT)/14));
+const dayScale=day=>1+.13*(effDay(day)-1);
 
 function resetPlayer(){
   const b=save.bless;
@@ -24,7 +33,8 @@ function initRun(){
   res.wood=24+20*save.bless.stock;res.stone=14+20*save.bless.stock;res.crys=4;
   Object.assign(S,{phase:'day',day:1,timeLeft:DAY_LEN,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,
     hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,elapsed:0,hints:{},aimUid:null,dragUid:null,
-    dragMoved:false,handDirty:true,dawnStep:0,pendingSalvage:null,
+    dragMoved:false,dragStart:[0,0],dragPointerId:null,endless:false,endlessBase:null,settled:null,
+    handDirty:true,dawnStep:0,pendingSalvage:null,
     stats:{kills:0,gathered:0,dmg:0,nights:0,level:1,played:0}});
   DECK.draw=[];DECK.hand=[];DECK.discard=[];DECK.max=5;DECK.recycle=0;DECK.uid=1;
   const starter=['wall','wall','wall','tower','tower','totem','rain','spring','tactic'];

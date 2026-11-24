@@ -3,7 +3,7 @@
 function openDawn(){
   S.mode='dawn';S.dawnStep=0;
   S.dawnCards=rollRewards(3);
-  const pool=BLESSINGS.filter(b=>!b.max||(P.stacks[b.id]||0)<b.max);
+  const pool=BLESSINGS.filter(b=>(P.stacks[b.id]||0)<(b.max||(S.endless?8:Infinity)));
   const weights={c:60,r:30,e:12},bag=[];
   pool.forEach(b=>{for(let i=0;i<weights[b.rar];i++)bag.push(b);});
   S.dawnBless=[];let guard=0;
@@ -92,35 +92,73 @@ function finishDawn(){
 $('dawnSkip').addEventListener('click',skipDawn);
 
 /* ---------------- 胜负 ---------------- */
+function stopEmberTimer(){clearInterval(emberTimer);emberTimer=null;}
 function awardEmbers(win){
   const st=S.stats;
   let e=st.nights*3+Math.floor(st.kills/8)+(win?12:0);
-  e=Math.round(e*DIFFS[save.diff].ember);
+  return Math.round(e*DIFFS[save.diff].ember);
+}
+// 胜负一旦确定即结算并写档；S.settled 同时是幂等闸门与展示快照
+function settle(win){
+  if(S.settled)return S.settled;
+  const st=S.stats;
+  if(S.endless&&S.endlessBase){
+    // 无尽阶段只补发胜利基线之后的增量：不重复 +12、不重复 wins++、DIFFS 只施加一次
+    const b=S.endlessBase;
+    const delta=3*(st.nights-b.nights0)+Math.floor(st.kills/8)-Math.floor(b.kills0/8);
+    const e=Math.round(delta*DIFFS[save.diff].ember);
+    save.embers+=e;
+    save.best.nights=Math.max(save.best.nights,st.nights);
+    save.best.kills=Math.max(save.best.kills,st.kills);
+    persist();
+    S.settled={win,embers:e,nights0:b.nights0,kills0:b.kills0,incremental:true};
+    return S.settled;
+  }
+  const e=awardEmbers(win);
   save.embers+=e;
   save.best.nights=Math.max(save.best.nights,st.nights);
   save.best.kills=Math.max(save.best.kills,st.kills);
   if(win)save.best.wins++;
-  persist();return e;
+  persist();
+  S.settled={win,embers:e,nights0:st.nights,kills0:st.kills};
+  return S.settled;
 }
-function winRun(){S.mode='launch';S.launchT=0;S.win=true;banner('方舟启航','','');sfx('victory');}
+function freezeBattle(){
+  shots.length=0;warns.length=0;
+  core.hp=clamp(core.hp,0,core.max);
+  stopEmberTimer();
+}
+function winRun(){S.mode='launch';S.launchT=0;S.win=true;freezeBattle();settle(true);banner('方舟启航','','');sfx('victory');}
 function loseRun(){
-  S.mode='over';S.overT=1.3;S.win=false;
+  S.mode='over';S.overT=1.3;S.win=false;freezeBattle();settle(false);
   puff(core.x,core.y,60,'#ff8a3d',5,1.2,5);ring(core.x,core.y,'rgba(255,77,109,.9)',.5,6,1);
   shake(14);sfx('defeat');
 }
+function continueEndless(){
+  if(!S.settled||!S.settled.win)return;
+  S.endlessBase={nights0:S.settled.nights0,kills0:S.settled.kills0};
+  S.settled=null;S.endless=true;
+  showOv('endOv',false);stopEmberTimer();blurFocus();
+  S.launchT=0;S.overT=0;S.win=false;
+  S.aimUid=null;S.dragUid=null;S.dragPointerId=null;S.dragStart=[0,0];
+  dragBuildType=null;$('dragCard').style.display='none';
+  enterNextDay();
+}
 let emberTimer=null;
 function showEnd(win){
-  S.mode='end';const e=awardEmbers(win);
-  $('endTitle').textContent=win?'方舟启航':'灯熄雾海';
-  $('endTitle').className=win?'win':'lose';
-  $('endSub').textContent=win?'七夜已过':'核心陷落';
-  const st=S.stats;
-  const cells=[[st.nights+' / 7','夜晚'],[st.kills,'击杀'],[st.gathered,'采集'],
+  S.mode='end';
+  if(!S.settled)settle(win); // 兜底：正常路径在判胜/判负瞬间已结算
+  const e=S.settled.embers,realWin=S.settled.win,st=S.stats;
+  $('endTitle').textContent=realWin?'方舟启航':'灯熄雾海';
+  $('endTitle').className=realWin?'win':'lose';
+  $('endSub').textContent=realWin?(S.endless?'远航已完成 · 守护继续':'七夜已过'):(S.endless?'无尽守护结束':'核心陷落');
+  const cells=[[st.nights+(S.endless?' / ∞':' / 7'),'夜晚'],[st.kills,'击杀'],[st.gathered,'采集'],
     ['Lv.'+st.level,'等级'],[st.played,'出牌'],[DECK.recycle+'%','回收率']];
   $('statsGrid').innerHTML=cells.map(c=>`<div class="statCell"><b>${c[0]}</b><span>${c[1]}</span></div>`).join('');
   $('emberTotal').textContent=`（库存 ${save.embers}）`;
+  $('btnEndless').style.display=(realWin&&!S.endless)?'':'none';
   showOv('endOv',true);
-  let cur=0;clearInterval(emberTimer);
+  let cur=0;stopEmberTimer();
   emberTimer=setInterval(()=>{
     cur=Math.min(e,cur+Math.max(1,Math.ceil(e/30)));
     $('emberGain').textContent='+'+cur;

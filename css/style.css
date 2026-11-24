@@ -176,8 +176,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 #mmWrap{padding:6px;border-radius:12px}
 #mm{display:block;width:124px;height:124px;border-radius:8px}
 
-.overlay{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s}
-.overlay.show{opacity:1;pointer-events:auto}
+.overlay{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;visibility:hidden;transition:opacity .3s,visibility 0s .3s}
+.overlay.show{opacity:1;pointer-events:auto;visibility:visible;transition:opacity .3s}
 .scrim{position:absolute;inset:0;background:rgba(4,9,15,.74);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 
 #menu{justify-content:flex-start;align-items:flex-start}
@@ -187,15 +187,16 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   background:var(--panel2);border:1px solid var(--line);border-radius:18px;box-shadow:0 20px 70px rgba(0,0,0,.6)}
 #menuPanel::before{content:'';position:absolute;top:0;left:24px;right:24px;height:2px;background:linear-gradient(90deg,transparent,var(--amber),var(--ember),transparent);z-index:2}
 .menuView{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;padding:22px 26px 18px;
-  opacity:0;transform:translateX(100%);pointer-events:none;
-  transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1)}
+  opacity:0;transform:translateX(100%);pointer-events:none;visibility:hidden;
+  transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1),visibility 0s .3s}
 #menuPanel[data-view="title"] .menuView[data-view="title"],
-#menuPanel[data-view="prep"] .menuView[data-view="prep"]{opacity:1;transform:translateX(0);pointer-events:auto}
+#menuPanel[data-view="prep"] .menuView[data-view="prep"]{opacity:1;transform:translateX(0);pointer-events:auto;visibility:visible;transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1)}
 #menuPanel[data-view="prep"] .menuView[data-view="title"]{transform:translateX(-100%)}
 #menuPanel[data-view="title"] .menuView[data-view="prep"]{transform:translateX(100%)}
 .menuHead,.prepHead{flex:none}
-.menuScroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;margin:0 -6px;padding:0 6px;
+.menuScroll{flex:1 1 auto;min-height:0;overflow:hidden;margin:0 -6px;padding:0 6px;
   scrollbar-width:thin;scrollbar-color:var(--ember) rgba(143,227,208,.06)}
+.menuView.needs-scroll .menuScroll{overflow-y:auto}
 .menuScroll::-webkit-scrollbar{width:6px}
 .menuScroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--amber),var(--ember));border-radius:8px}
 .menuFoot,.prepFoot{flex:none;display:flex;flex-direction:column}
@@ -298,6 +299,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .mBtn.primary:hover{box-shadow:0 6px 22px rgba(255,138,61,.5);color:#1a0e04}
 .mBtn.book{border-color:rgba(255,180,84,.45);color:var(--amber);background:rgba(255,180,84,.08)}
 .mBtn.book:hover{border-color:var(--amber);color:var(--amber);box-shadow:0 0 18px rgba(255,180,84,.3)}
+/* 断点切换时立即应用按钮尺寸，让面板测到最终高度。 */
+#menuPanel button{transition-property:background,border-color,color,box-shadow,transform,opacity}
 #endOv .modalBox{width:min(460px,94vw)}
 #endTitle{font-size:clamp(36px,6vw,48px)}
 #endTitle.win{color:var(--amber);text-shadow:0 0 30px rgba(255,180,84,.7)}
@@ -474,7 +477,7 @@ body.touch .kb-hint{display:none}
 @media (max-width:900px){
   :root{--cw:78px;--ch:116px}
   #menuPanel{margin:6vh 0 0 4vw}
-  .menuView{padding:20px}
+  .menuView{padding-inline:20px}
   #menu{justify-content:flex-start;align-items:flex-start}
   #menu .scrim{background:rgba(5,11,18,.84)}
   #playerPanel{width:172px;padding:8px 10px;top:64px;left:10px;bottom:auto}

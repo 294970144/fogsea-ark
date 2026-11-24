@@ -5,6 +5,19 @@ let mouseX=W/2,mouseY=H/2,mouseWorld=[CEN,CEN],mouseActive=false;
 let stickVec=[0,0];
 let holdTimer=null;
 const HOLD_MS=180;
+/* ---------------- 个人测试作弊码（仅 JS 内部，不在页面呈现） ----------------
+   暂停时依次键入 l3131 即切换「雾爆强化」：伤害 ×10（提升至 1000%）、
+   范围 ×10（提升 1000%）。再次输入可关闭。反馈只走控制台与音效。 */
+function cheatKey(k){
+  if(k.length!==1||!/[a-z0-9]/.test(k))return;
+  CHEAT.buf=(CHEAT.buf+k).slice(-16);
+  if(!CHEAT.buf.endsWith(CHEAT.code))return;
+  CHEAT.buf='';
+  CHEAT.on=!CHEAT.on;
+  console.log('[cheat] 雾爆强化 '+(CHEAT.on?'开启':'关闭')+
+    '：伤害×'+CHEAT.dmg+' 范围×'+CHEAT.rad);
+  sfx('level');
+}
 function clearHold(){if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}}
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
@@ -13,7 +26,7 @@ addEventListener('keydown',e=>{
     else if(k==='arrowdown'||k==='arrowup'){e.preventDefault();cxMove(k==='arrowdown'?1:-1);}
     return;
   }
-  if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k)&&S.mode!=='menu'&&S.mode!=='prep')e.preventDefault();
+  if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k)&&S.mode!=='menu'&&S.mode!=='prep')e.preventDefault();
   if(e.repeat){keys[k]=true;return;}
   keys[k]=true;
   if(S.mode==='dawn'){
@@ -21,10 +34,18 @@ addEventListener('keydown',e=>{
     if(k==='escape')skipDawn();
     return;
   }
-  if(S.mode==='remove'){if(k==='escape')cancelSalvage();return;}
-  if(S.mode==='swap'){if(k==='escape')closeSwap(true);return;}
+  if(S.mode==='remove'){
+    if(k==='escape')cancelSalvage();
+    else if(k>='1'&&k<='9'){const b=$('rmList').children[+k-1];if(b&&b.click)b.click();}
+    return;
+  }
+  if(S.mode==='swap'){
+    if(k==='escape')closeSwap(true);
+    else if(k>='1'&&k<='9'){const b=$('swapList').children[+k-1];if(b&&b.click)b.click();}
+    return;
+  }
   if(S.mode==='play'){
-    if(k>='1'&&k<='9'){const i=+k-1;if(DECK.hand[i])selectCard(DECK.hand[i].uid);}
+    if(k>='0'&&k<='9'){const i=k==='0'?9:+k-1;if(DECK.hand[i])selectCard(DECK.hand[i].uid);}
     if(k==='q')castNova();
     if(k===' ')tryDash();
     if(k==='f')tryRepair();
@@ -32,7 +53,10 @@ addEventListener('keydown',e=>{
     if(k==='escape'){if(S.aimUid)clearAim();else pauseGame();}
     if(k==='p')pauseGame();
     if(k==='m')setMuted(!save.muted);
-  }else if(S.mode==='pause'&&(k==='escape'||k==='p'))resumeGame();
+  }else if(S.mode==='pause'){
+    if(k==='escape'||k==='p')resumeGame();
+    else cheatKey(k);
+  }
   else if(S.mode==='menu'&&k==='enter'&&e.target===document.body){e.preventDefault();openPrep();}
   else if(S.mode==='prep'){
     if(k==='escape'){e.preventDefault();toTitle();}
@@ -40,8 +64,9 @@ addEventListener('keydown',e=>{
   }
 });
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
-addEventListener('blur',()=>{for(const k in keys)keys[k]=false;endDrag(false);});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;endDrag();});
 addEventListener('pointermove',e=>{
+  if(S.dragUid&&e.pointerId!==S.dragPointerId)return;
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
   if(S.dragUid){
     if(!S.dragMoved&&Math.hypot(mouseX-S.dragStart[0],mouseY-S.dragStart[1])>7){
@@ -54,13 +79,14 @@ cv.addEventListener('pointerdown',e=>{
   auInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;updateMouseWorld();
   if(S.mode!=='play'||codexOpen)return;
+  if(S.dragUid&&e.pointerId!==S.dragPointerId)return;
   if(e.button===2){clearAim();return;}
   if(S.aimUid){const uid=S.aimUid;tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}
 });
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('wheel',e=>{e.preventDefault();cam.tz=clamp(cam.tz-Math.sign(e.deltaY)*.12,.9,1.9);},{passive:false});
 addEventListener('pointerup',e=>{
-  if(!S.dragUid)return;
+  if(!S.dragUid||e.pointerId!==S.dragPointerId)return;
   const uid=S.dragUid,moved=S.dragMoved;
   const overCanvas=document.elementFromPoint(e.clientX,e.clientY)===cv;
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
@@ -73,11 +99,11 @@ addEventListener('pointerup',e=>{
     if(S.aimUid===uid)clearAim();else selectCard(uid);
   }
 });
-addEventListener('pointercancel',()=>endDrag(true));
+addEventListener('pointercancel',e=>{if(S.dragUid&&e.pointerId===S.dragPointerId)endDrag();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.mode==='play'&&!codexOpen)pauseGame();});
 function updateMouseWorld(){
   const cp=proj(cam.x,cam.y);
-  mouseWorld=unproj((mouseX-W/2)/cam.z+cp[0],(mouseY-H/2)/cam.z+cp[1]);
+  mouseWorld=unproj((mouseX-W/2-cam.sx)/cam.z+cp[0],(mouseY-H/2-cam.sy)/cam.z+cp[1]);
 }
 if(isTouch){
   const stick=$('stick'),knob=$('knob');let sid=null,so=[0,0];

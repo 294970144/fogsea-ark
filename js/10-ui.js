@@ -28,7 +28,7 @@ function syncHUD(){
     setTxt(UI.phaseName,night?'雾潮':'白昼');
   }
   setTxt(UI.dayLabel,night?`第 ${S.day} 夜`:`第 ${S.day} 日`);
-  setTxt(UI.nightLabel,`夜 ${S.stats.nights}/7`);
+  setTxt(UI.nightLabel,`夜 ${S.stats.nights}${S.endless?'/∞':'/7'}`);
   setBar(UI.phaseBar,UI.phaseBar,night?(S.nightTotal?S.nightKilled/S.nightTotal:0):S.timeLeft/DAY_LEN);
   setBar(UI.hpBar,UI.hpFill,P.hp/P.maxHp);
   const low=P.hp/P.maxHp<.3;
@@ -79,7 +79,7 @@ function banner(title,sub,cls){
 /* ---------------- 图鉴 ---------------- */
 const CX_CATS=[{id:'all',name:'全部'},{id:'role',name:'角色'},{id:'res',name:'资源'},{id:'card',name:'卡牌'},
   {id:'foe',name:'雾裔'},{id:'bless',name:'祝福'},{id:'legacy',name:'传承'},{id:'term',name:'术语'}];
-const foeNow=t=>Math.round(FOES[t].hp*DIFFS[save.diff].hp*(1+(Math.max(1,S.day)-1)*.13));
+const foeNow=t=>Math.round(FOES[t].hp*DIFFS[save.diff].hp*dayScale(Math.max(1,S.day)));
 const CODEX=[
   {id:'keeper',cat:'role',name:'守灯人',icon:'lantern',color:'#ffb454',sprite:'player',
    desc:'你操控的角色。挥刃自动：范围内只要有雾裔或资源，就会持续朝目标方向攻击。',
@@ -142,7 +142,7 @@ const CODEX=[
      ['对核心',FOES.brute.coreDmg],['首次出现','第 3 夜'],['累计击杀',save.seen.foe.brute||0]],
    rel:['c_wall','c_tower','nova']},
   {id:'boss',cat:'foe',name:'雾潮之主',icon:'boss',color:'#ff4d6d',sprite:'boss',
-   desc:'第七夜的巨影。每 6 秒召唤两只爬行者，近身践踏。击溃它即可启航。',
+   desc:'每七夜重现的巨影。每 6 秒召唤两只爬行者，近身践踏。击溃它即可完成远航或继续守护。',
    stats:()=>[['基础生命',FOES.boss.hp],['本局生命',foeNow('boss')],['践踏伤害','25'],
      ['对核心',FOES.boss.coreDmg],['召唤间隔','6 秒'],['累计击杀',save.seen.foe.boss||0]],
    rel:['seven','c_mine','c_cannon']},
@@ -176,15 +176,15 @@ const CODEX=[
      ['核心自愈','1 /秒']],rel:['hand','deck','b_blade']},
   {id:'tide',cat:'term',name:'雾潮',icon:'fog',color:'#a06bff',
    desc:'夜间敌潮，自岛缘分批刷新。夜晚构筑牌封存，只能打瞬发牌——白天没铺好，晚上就得靠操作。',
-   stats:()=>[['本夜波次',S.nightTotal||'—'],['已消灭',S.nightKilled],['同屏上限','42'],['每夜成长','+13% 生命']],
+   stats:()=>[['本夜波次',S.nightTotal||'—'],['已消灭',S.nightKilled],['同屏上限',FOE_CAP],['每夜成长',S.endless?'缓增封顶':'+13% 生命']],
    rel:['seven','c_rain','c_mine']},
-  {id:'seven',cat:'term',name:'七夜',icon:'clock',color:'#8fe3d0',
-   desc:'一次远航的长度。撑过第七夜并击溃雾潮之主，方舟启航即胜利。',
-   stats:()=>[['总夜数',MAX_NIGHT],['已度过',S.stats?S.stats.nights:0],['最佳纪录',save.best.nights+' 夜'],
+  {id:'seven',cat:'term',name:'七夜与无尽',icon:'clock',color:'#8fe3d0',
+   desc:'远航共七夜。击溃雾潮之主即可启航，也可继续守护进入无尽；无尽每七夜重现 Boss，难度缓增封顶。',
+   stats:()=>[['远航夜数',MAX_NIGHT],['已度过',S.stats?S.stats.nights:0],['最佳纪录',save.best.nights+' 夜'],
      ['累计启航',save.best.wins+' 次']],rel:['boss','ember','tide']},
   {id:'ember',cat:'term',name:'文明火种',icon:'ember',color:'#ff8a3d',
    desc:'局外货币，失败也结算，用于购买永久传承。',
-   stats:()=>[['当前库存',save.embers],['公式','夜数×3 + 击杀÷8'],['胜利额外','+12'],['难度系数',DIFFS[save.diff].ember+'×']],
+   stats:()=>[['当前库存',save.embers],['公式','夜数×3 + 击杀÷8'],['胜利额外','+12（仅远航）'],['难度系数',DIFFS[save.diff].ember+'×']].concat(S.endless?[['无尽补发','只结算胜利基线之后的增量']]:[]),
    rel:['l_blade','l_iron','l_stock']},
   {id:'dash',cat:'term',name:'冲刺',icon:'bolt',color:'#57e6ff',
    desc:'空格短距疾冲，3.4 倍速并附带无敌帧。',
@@ -324,18 +324,19 @@ function cxDrawPreview(dt){
   }catch(err){}finally{ctx=main;}
 }
 let cxOpener=null;
+const CX_RETURN_OV={menu:'menu',pause:'pauseOv',end:'endOv'};
 function openCodex(from){
   if(codexOpen)return;
   auInit();codexReturn=from;codexOpen=true;
-  cxOpener=from==='menu'?$('btnCodexMenu'):$('btnCodexPause');
-  persist();showOv(from==='menu'?'menu':'pauseOv',false);showOv('codexOv',true);
+  cxOpener=from==='menu'?$('btnCodexMenu'):from==='pause'?$('btnCodexPause'):null;
+  persist();showOv(CX_RETURN_OV[from]||'pauseOv',false);showOv('codexOv',true);
   cxBuildCats();cxRenderList();sizeCodexCv();sfx('page');
   if(!isTouch)setTimeout(()=>$('cxSearch').focus(),60);
 }
 function closeCodex(){
   if(!codexOpen)return;
   codexOpen=false;showOv('codexOv',false);
-  showOv(codexReturn==='menu'?'menu':'pauseOv',true);sfx('ui');
+  showOv(CX_RETURN_OV[codexReturn]||'pauseOv',true);sfx('ui');
   if(cxOpener&&!isTouch)cxOpener.focus();
 }
 $('cxClose').addEventListener('click',closeCodex);

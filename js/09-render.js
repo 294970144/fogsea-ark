@@ -232,7 +232,7 @@ function drawGhost(){
     const[tx,ty]=ghostTile(),chk=placeCheck(def,tx,ty);
     const pp=proj(P.x,P.y);
     ctx.strokeStyle='rgba(255,255,255,.16)';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.ellipse(pp[0],pp[1],5.5*TW/2*.72,5.5*TH/2*.72,0,0,TAU);ctx.stroke();
+    ctx.beginPath();ctx.ellipse(pp[0],pp[1],5.5*TW/2,5.5*TH/2,0,0,TAU);ctx.stroke();
     const c=proj(tx,ty);
     ctx.fillStyle=chk.ok?'rgba(255,255,255,.3)':'rgba(255,77,109,.32)';
     ctx.beginPath();ctx.moveTo(c[0],c[1]-TH/2);ctx.lineTo(c[0]+TW/2,c[1]);ctx.lineTo(c[0],c[1]+TH/2);ctx.lineTo(c[0]-TW/2,c[1]);ctx.closePath();ctx.fill();
@@ -249,7 +249,7 @@ function drawGhost(){
     const wx=mouseWorld[0],wy=mouseWorld[1],chk=placeCheck(def,wx,wy);
     const c=proj(wx,wy),R=def.radius;
     ctx.fillStyle=chk.ok?'rgba(255,255,255,.22)':'rgba(255,77,109,.26)';
-    ctx.beginPath();ctx.ellipse(c[0],c[1],R*TW/2*.72,R*TH/2*.72,0,0,TAU);ctx.fill();
+    ctx.beginPath();ctx.ellipse(c[0],c[1],R*TW/2,R*TH/2,0,0,TAU);ctx.fill();
     ctx.strokeStyle=chk.ok?'rgba(255,255,255,.95)':'rgba(255,77,109,.95)';ctx.lineWidth=2;ctx.stroke();
     ctx.globalAlpha=.5;ctx.drawImage(chk.ok?GLOW.white:GLOW.violet,c[0]-40,c[1]-40,80,80);ctx.globalAlpha=1;
   }
@@ -326,7 +326,7 @@ function render(){
     if(p.ring){
       const r=lerp(p.r1,p.r0,t);
       ctx.strokeStyle=p.col;ctx.globalAlpha=t;ctx.lineWidth=3*t+1;
-      ctx.beginPath();ctx.ellipse(px,py,r*TW/2*1.2,r*TH/2*1.2,0,0,TAU);ctx.stroke();ctx.globalAlpha=1;
+      ctx.beginPath();ctx.ellipse(px,py,r*TW/2,r*TH/2,0,0,TAU);ctx.stroke();ctx.globalAlpha=1;
     }else{ctx.globalAlpha=t;ctx.fillStyle=p.col;
       ctx.beginPath();ctx.arc(px,py-p.z,p.size*t+.5,0,TAU);ctx.fill();ctx.globalAlpha=1;}
   }

@@ -7,7 +7,7 @@ function blurFocus(){const el=document.activeElement;if(el&&el.blur)el.blur();}
 function menuViewHeight(el){
   const pos=el.style.position,min=el.style.minHeight;
   el.style.position='static';el.style.minHeight='0';
-  const h=el.scrollHeight;
+  const h=Math.max(el.scrollHeight,Math.ceil(el.getBoundingClientRect().height));
   el.style.position=pos;el.style.minHeight=min;
   return h;
 }
@@ -15,14 +15,19 @@ function setMenuView(view,focus=true){
   const panel=$('menuPanel');
   panel.dataset.view=view;
   const el=panel.querySelector(`.menuView[data-view="${view}"]`);
-  panel.style.height=Math.min(menuViewHeight(el),innerHeight*.94)+'px';
-  if(focus)$(view==='prep'?'launchBtn':'startBtn').focus();
+  // 面板为 border-box：测量值只含内容，需补回边框与内边距，否则子视图少几像素而出现滚动条
+  const frame=Math.max(0,panel.offsetHeight-panel.clientHeight);
+  const naturalHeight=menuViewHeight(el)+frame;
+  // CSS owns the cap; read the computed pixel value so layout and scroll logic stay aligned.
+  const maxHeight=parseFloat(getComputedStyle(panel).maxHeight);
+  // Only enable scrolling when the content cannot fit after the height transition.
+  el.classList.toggle('needs-scroll',naturalHeight>maxHeight);
+  panel.style.height=Math.min(naturalHeight,maxHeight)+'px';
+  if(focus)$(view==='prep'?'launchBtn':'startBtn').focus({preventScroll:true});
 }
 function openPrep(){
-  const view={x:cam.x,y:cam.y,z:cam.z,elapsed:S.elapsed,nightAmt:S.nightAmt};
-  initRun();
-  Object.assign(cam,{x:view.x,y:view.y,z:view.z});
-  S.elapsed=view.elapsed;S.nightAmt=view.nightAmt;
+  const needsFreshRun=S.mode!=='menu'&&S.mode!=='prep';
+  if(needsFreshRun)initRun();
   clearInterval(emberTimer);codexOpen=false;blurFocus();closeOverlays('menu');showOv('menu',true);
   S.mode='prep';
   UI.hud.classList.add('hidden');refreshPrep();setMenuView('prep');sfx('ui');
@@ -45,8 +50,11 @@ function skipToNight(){
   S.timeLeft=0;startNight();
 }
 function toTitle(){
+  stopEmberTimer();const fromPrep=S.mode==='prep',elapsed=S.elapsed;
   S.mode='menu';codexOpen=false;blurFocus();closeOverlays();
-  UI.hud.classList.add('hidden');initRun();S.nightAmt=.55;refreshPrep();showOv('menu',true);setMenuView('title');auPhase(false);
+  UI.hud.classList.add('hidden');
+  if(!fromPrep){initRun();S.elapsed=elapsed;}
+  S.nightAmt=.55;refreshPrep();showOv('menu',true);setMenuView('title');auPhase(false);
 }
 function refreshPrep(){
   $('emberNum').textContent=save.embers;
@@ -92,7 +100,10 @@ function loop(now){
     updateMouseWorld();
     let wdt=dt*S.speed;
     if(S.hitstop>0){S.hitstop-=dt;wdt=0;}
-    if(wdt>0)update(wdt);
+    if(wdt>0){
+      const steps=Math.min(4,Math.ceil(S.speed)),step=wdt/steps;
+      for(let k=0;k<steps&&S.mode==='play';k++)update(step);
+    }
     if(S.handDirty)renderHand();
   }else if(S.mode==='launch'){
     S.launchT+=dt;S.elapsed+=dt;updateParts(dt);
@@ -128,10 +139,13 @@ $('btnRestart').addEventListener('click',openPrep);
 $('btnToTitle').addEventListener('click',toTitle);
 $('btnAgain').addEventListener('click',openPrep);
 $('btnTitle2').addEventListener('click',toTitle);
+$('btnEndless').addEventListener('click',()=>{auInit();continueEndless();});
 $('startBtn').addEventListener('click',openPrep);
 $('launchBtn').addEventListener('click',startRun);
 $('btnPrepBack').addEventListener('click',toTitle);
 $('repairBtn').addEventListener('click',tryRepair);
 initRun();S.nightAmt=.55;refreshPrep();refreshStacks();setMenuView('title',false);
-addEventListener('resize',()=>setMenuView($('menuPanel').dataset.view||'title',false));
+const resizeMenu=()=>setMenuView($('menuPanel').dataset.view||'title',false);
+addEventListener('resize',resizeMenu);
+document.fonts?.addEventListener('loadingdone',resizeMenu);
 requestAnimationFrame(loop);
