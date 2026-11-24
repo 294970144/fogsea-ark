@@ -295,15 +295,16 @@ function cxDrawPreview(dt){
     const bg=ctx.createRadialGradient(cxW/2,cxH*.66,4,cxW/2,cxH*.66,cxW*.75);
     bg.addColorStop(0,'rgba(20,58,78,.85)');bg.addColorStop(1,'rgba(7,19,28,0)');
     ctx.fillStyle=bg;ctx.fillRect(0,0,cxW,cxH);
-    const sc=Math.min(cxW,cxH)/168;
-    ctx.save();ctx.translate(cxW/2,cxH*.8);ctx.scale(sc,sc);
-    ctx.fillStyle='#163c3a';ctx.beginPath();ctx.moveTo(0,-16);ctx.lineTo(46,7);ctx.lineTo(0,30);ctx.lineTo(-46,7);ctx.closePath();ctx.fill();
+    const k=e.sprite,sc=Math.min(cxW,cxH)/168,coreScale=.82;
+    const groundX=k==='core'?TW*coreScale+8:46,groundY=k==='core'?0:7;
+    const back=groundY-groundX/2,front=groundY+groundX/2;
+    ctx.save();ctx.translate(cxW/2,cxH*(k==='core'?.74:.8));ctx.scale(sc,sc);
+    ctx.fillStyle='#163c3a';ctx.beginPath();ctx.moveTo(0,back);ctx.lineTo(groundX,groundY);ctx.lineTo(0,front);ctx.lineTo(-groundX,groundY);ctx.closePath();ctx.fill();
     ctx.fillStyle='#0c2a30';
-    ctx.beginPath();ctx.moveTo(-46,7);ctx.lineTo(0,30);ctx.lineTo(0,38);ctx.lineTo(-46,15);ctx.closePath();ctx.fill();
-    ctx.beginPath();ctx.moveTo(46,7);ctx.lineTo(0,30);ctx.lineTo(0,38);ctx.lineTo(46,15);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(-groundX,groundY);ctx.lineTo(0,front);ctx.lineTo(0,front+8);ctx.lineTo(-groundX,groundY+8);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(groundX,groundY);ctx.lineTo(0,front);ctx.lineTo(0,front+8);ctx.lineTo(groundX,groundY+8);ctx.closePath();ctx.fill();
     ctx.strokeStyle='rgba(143,227,208,.28)';ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(0,-16);ctx.lineTo(46,7);ctx.lineTo(0,30);ctx.lineTo(-46,7);ctx.closePath();ctx.stroke();
-    const k=e.sprite;
+    ctx.beginPath();ctx.moveTo(0,back);ctx.lineTo(groundX,groundY);ctx.lineTo(0,front);ctx.lineTo(-groundX,groundY);ctx.closePath();ctx.stroke();
     const gk=(k==='crys'||k==='cannon')?'cyan':k==='totem'?'leaf':
       (k==='crawler'||k==='spitter'||k==='brute'||k==='boss')?'violet':'amber';
     ctx.globalCompositeOperation='lighter';ctx.globalAlpha=.45;
@@ -311,7 +312,7 @@ function cxDrawPreview(dt){
     ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
     const t=cxT;
     if(k==='player')drawPlayer({x:0,y:0,downed:false,moving:false,anim:0,face:.6,ifr:0,swingT:0});
-    else if(k==='core'){ctx.save();ctx.scale(.82,.82);drawCore({x:0,y:0,hp:1,max:1,flash:0});ctx.restore();}
+    else if(k==='core'){ctx.save();ctx.scale(coreScale,coreScale);drawCore({x:0,y:0,hp:1,max:1,flash:0});ctx.restore();}
     else if(k==='tree')drawTree({type:'tree',x:0,y:0,alive:true,shake:0,sway:0,s:1.15});
     else if(k==='rock')drawRock({type:'rock',x:0,y:0,alive:true,shake:0,sway:0,s:1.25});
     else if(k==='crys')drawCrys({type:'crys',x:0,y:0,alive:true,shake:0,sway:0,s:1.3});

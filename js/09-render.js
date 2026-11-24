@@ -49,23 +49,40 @@ function drawCrys(n){
 }
 function drawCore(c){
   c=c||core;
-  const[px,py]=proj(c.x,c.y),pulse=.8+.2*Math.sin(S.elapsed*2);
-  drawShadow(px,py+4,42,.4);
-  ctx.fillStyle='#2c3e46';ctx.beginPath();ctx.moveTo(px,py-20);ctx.lineTo(px+44,py+2);ctx.lineTo(px,py+24);ctx.lineTo(px-44,py+2);ctx.closePath();ctx.fill();
-  ctx.fillStyle='#3a505a';ctx.beginPath();ctx.moveTo(px,py-20);ctx.lineTo(px+44,py+2);ctx.lineTo(px,py+12);ctx.lineTo(px-44,py+2);ctx.closePath();ctx.fill();
-  ctx.strokeStyle='rgba(255,180,84,.4)';ctx.lineWidth=1.5;
-  ctx.beginPath();ctx.moveTo(px-30,py+1);ctx.lineTo(px,py-13);ctx.lineTo(px+30,py+1);ctx.stroke();
-  ctx.fillStyle='#22333c';ctx.fillRect(px-6,py-72,12,58);
-  ctx.fillStyle='#2e444e';ctx.fillRect(px-6,py-72,5,58);
-  ctx.strokeStyle='#3a505a';ctx.lineWidth=4;
-  ctx.beginPath();ctx.moveTo(px-22,py-58);ctx.lineTo(px+22,py-58);ctx.stroke();
-  const oy=py-84,g=ctx.createRadialGradient(px,oy,2,px,oy,20);
-  g.addColorStop(0,'#fff3d6');g.addColorStop(.4,'#ffb454');g.addColorStop(1,'rgba(255,138,61,0)');
-  ctx.fillStyle=g;ctx.beginPath();ctx.arc(px,oy,20*pulse,0,TAU);ctx.fill();
-  ctx.fillStyle='#ffe0a8';ctx.beginPath();ctx.arc(px,oy,7,0,TAU);ctx.fill();
-  ctx.strokeStyle=`rgba(255,180,84,${.5*pulse})`;ctx.lineWidth=2;
-  ctx.beginPath();ctx.ellipse(px,oy,16,6+2*Math.sin(S.elapsed*1.4),S.elapsed*.8,0,TAU);ctx.stroke();
-  if(c.flash>0){ctx.fillStyle=`rgba(255,77,109,${c.flash})`;ctx.beginPath();ctx.arc(px,oy,24,0,TAU);ctx.fill();}
+  const[px,py]=proj(c.x,c.y),pulse=.8+.2*Math.sin(S.elapsed*2),turn=S.elapsed*.22;
+  const deckY=py-8,frontY=deckY+TH;
+  drawShadow(px,py+4,TW,.42);
+  // 2×2 格的等距投影，底座顶面比地面高 8 像素。
+  ctx.fillStyle='#172a31';ctx.beginPath();ctx.moveTo(px-TW,deckY);ctx.lineTo(px,frontY);ctx.lineTo(px,py+TH);ctx.lineTo(px-TW,py);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#354b50';ctx.beginPath();ctx.moveTo(px+TW,deckY);ctx.lineTo(px,frontY);ctx.lineTo(px,py+TH);ctx.lineTo(px+TW,py);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#53665f';ctx.beginPath();ctx.moveTo(px,deckY-TH);ctx.lineTo(px+TW,deckY);ctx.lineTo(px,frontY);ctx.lineTo(px-TW,deckY);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#b78348';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(px-TW+12,deckY);ctx.lineTo(px,deckY-TH+6);ctx.lineTo(px+TW-12,deckY);ctx.lineTo(px,frontY-6);ctx.closePath();ctx.stroke();
+  for(const side of [-1,1]){
+    const x=px+side*(TW-12);
+    ctx.fillStyle='#d09a54';ctx.beginPath();ctx.moveTo(x,deckY-5);ctx.lineTo(x+9,deckY);ctx.lineTo(x,deckY+5);ctx.lineTo(x-9,deckY);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#f1c77c';ctx.beginPath();ctx.arc(x,deckY,1.7,0,TAU);ctx.fill();
+  }
+  // 灯塔脊柱与环形箍带。
+  ctx.fillStyle='#182b31';ctx.beginPath();ctx.moveTo(px-9,deckY);ctx.lineTo(px-7,py-76);ctx.lineTo(px,py-83);ctx.lineTo(px+7,py-76);ctx.lineTo(px+9,deckY);ctx.lineTo(px,deckY+4);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#586b63';ctx.beginPath();ctx.moveTo(px-5,deckY-4);ctx.lineTo(px-4,py-73);ctx.lineTo(px,py-78);ctx.lineTo(px+1,deckY-4);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#bb8749';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px-10,py-59);ctx.lineTo(px+10,py-59);ctx.moveTo(px-9,py-30);ctx.lineTo(px+9,py-30);ctx.stroke();
+  ctx.strokeStyle='rgba(242,197,119,.8)';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(px-22,py-57);ctx.lineTo(px+22,py-57);ctx.stroke();
+  // 三枚护焰支架围住核心，不遮挡其识别性光源。
+  ctx.strokeStyle='#bd8b50';ctx.lineWidth=2.5;ctx.beginPath();
+  ctx.moveTo(px-17,py-70);ctx.lineTo(px-11,py-87);ctx.lineTo(px-6,py-90);
+  ctx.moveTo(px+17,py-70);ctx.lineTo(px+11,py-87);ctx.lineTo(px+6,py-90);
+  ctx.moveTo(px-14,py-76);ctx.lineTo(px+14,py-76);ctx.stroke();
+  ctx.fillStyle='#e3b96e';ctx.beginPath();ctx.arc(px-17,py-70,2,0,TAU);ctx.arc(px+17,py-70,2,0,TAU);ctx.fill();
+  const oy=py-84,g=ctx.createRadialGradient(px,oy,2,px,oy,22);
+  g.addColorStop(0,'#fff7dc');g.addColorStop(.34,'#ffd078');g.addColorStop(.72,'#ff9d45');g.addColorStop(1,'rgba(255,138,61,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(px,oy,22*pulse,0,TAU);ctx.fill();
+  ctx.fillStyle='#fff0bd';ctx.beginPath();ctx.arc(px,oy,6.5,0,TAU);ctx.fill();
+  ctx.strokeStyle=`rgba(255,195,105,${.62*pulse})`;ctx.lineWidth=1.6;
+  ctx.beginPath();ctx.ellipse(px,oy,17,5+1.5*Math.sin(S.elapsed*1.4),turn,0,TAU);ctx.stroke();
+  ctx.strokeStyle=`rgba(255,232,179,${.42*pulse})`;ctx.lineWidth=1;
+  ctx.beginPath();ctx.ellipse(px,oy,11,3, -turn*1.4,0,TAU);ctx.stroke();
+  if(c.flash>0){ctx.fillStyle=`rgba(255,77,109,${c.flash})`;ctx.beginPath();ctx.arc(px,oy,25,0,TAU);ctx.fill();}
   if(c.hp<c.max){
     const w=64,r=clamp(c.hp/c.max,0,1);
     ctx.fillStyle='rgba(7,15,22,.8)';ctx.fillRect(px-w/2,py-112,w,7);
@@ -83,15 +100,27 @@ function drawBuild(b){
     ctx.strokeStyle='rgba(40,28,14,.6)';ctx.lineWidth=1.5;
     for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(px+i*9,py-10+Math.abs(i)*4);ctx.lineTo(px+i*9,py+12+Math.abs(i)*2);ctx.stroke();}
   }else if(b.type==='tower'){
-    ctx.fillStyle='#4a3826';ctx.fillRect(px-4,py-34,8,34);
-    ctx.fillStyle=fl?'#ffe8c4':'#6b5334';
-    ctx.beginPath();ctx.moveTo(px-16,py-30);ctx.lineTo(px,py-38);ctx.lineTo(px+16,py-30);ctx.lineTo(px,py-22);ctx.closePath();ctx.fill();
-    const sp=proj(Math.cos(b.ang),Math.sin(b.ang)),m=Math.hypot(sp[0],sp[1])||1,dx=sp[0]/m,dy=sp[1]/m;
-    ctx.strokeStyle='#8fe3d0';ctx.lineWidth=3;
-    ctx.beginPath();ctx.moveTo(px-dx*6,py-32-dy*6);ctx.lineTo(px+dx*14,py-32+dy*14);ctx.stroke();
-    ctx.strokeStyle='#e0b070';ctx.lineWidth=2;
-    ctx.beginPath();ctx.moveTo(px-dy*8,py-32+dx*4);ctx.lineTo(px+dy*8,py-32-dx*4);ctx.stroke();
-    if(fl){ctx.fillStyle='rgba(255,240,200,.9)';ctx.beginPath();ctx.arc(px+dx*16,py-32+dy*16,4,0,TAU);ctx.fill();}
+    const wood=fl?'#ffe8c4':'#705238',woodHi=fl?'#fff2d8':'#a17b4c',dark='#3b3026';
+    // 四脚瞭望架：外轮廓保持在原箭塔范围内，斜撑提升轮廓识别度。
+    ctx.fillStyle='#263b3b';ctx.beginPath();ctx.moveTo(px-22,py-3);ctx.lineTo(px,py-14);ctx.lineTo(px+22,py-3);ctx.lineTo(px,py+7);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#637367';ctx.beginPath();ctx.moveTo(px-19,py-4);ctx.lineTo(px,py-13);ctx.lineTo(px+19,py-4);ctx.lineTo(px,py+2);ctx.closePath();ctx.fill();
+    ctx.strokeStyle=dark;ctx.lineWidth=5;ctx.lineCap='square';ctx.beginPath();
+    ctx.moveTo(px-10,py-7);ctx.lineTo(px-5,py-32);ctx.lineTo(px+5,py-32);ctx.lineTo(px+10,py-7);
+    ctx.moveTo(px-8,py-20);ctx.lineTo(px+7,py-10);ctx.moveTo(px+8,py-20);ctx.lineTo(px-7,py-10);ctx.stroke();
+    ctx.strokeStyle=wood;ctx.lineWidth=3;ctx.beginPath();
+    ctx.moveTo(px-10,py-7);ctx.lineTo(px-5,py-32);ctx.lineTo(px+5,py-32);ctx.lineTo(px+10,py-7);
+    ctx.moveTo(px-8,py-20);ctx.lineTo(px+7,py-10);ctx.moveTo(px+8,py-20);ctx.lineTo(px-7,py-10);ctx.stroke();
+    ctx.fillStyle=woodHi;ctx.beginPath();ctx.moveTo(px-18,py-31);ctx.lineTo(px-7,py-39);ctx.lineTo(px+9,py-39);ctx.lineTo(px+18,py-31);ctx.lineTo(px+13,py-24);ctx.lineTo(px-13,py-24);ctx.closePath();ctx.fill();
+    ctx.fillStyle=dark;ctx.fillRect(px-14,py-25,28,3);
+    ctx.strokeStyle='rgba(232,193,124,.75)';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(px-16,py-31);ctx.lineTo(px+15,py-31);ctx.stroke();
+    // 转向弩架跟随 b.ang；细弦与箭矢方向清晰可读。
+    const sp=proj(Math.cos(b.ang),Math.sin(b.ang)),m=Math.hypot(sp[0],sp[1])||1,dx=sp[0]/m,dy=sp[1]/m,cy=py-34;
+    ctx.strokeStyle='#d5b47d';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(px-dy*9,cy+dx*9);ctx.lineTo(px+dy*9,cy-dx*9);ctx.stroke();
+    ctx.strokeStyle=fl?'#fff2d8':'#8fe3d0';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px-dx*5,cy-dy*5);ctx.lineTo(px+dx*13,cy+dy*13);ctx.stroke();
+    ctx.fillStyle=fl?'#fff2d8':'#d8c08b';ctx.beginPath();ctx.moveTo(px+dx*16,cy+dy*16);ctx.lineTo(px+dx*10+dy*2,cy+dy*10-dx*2);ctx.lineTo(px+dx*10-dy*2,cy+dy*10+dx*2);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#e5bd73';ctx.beginPath();ctx.arc(px,cy,2.5,0,TAU);ctx.fill();
+    if(fl){ctx.fillStyle='rgba(255,240,200,.9)';ctx.beginPath();ctx.arc(px+dx*17,cy+dy*17,4,0,TAU);ctx.fill();}
+    ctx.lineCap='butt';
   }else if(b.type==='totem'){
     ctx.fillStyle='#3d4a44';ctx.fillRect(px-3,py-26,6,26);
     const p=.7+.3*Math.sin(b.pulse*3),g=ctx.createRadialGradient(px,py-34,1,px,py-34,12);
