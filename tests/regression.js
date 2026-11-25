@@ -154,18 +154,14 @@ function captureSaves() {
   const base = { embers: 41, bless: { blade: 2, iron: 1, stock: 0 }, best: { nights: 5, kills: 33, wins: 1 },
     seen: { foe: { crawler: 7 }, build: { tower: 2 }, card: { blade: 1 }, play: { rain: 3 } },
     diff: 'wild', muted: true };
-  const out = {};
-  for (const key of ['arkmist_v3', 'arkmist_v2', 'arkmist_v1']) {
-    const env = makeEnv({ storage: [[key, JSON.stringify(base)]] });
-    out[key] = j(env)(`JSON.stringify({embers:save.embers,diff:save.diff,muted:save.muted,bless:save.bless,best:save.best,seen:save.seen})`);
-  }
-  return out;
+  const env = makeEnv({ storage: [['arkmist_v3', JSON.stringify(base)]] });
+  return j(env)(`JSON.stringify({embers:save.embers,diff:save.diff,muted:save.muted,bless:save.bless,best:save.best,seen:save.seen})`);
 }
 
 const SAVE_G = { "embers": 41, "diff": "wild", "muted": true, "bless": { "blade": 2, "iron": 1, "stock": 0 }, "best": { "nights": 5, "kills": 33, "wins": 1 }, "seen": { "foe": { "crawler": 7 }, "build": { "tower": 2 }, "card": { "blade": 1 }, "play": { "rain": 3 } } };
 const GOLDEN = {
   r0: {"nightTotal":{"1":[10,10],"2":[14,14],"3":[19,19],"4":[23,23],"5":[27,27],"6":[31,31],"7":[26,25]},"bossNight":{"1":false,"2":false,"3":false,"4":false,"5":false,"6":false,"7":true},"hp":{"1":{"crawler":26,"crawlerElite":41.6,"spitter":22,"spitterElite":35.2,"brute":95,"bruteElite":152,"boss":900,"bossElite":1440},"2":{"crawler":29.379999999999995,"crawlerElite":47.007999999999996,"spitter":24.86,"spitterElite":39.775999999999996,"brute":107.35,"bruteElite":171.76,"boss":1016.9999999999999,"bossElite":1627.1999999999998},"3":{"crawler":32.76,"crawlerElite":52.416,"spitter":27.72,"spitterElite":44.352,"brute":119.7,"bruteElite":191.52,"boss":1134,"bossElite":1814.4},"4":{"crawler":36.14,"crawlerElite":57.824,"spitter":30.580000000000002,"spitterElite":48.928,"brute":132.05,"bruteElite":211.28,"boss":1251,"bossElite":2001.6},"5":{"crawler":39.52,"crawlerElite":63.232,"spitter":33.44,"spitterElite":53.504,"brute":144.4,"bruteElite":231.04,"boss":1368,"bossElite":2188.8},"6":{"crawler":42.9,"crawlerElite":68.64,"spitter":36.3,"spitterElite":58.08,"brute":156.75,"bruteElite":250.8,"boss":1485,"bossElite":2376},"7":{"crawler":46.28,"crawlerElite":74.048,"spitter":39.160000000000004,"spitterElite":62.656,"brute":169.1,"bruteElite":270.56,"boss":1602,"bossElite":2563.2}},"weights":{"1":[200,0,0],"2":[140,60,0],"3":[103,55,42],"4":[98,71,31],"5":[97,67,36],"6":[81,69,50],"7":[79,65,56]}},
-  saves: { arkmist_v3: SAVE_G, arkmist_v2: SAVE_G, arkmist_v1: SAVE_G }
+  saves: SAVE_G
 };
 
 const cases = [];
@@ -206,8 +202,8 @@ testCase('R2_save_validation', () => {
   assert.equal(env.run('save.diff'), 'std');
   assert.equal(env.run('save.embers'), 0);
   for (const raw of ['{bad', '{}', JSON.stringify({ embers: -1 })]) {
-    const fallback = makeEnv({ storage: [['arkmist_v3', raw], ['arkmist_v2', JSON.stringify({ embers: 123 })]] });
-    assert.equal(fallback.run('save.embers'), 123);
+    const invalid = makeEnv({ storage: [['arkmist_v3', raw]] });
+    assert.equal(invalid.run('save.embers'), 0);
   }
   const proto = makeEnv({ storage: [['arkmist_v3', JSON.stringify({ diff: 'constructor' })]] });
   proto.run('S.day=1;S.toSpawn=0;warns.length=0;startNight()');

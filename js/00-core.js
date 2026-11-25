@@ -46,9 +46,8 @@ const BLESS={
 function loadSave(){
   let p=null;
   try{
-    for(const key of [SAVE_KEY,'arkmist_v2','arkmist_v1']){
-      const raw=localStorage.getItem(key);
-      if(!raw)continue;
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(raw){
       try{
         const next=JSON.parse(raw);
         const seenValid=next.seen&&typeof next.seen==='object'&&['foe','build','card','play'].some(k=>
@@ -58,7 +57,7 @@ function loadSave(){
           (typeof next.diff==='string'&&Object.prototype.hasOwnProperty.call(DIFFS,next.diff))||
           (next.bless&&typeof next.bless==='object'&&Object.keys(BLESS).some(k=>Number.isInteger(next.bless[k])&&next.bless[k]>=0&&next.bless[k]<=BLESS[k].max))||
           (next.best&&typeof next.best==='object'&&['nights','kills','wins'].some(k=>Number.isInteger(next.best[k])&&next.best[k]>=0))||seenValid);
-        if(valid){p=next;break;}
+        if(valid)p=next;
       }catch(e){}
     }
   }catch(e){return;}
