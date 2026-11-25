@@ -233,6 +233,12 @@ testCase('R3_deck_and_card_text', () => {
   assert.equal(costs.wall, '8木');
   assert.equal(costs.tower, '12木 6石');
   assert.equal(costs.sp_fireball, '15雾');
+  const handTower = env.run(`cardInner(CDEFS.tower,1)`);
+  assert.ok(handTower.includes('title="12木材"') && handTower.includes('title="6石料"'));
+  assert.ok(!handTower.includes('>12木<') && !handTower.includes('hcKind'));
+  assert.ok(handTower.includes('自动射击附近雾裔。'));
+  const handSpell = env.run(`P.cls='mage';cardInner(CDEFS.sp_fireball,'')`);
+  assert.ok(handSpell.includes('title="15法力"'));
   env.run(`DECK.hand=[mkCard('wall'),mkCard('tower')];DECK.draw=[];DECK.discard=[];renderSwap()`);
   assert.ok(!/undefined|\[object Object\]|NaN/.test(env.ids.get('swapList').children.map(e => e.innerHTML).join('')));
   env.run(`const sc=mkCard('salvage5');DECK.hand=[sc,mkCard('wall')];DECK.draw=[];DECK.discard=[];beginSalvage(sc)`);

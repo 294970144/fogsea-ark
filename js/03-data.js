@@ -118,10 +118,20 @@ const costStr=def=>{
   for(const k of Object.keys(def.cost||{}))parts.push(def.cost[k]+RESNAME[k]);
   return parts.length?parts.join(' '):'免费';
 };
-const costHtml=def=>{
+const costHtml=(def,compact=false)=>{
   const parts=[];
-  if(def.mana)parts.push(`<b class="mana" data-mana="1" style="color:#8fb8ff">${effManaCost(def)}${isMage()?'法':'雾'}</b>`);
-  for(const k of Object.keys(def.cost||{}))parts.push(`<b data-k="${k}" style="color:${RESCOL[k]}">${def.cost[k]}${RESNAME[k]}</b>`);
+  if(def.mana){
+    const manaName=isMage()?'法力':'雾能';
+    parts.push(compact
+      ?`<b class="mana" data-mana="1" title="${effManaCost(def)}${manaName}" style="color:#8fb8ff">${svg(isMage()?'wick':'fog',12)}${effManaCost(def)}</b>`
+      :`<b class="mana" data-mana="1" style="color:#8fb8ff">${effManaCost(def)}${isMage()?'法':'雾'}</b>`);
+  }
+  for(const k of Object.keys(def.cost||{})){
+    if(compact){
+      const label=k==='wood'?'木材':k==='stone'?'石料':'雾晶';
+      parts.push(`<b data-k="${k}" title="${def.cost[k]}${label}" style="color:${RESCOL[k]}">${svg(k,12)}${def.cost[k]}</b>`);
+    }else parts.push(`<b data-k="${k}" style="color:${RESCOL[k]}">${def.cost[k]}${RESNAME[k]}</b>`);
+  }
   return parts.length?parts.join(''):'<b class="free">免费</b>';
 };
 

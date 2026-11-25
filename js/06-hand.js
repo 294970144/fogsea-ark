@@ -2,13 +2,13 @@
 /* ---------------- 手牌 UI ---------------- */
 const HAND_KEYS='1234567890-=';
 function cardInner(def,hot){
-  const cost=def.cls==='class'?'<b style="color:#b48cff">职业</b>':costHtml(def);
-  const kind=def.cls==='class'?'职业':(KINDNAME[def.kind]+(def.elem?' · '+ELEMNAME[def.elem]:''));
+  const cost=def.cls==='class'?'<b style="color:#b48cff">职业</b>':costHtml(def,true);
   return `<span class="hcHot kb-hint">${hot||''}</span>
     <div class="hcCost">${cost}</div>
-    <div class="hcArt" style="color:${def.color}">${svg(def.icon,26)}</div>
-    <div class="hcName">${def.name}</div>
-    <div class="hcKind" style="color:${def.color}">${kind}</div>
+    <div class="hcMain">
+      <div class="hcArt" style="color:${def.color}">${svg(def.icon,22)}</div>
+      <div class="hcName">${def.name}</div>
+    </div>
     <div class="hcDesc">${CARD_BRIEF[def.id]||def.desc}</div>`;
 }
 function renderHand(){
@@ -20,6 +20,7 @@ function renderHand(){
     el.innerHTML=cardInner(def,HAND_KEYS[i]||'');
     el.addEventListener('pointerdown',e=>{
       if(S.mode!=='play')return;
+      if(e.button!==0){e.preventDefault();if(e.button===2)clearAim();return;}
       e.preventDefault();auInit();
       const pid=e.pointerId,uid=c.uid;
       S.dragUid=uid;S.dragMoved=false;S.dragStart=[e.clientX,e.clientY];S.dragPointerId=pid;
