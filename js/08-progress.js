@@ -104,6 +104,7 @@ function finishDawn(){
   if(n)toast('抽入 '+n+' 张牌','good');
   if(blocked>0&&DECK.hand.length>=DECK.max&&hasCards)
     offerSwap(Math.min(blocked,DECK.hand.length),'黎明抽牌 · 手牌已满');
+  autoSave(); // 黎明选择已落地，此处是干净的第 N 日检查点
 }
 $('dawnSkip').addEventListener('click',skipDawn);
 
@@ -126,7 +127,7 @@ function settle(win){
     save.embers+=e;
     save.best.nights=Math.max(save.best.nights,st.nights);
     save.best.kills=Math.max(save.best.kills,st.kills);
-    persist();
+    persist();clearActiveSlot(); // 本局已结束，清掉对应存档位
     S.settled={win,embers:e,nights0:b.nights0,kills0:b.kills0,incremental:true};
     return S.settled;
   }
@@ -135,7 +136,7 @@ function settle(win){
   save.best.nights=Math.max(save.best.nights,st.nights);
   save.best.kills=Math.max(save.best.kills,st.kills);
   if(win)save.best.wins++;
-  persist();
+  persist();clearActiveSlot();
   S.settled={win,embers:e,nights0:st.nights,kills0:st.kills};
   return S.settled;
 }

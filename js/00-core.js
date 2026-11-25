@@ -81,6 +81,77 @@ function loadSave(){
   }
 }
 loadSave();
+
+/* ---------------- 单局存档槽（与局外元数据 arkmist_v3 完全隔离） ----------------
+   约束：本段不得调用 rand/irand/Math.random，否则会打乱启动期随机序列。 */
+const SLOT_KEY='arkmist_slots_v1',SLOT_VER=1,SLOT_N=3,SLOT_FOE_CAP=44;
+const slots={v:SLOT_VER,active:null,slots:[null,null,null],corrupt:false};
+
+function _slotCardOK(c){return !!c&&typeof c==='object'&&Number.isInteger(c.uid)&&typeof c.id==='string';}
+function validateSlot(s){
+  if(!s||typeof s!=='object'||Array.isArray(s)||s.v!==SLOT_VER)return false;
+  if(!Number.isFinite(s.ts)||!Number.isInteger(s.day)||s.day<1||s.day>1e7)return false;
+  if(s.phase!=='day'&&s.phase!=='night')return false;
+  const n=s.snap;
+  if(!n||typeof n!=='object'||Array.isArray(n))return false;
+  if(!Number.isInteger(n.seed))return false;
+  if(!n.S||typeof n.S!=='object'||!n.P||typeof n.P!=='object'||!n.res||typeof n.res!=='object')return false;
+  if(!n.S.stats||typeof n.S.stats!=='object'||!n.P.aff||typeof n.P.aff!=='object'||!n.P.stacks||typeof n.P.stacks!=='object')return false;
+  if(![n.P.hp,n.P.maxHp,n.P.en,n.P.maxEn,n.S.timeLeft,n.S.day].every(Number.isFinite))return false;
+  const d=n.DECK;
+  if(!d||typeof d!=='object'||!['draw','hand','discard'].every(k=>Array.isArray(d[k])&&d[k].every(_slotCardOK)))return false;
+  if(!Number.isInteger(d.max)||!Number.isInteger(d.uid))return false;
+  if(!['nodes','fogBlobs','builds','foes','warns','shots'].every(k=>Array.isArray(n[k])))return false;
+  if(n.foes.length>SLOT_FOE_CAP||n.shots.length>240||n.warns.length>80||n.nodes.length>240)return false;
+  if(!n.core||typeof n.core!=='object'||!Number.isFinite(n.core.hp)||!Number.isFinite(n.core.max))return false;
+  return true;
+}
+// 只读取、不删除原始数据；版本不符或单槽损坏时保留原串供玩家/后续版本处理
+function loadSlots(){
+  let raw=null;
+  try{raw=localStorage.getItem(SLOT_KEY);}catch(e){return;}
+  if(!raw)return;
+  let p=null;
+  try{p=JSON.parse(raw);}catch(e){p=null;}
+  if(!p||typeof p!=='object'||Array.isArray(p)||p.v!==SLOT_VER||!Array.isArray(p.slots)){
+    slots.corrupt=true;return;
+  }
+  const arr=[null,null,null];
+  for(let i=0;i<SLOT_N;i++){
+    const s=p.slots[i];
+    if(s===null||s===undefined)continue;
+    if(validateSlot(s))arr[i]=s;else slots.corrupt=true;
+  }
+  slots.slots=arr;
+  slots.active=Number.isInteger(p.active)&&p.active>=0&&p.active<SLOT_N&&arr[p.active]?p.active:null;
+}
+// 先序列化并写盘，成功后才提交内存；避免配额失败时内存与磁盘不一致
+function persistSlots(next){
+  const payload=next||{v:SLOT_VER,active:slots.active,slots:slots.slots};
+  let str;
+  try{str=JSON.stringify(payload);}
+  catch(e){if(typeof console!=='undefined'&&console.warn)console.warn('存档槽序列化失败',e);return false;}
+  try{localStorage.setItem(SLOT_KEY,str);}
+  catch(e){
+    if(!persistSlots._warned){
+      persistSlots._warned=true;
+      if(typeof console!=='undefined'&&console.warn)console.warn('存档槽写入失败',e);
+      if(typeof toast==='function')toast('存档写入失败 · 进度可能未保存','warn');
+    }
+    return false;
+  }
+  slots.v=SLOT_VER;slots.active=payload.active;slots.slots=payload.slots;slots.corrupt=false;
+  return true;
+}
+function setActiveSlot(i){return persistSlots({v:SLOT_VER,active:i,slots:slots.slots.slice()});}
+function clearActiveSlot(){
+  if(slots.active===null&&!slots.slots.some(Boolean))return true;
+  const arr=slots.slots.slice();
+  if(slots.active!==null)arr[slots.active]=null;
+  return persistSlots({v:SLOT_VER,active:null,slots:arr});
+}
+loadSlots();
+
 const ICONS={
 sword:'<path d="M4 20L18 6M18 6l2-2-4 0-2 2M14 4l6 6M6 16l2 2"/>',
 heart:'<path d="M12 21C5 15 2 11 2 7.5A4.5 4.5 0 0112 5a4.5 4.5 0 0110 2.5c0 3.5-3 7.5-10 13.5z"/>',

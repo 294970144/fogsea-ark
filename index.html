@@ -86,6 +86,7 @@
       </div>
       <div class="menuFoot">
         <button id="startBtn">开始</button>
+        <button id="btnContinue">继续游戏</button>
         <button class="mBtn book" id="btnCodexMenu">图鉴</button>
       </div>
     </section>
@@ -108,6 +109,7 @@
           <div><span class="kb">点选 / 拖拽</span>卡牌落地</div>
           <div><span class="kb">空格</span>冲刺<span class="kb">N</span>入夜</div>
           <div><span class="kb">Q</span>雾爆<span class="kb">F</span>修复</div>
+          <div><span class="kb">K</span>随时存档<span class="kb">S</span>暂停存档</div>
         </div>
       </div>
       <div class="prepFoot">
@@ -159,6 +161,7 @@
     <h2>雾海静止</h2>
     <div class="msub"></div>
     <button class="mBtn primary" id="btnResume">继续</button>
+    <button class="mBtn book" id="btnSave">存档</button>
     <button class="mBtn book" id="btnCodexPause">图鉴</button>
     <button class="mBtn" id="btnRestart">重新开始</button>
     <button class="mBtn" id="btnToTitle">返回标题</button>
@@ -178,6 +181,16 @@
     <button class="mBtn primary" id="btnAgain">再次远航</button>
     <button class="mBtn book" id="btnEndless">继续守护</button>
     <button class="mBtn" id="btnTitle2">返回标题</button>
+  </div>
+</div>
+
+<div class="overlay" id="slotOv" role="dialog" aria-modal="true" aria-label="存档位">
+  <div class="scrim"></div>
+  <div class="modalBox slotBox">
+    <h2 id="slotTitle">存档位</h2>
+    <div id="slotList"></div>
+    <button class="mBtn" id="slotDelete">删除存档</button>
+    <button class="mBtn" id="slotBack">返回</button>
   </div>
 </div>
 

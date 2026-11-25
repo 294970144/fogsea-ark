@@ -29,6 +29,11 @@ addEventListener('keydown',e=>{
   if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k)&&S.mode!=='menu'&&S.mode!=='prep')e.preventDefault();
   if(e.repeat){keys[k]=true;return;}
   keys[k]=true;
+  if(slotUi){
+    if(k==='escape'){e.preventDefault();closeSlots();}
+    else if(['1','2','3'].includes(k)){const el=$('slotList').children[+k-1];if(el&&el.click)el.click();}
+    return;
+  }
   if(S.mode==='dawn'){
     if(['1','2','3'].includes(k))pickDawn(+k-1);
     if(k==='escape')skipDawn();
@@ -54,14 +59,16 @@ addEventListener('keydown',e=>{
     if(k==='escape'){if(S.aimUid)clearAim();else pauseGame();}
     if(k==='p')pauseGame();
     if(k==='m')setMuted(!save.muted);
+    if(k==='k')openSlots('save');
   }else if(S.mode==='pause'){
     if(k==='escape'||k==='p')resumeGame();
+    else if(k==='s')openSlots('save');
     else cheatKey(k);
   }
   else if(S.mode==='menu'&&k==='enter'&&e.target===document.body){e.preventDefault();openPrep();}
   else if(S.mode==='prep'){
     if(k==='escape'){e.preventDefault();toTitle();}
-    else if(k==='enter'&&e.target===document.body){e.preventDefault();startRun();}
+    else if(k==='enter'&&e.target===document.body){e.preventDefault();beginRun();}
   }
 });
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);

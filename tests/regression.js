@@ -453,6 +453,63 @@ testCase('R12_combat_targeting', () => {
   assert.ok(env.run('foes[0].hp') < hp0);
 });
 
+testCase('R13_save_slots_roundtrip', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    const metaBefore=localStorage.getItem('arkmist_v3');
+    initRun();S.mode='play';S.day=4;S.phase='night';S.timeLeft=12;
+    P.cls='mage';P.maxEn=200;P.en=137;P.aff.fire=3;P.aff.frost=1;
+    P.stacks={t_fusion:1,t_resonance:2};P.resoElem='fire';P.resoN=1;
+    res.wood=12;DECK.max=8;DECK.uid=99;
+    S.dawnBless=[BLESSINGS.find(b=>b.id==='t_fusion')];
+    const seed0=seed,node0=JSON.stringify(nodes[0]);
+    if(!doSaveSlot(0))return JSON.stringify({error:'save failed'});
+    const metaAfter=localStorage.getItem('arkmist_v3');
+    const raw=localStorage.getItem(SLOT_KEY)||'';
+    initRun();
+    restoreSnapshot(JSON.parse(JSON.stringify(slots.slots[0].snap)));
+    return JSON.stringify({
+      metaSame:metaBefore===metaAfter,rawHasSnap:raw.indexOf('"snap"')>=0,rawHasBless:raw.indexOf('t_fusion')>=0,
+      active:slots.active,cls:P.cls,en:P.en,aff:P.aff,stacks:P.stacks,reso:P.resoElem,
+      day:S.day,phase:S.phase,timeLeft:S.timeLeft,wood:res.wood,deckMax:DECK.max,deckUid:DECK.uid,
+      blessOk:S.dawnBless.length===1&&S.dawnBless[0]===BLESSINGS.find(b=>b.id==='t_fusion')&&typeof S.dawnBless[0].f==='function',
+      seedSame:seed===seed0,nodeSame:JSON.stringify(nodes[0])===node0,
+      transient:{drag:S.dragUid,hit:S.hitstop,aim:S.aimUid,pending:S.pendingSalvage}
+    });
+  })()`);
+  assert.equal(out.error, undefined);
+  assert.equal(out.metaSame, true);
+  assert.equal(out.rawHasSnap, true);
+  assert.equal(out.rawHasBless, true);
+  assert.equal(out.active, 0);
+  assert.deepEqual([out.cls, out.en, out.day, out.phase, out.timeLeft, out.wood, out.deckMax, out.deckUid],
+    ['mage', 137, 4, 'night', 12, 12, 8, 99]);
+  assert.deepEqual(out.aff, { fire: 3, frost: 1, arcane: 0, lightning: 0 });
+  assert.deepEqual(out.stacks, { t_fusion: 1, t_resonance: 2 });
+  assert.equal(out.reso, 'fire');
+  assert.equal(out.blessOk, true);
+  assert.equal(out.seedSame, true);
+  assert.equal(out.nodeSame, true);
+  assert.deepEqual(out.transient, { drag: null, hit: 0, aim: null, pending: null });
+
+  const bad = makeEnv({ storage: [['arkmist_slots_v1', '{bad']] });
+  assert.equal(bad.run('slots.corrupt'), true);
+  assert.deepEqual(JSON.parse(bad.run('JSON.stringify(slots.slots)')), [null, null, null]);
+  const ver = makeEnv({ storage: [['arkmist_slots_v1', JSON.stringify({ v: 99, active: 0, slots: [{}, null, null] })]] });
+  assert.equal(ver.run('slots.active'), null);
+  assert.equal(ver.run('slots.corrupt'), true);
+
+  const quota = makeEnv();
+  quota.run('localStorage.setItem=()=>{throw new Error("quota")}');
+  const warn = console.warn; console.warn = noop;
+  try { assert.equal(quota.run('persistSlots()'), false); } finally { console.warn = warn; }
+
+  const clr = makeEnv();
+  clr.run('initRun();S.mode="play";doSaveSlot(1);S.day=7;S.stats.nights=7;settle(true)');
+  assert.equal(clr.run('slots.slots[1]'), null);
+  assert.equal(clr.run('slots.active'), null);
+});
+
 function main() {
   if (process.env.CAPTURE) {
     console.log(JSON.stringify({ r0: captureBaseline(makeEnv()), saves: captureSaves() }, null, 2));

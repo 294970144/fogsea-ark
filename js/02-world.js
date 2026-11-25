@@ -40,8 +40,10 @@ function vnoise(x,y){
 }
 const walk=(x,y)=>{const ix=x|0,iy=y|0;if(ix<0||iy<0||ix>=GRID||iy>=GRID)return false;return tiles[iy*GRID+ix].land;};
 const tileAt=(x,y)=>{const ix=x|0,iy=y|0;if(ix<0||iy<0||ix>=GRID||iy>=GRID)return null;return tiles[iy*GRID+ix];};
-function genWorld(){
-  seed=(Math.random()*1e9)|0;tiles=[];
+// forcedSeed 仅供读档重建；默认路径必须保持 (Math.random()*1e9)|0，以免改变启动期 RNG 序列
+// 契约：hash/vnoise 与下方 tile 生成不得引入随机，否则 seed-only 地形恢复会失效
+function genWorld(forcedSeed){
+  seed=forcedSeed===undefined?(Math.random()*1e9)|0:forcedSeed;tiles=[];
   for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
     const d=dist(x+.5,y+.5,CEN,CEN),n=vnoise(x*.33,y*.33)*2.6;
     let land=d+n<15.6;if(d<4.5)land=true;

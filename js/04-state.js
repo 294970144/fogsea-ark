@@ -118,3 +118,62 @@ function rollRewards(n){
   return out;
 }
 
+/* ---------------- 单局快照 ----------------
+   const 对象只能原地恢复，禁止对 S/P/DECK/res 重新赋值。 */
+const S_SAVE_FIELDS=['mode','phase','day','timeLeft','toSpawn','nightTotal','nightKilled','spawnT','speed',
+  'nightAmt','win','elapsed','combatT','stats','hints','endless','endlessBase','settled',
+  'dawnStep','dawnCards','dawnBless','pendingSalvage','swapLeft','swapReason'];
+function _pickFields(src,keys){const out={};for(const k of keys)if(k in src)out[k]=src[k];return out;}
+function _clone(v){return JSON.parse(JSON.stringify(v));}
+
+function captureSnapshot(){
+  const sd=_pickFields(S,S_SAVE_FIELDS);
+  // BLESSINGS 条目带函数 f，不能序列化：只存 id，恢复时回绑原对象
+  sd.dawnBless=(S.dawnBless||[]).map(b=>b&&b.id).filter(Boolean);
+  if(!Array.isArray(sd.dawnCards))sd.dawnCards=[];
+  if(!sd.stats)sd.stats=S.stats?_clone(S.stats):{};
+  const pd=_pickFields(P,Object.keys(P));
+  const cards=a=>a.map(c=>({uid:c.uid,id:c.id})).slice(0,240);
+  const plain=(a,cap)=>a.map(o=>_clone(o)).slice(0,cap);
+  return _clone({
+    seed,nodes:plain(nodes,240),fogBlobs:plain(fogBlobs,40),
+    S:sd,P:pd,res:_clone(res),
+    DECK:{draw:cards(DECK.draw),hand:cards(DECK.hand),discard:cards(DECK.discard),
+      max:DECK.max,recycle:DECK.recycle,uid:DECK.uid},
+    core:{hp:core.hp,max:core.max},builds:plain(builds,200),
+    foes:plain(foes,44),warns:plain(warns,80),shots:plain(shots,240)
+  });
+}
+function _putObj(dst,src){for(const k in dst)delete dst[k];Object.assign(dst,src);}
+function _putArr(dst,src){dst.length=0;for(const x of src)dst.push(x);}
+function restoreSnapshot(s){
+  if(!s||typeof s!=='object')return false;
+  const d=_clone(s);
+  // 地形由 seed 完全决定；nodes/fogBlobs 含随机摆放，必须覆盖 genWorld 重新掷出的结果
+  genWorld(d.seed);
+  _putArr(nodes,d.nodes.map(n=>_clone(n)));
+  _putArr(fogBlobs,d.fogBlobs.map(b=>_clone(b)));
+  rebuildSolids();rebuildTileCost();fieldDirty=true;
+  const sd=d.S;
+  sd.dawnBless=Array.isArray(sd.dawnBless)?sd.dawnBless.map(id=>BLESSINGS.find(b=>b.id===id)).filter(Boolean):[];
+  if(sd.mode!=='dawn')sd.mode='play';
+  Object.assign(sd,{hitstop:0,launchT:0,overT:0,aimUid:null,dragUid:null,dragMoved:false,
+    dragStart:[0,0],dragPointerId:null,handDirty:true,pendingSalvage:null,swapLeft:0,swapReason:''});
+  _putObj(S,sd);
+  const pd=d.P;
+  Object.assign(pd,{anim:0,hurtT:0,swingT:0,moving:false});
+  _putObj(P,pd);
+  _putObj(res,d.res);
+  _putObj(DECK,d.DECK);
+  core.hp=d.core.hp;core.max=d.core.max;core.flash=0;core.beam=0;
+  _putArr(builds,d.builds.map(o=>_clone(o)));
+  _putArr(foes,d.foes.map(o=>_clone(o)));
+  _putArr(warns,d.warns.map(o=>_clone(o)));
+  _putArr(shots,d.shots.map(o=>_clone(o)));
+  nodes.forEach(n=>{n.shake=0;});
+  cam.x=P.x;cam.y=P.y;cam.z=cam.tz=1.35;cam.shake=cam.sx=cam.sy=0;
+  _putArr(picks,[]);_putArr(parts,[]);_putArr(floats,[]);_putArr(slashes,[]);_putArr(ghosts,[]);
+  rebuildFoeGrid();fieldDirty=true;S.handDirty=true;
+  return true;
+}
+
