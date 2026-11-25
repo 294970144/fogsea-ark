@@ -42,7 +42,7 @@ function startRun(){
 }
 function pauseGame(){
   if(S.mode!=='play'||codexOpen)return;
-  S.mode='pause';endDrag(true);persist();showOv('pauseOv',true);sfx('ui');
+  S.mode='pause';endDrag();persist();showOv('pauseOv',true);sfx('ui');
 }
 function resumeGame(){if(S.mode!=='pause')return;S.mode='play';showOv('pauseOv',false);sfx('ui');}
 function skipToNight(){

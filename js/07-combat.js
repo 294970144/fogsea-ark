@@ -41,12 +41,15 @@ function swing(ang){
     type:'wave',dmg:P.dmg*(.5+.2*P.wave),life:.34,pierce:2,z:12});
   if(hit)S.hitstop=Math.max(S.hitstop,.02);
 }
-function damageFoe(f,dmg,ang,crit){
+function damageFoe(f,dmg,ang,crit,opts){
   if(f.dead)return;
+  opts=opts||{};
   f.hp-=dmg;f.flash=.13;S.stats.dmg+=dmg;
-  f.kx+=Math.cos(ang)*3.2;f.ky+=Math.sin(ang)*3.2;
-  floater(f.x,f.y,Math.round(dmg),crit?'#ffb454':'#eef7f2',crit);
-  puff(f.x,f.y,4,'#c9a8ff',2.4,.4,2.5);sfx('hit');
+  if(!opts.noKnock){f.kx+=Math.cos(ang)*3.2;f.ky+=Math.sin(ang)*3.2;}
+  if(!opts.dot){
+    floater(f.x,f.y,Math.round(dmg),crit?'#ffb454':'#eef7f2',crit);
+    puff(f.x,f.y,4,'#c9a8ff',2.4,.4,2.5);sfx('hit');
+  }
   if(f.hp<=0)killFoe(f);
 }
 function killFoe(f){
@@ -58,6 +61,13 @@ function killFoe(f){
   const crys=f.boss?12:f.type==='brute'?3:f.type==='spitter'?2:1;
   for(let i=0;i<crys;i++)dropPickup(f.x,f.y,'crys',1);
   if(P.ls>0)healPlayer(P.ls);
+  if(isMage()&&tLv('t_burnspread')>0&&(f.burnStacks||0)>0){
+    let n=0;
+    forFoes(f.x,f.y,2.5,o=>{
+      if(n>=2||o===f||o.dead||dist(f.x,f.y,o.x,o.y)>=2.5+o.r)return;
+      applyStatus(o,'burn',Math.min(5,f.burnStacks));n++;
+    });
+  }
   sfx('kill');shake(f.boss?10:2);
   if(f.boss){banner('雾潮之主已溃','','');sfx('boom');S.hitstop=.12;}
 }
@@ -88,6 +98,39 @@ let hurtFxT=null;
 function damagePlayer(dmg,src){
   if(P.ifr>0||P.downed)return;
   dmg*=DIFFS[save.diff].dmg;
+  if(isMage()&&P.en>=P.maxEn*.5&&tLv('t_armor')>0)
+    dmg=Math.max(1,dmg-3*tLv('t_armor'));
+  if(P.shield>0){
+    const absorb=Math.min(P.shield,dmg);
+    P.shield-=absorb;dmg-=absorb;
+    if(dmg<=0){
+      P.ifr=Math.max(P.ifr,.3);P.hurtT=.2;
+      floater(P.x,P.y,'护盾','#8fe3d0');sfx('ward');
+      return;
+    }
+  }
+  if(dmg>=P.hp&&isMage()){
+    if(tLv('t_nirvana')>0&&!P.nirvanaUsed&&P.en>0){
+      P.nirvanaUsed=true;P.en=0;P.hp=Math.max(1,Math.round(P.maxHp*.5));P.ifr=2;
+      delete P.stacks.t_nirvana;refreshStacks();
+      const elems=['fire','frost','arcane'],elem=elems[irand(0,elems.length-1)];
+      for(const f of foes)if(!f.dead){
+        damageFoe(f,80,0,false,{noKnock:true});
+        if(!f.dead)applyElement(f,elem,2);
+      }
+      ring(P.x,P.y,'rgba(255,180,84,.95)',.3,4.5,.7);
+      puff(P.x,P.y,30,'#ffb454',5,.8,4);
+      toast('魔能涅槃 · 每局一次','good');sfx('boom');shake(10);
+      return;
+    }
+    if(tLv('t_manashield')>0&&P.en>=P.maxEn*.2){
+      P.en=0;P.ifr=Math.max(P.ifr,1.2);P.hurtT=.2;
+      ring(P.x,P.y,'rgba(143,227,208,.95)',.2,2.2,.5);
+      puff(P.x,P.y,20,'#8fe3d0',3,.6,3);
+      floater(P.x,P.y,'法力护盾','#8fe3d0',true);sfx('ward');
+      return;
+    }
+  }
   P.hp-=dmg;P.ifr=.6;P.hurtT=.35;
   floater(P.x,P.y,'-'+Math.round(dmg),'#ff4d6d',true);
   puff(P.x,P.y,8,'#ff4d6d',2.5,.5,3);sfx('hurt');shake(5);
@@ -250,6 +293,9 @@ function updateFoes(dt){
     if(f.dead)continue;
     f.anim+=dt*6;f.flash=Math.max(0,f.flash-dt);f.atkCd-=dt;f.retarget-=dt;
     f.detourT=Math.max(0,f.detourT-dt);f.phaseT=Math.max(0,f.phaseT-dt);
+    updateFoeStatus(f,dt);
+    if(f.dead)continue;
+    if((f.freezeT||0)>0)continue;
     if(f.retarget<=0){
       f.retarget=.3;
       const pd=P.downed?99:dist(f.x,f.y,P.x,P.y);
@@ -317,7 +363,8 @@ function updateFoes(dt){
       if(dd<min&&dd>.001){const push=(min-dd)/min;sepx+=(f.x-o.x)/dd*push;sepy+=(f.y-o.y)/dd*push;}
     });
     const sm=Math.hypot(sepx,sepy);if(sm>1){sepx/=sm;sepy/=sm;}
-    moveCircle(f,(dx*f.spd+sepx*f.spd*.9+f.kx)*dt,(dy*f.spd+sepy*f.spd*.9+f.ky)*dt,f.r,f.phaseT>0);
+    const fs=f.spd*foeSlowMult(f);
+    moveCircle(f,(dx*fs+sepx*fs*.9+f.kx)*dt,(dy*fs+sepy*fs*.9+f.ky)*dt,f.r,f.phaseT>0);
     f.kx*=Math.pow(.0015,dt);f.ky*=Math.pow(.0015,dt);
     if(f.boss){
       f.spawnCd-=dt;f.stompCd-=dt;
@@ -356,6 +403,11 @@ function updateBuilds(dt){
       if(b.cd<=0){b.cd=1;
         if(!P.downed&&dist(b.x,b.y,P.x,P.y)<def.range&&P.hp<P.maxHp){healPlayer(4);puff(P.x,P.y,3,'#6fe08a',1,.5,2);}
         puff(b.x,b.y,2,'#6fe08a',.8,.7,2);}
+    }else if(b.type==='manawell'){
+      b.cd-=dt;
+      if(b.cd<=0){b.cd=.6;puff(b.x,b.y,1,'#57e6ff',.6,.6,2);}
+      if(!P.downed&&dist(b.x,b.y,P.x,P.y)<=def.range)
+        gainMana(def.regen*P.regen*(1+.25*tLv('t_spring'))*dt);
     }
   }
 }
@@ -438,7 +490,7 @@ function updateParts(dt){
   for(const n of nodes)if(n.shake>0)n.shake=Math.max(0,n.shake-dt);
 }
 function update(dt){
-  S.elapsed+=dt;rebuildFoeGrid();
+  S.elapsed+=dt;S.combatT+=dt;rebuildFoeGrid();
   if(S.phase==='day'){
     S.timeLeft-=dt;S.nightAmt=Math.max(0,S.nightAmt-dt*.5);
     if(S.timeLeft<10&&S.timeLeft+dt>=10){toast('夜幕将至 · 构筑即将封存','warn');sfx('warn');}
@@ -481,18 +533,19 @@ function update(dt){
     if(isTouch&&(Math.abs(stickVec[0])>.12||Math.abs(stickVec[1])>.12)){dx=stickVec[0]+stickVec[1];dy=stickVec[1]-stickVec[0];}
     const m=Math.hypot(dx,dy);P.moving=m>0;
     if(P.dashT>0){
-      P.dashT-=dt;moveCircle(P,P.dashDx*P.spd*3.4*dt,P.dashDy*P.spd*3.4*dt,.3,false);
+      P.dashT-=dt;moveCircle(P,P.dashDx*P.spd*moveSpeedMult()*3.4*dt,P.dashDy*P.spd*moveSpeedMult()*3.4*dt,.3,false);
       ghosts.push({x:P.x,y:P.y,t:0});
       if(Math.random()<.5)puff(P.x,P.y,1,'#8fe3d0',.5,.3,2);
     }else if(m>0){
-      dx/=m;dy/=m;moveCircle(P,dx*P.spd*dt,dy*P.spd*dt,.3,false);
+      dx/=m;dy/=m;moveCircle(P,dx*P.spd*moveSpeedMult()*dt,dy*P.spd*moveSpeedMult()*dt,.3,false);
       P.face=Math.atan2(dy,dx);P.anim+=dt*10;
     }else depenetrate(P,.3,false);
     P.atkCd-=dt;P.swingT=Math.max(0,P.swingT-dt);
     P.dashCd=Math.max(0,P.dashCd-dt);P.ifr=Math.max(0,P.ifr-dt);P.hurtT=Math.max(0,P.hurtT-dt);
-    P.en=Math.min(P.maxEn,P.en+14*P.regen*dt);
+    gainMana(manaRegenRate()*dt);
     autoAttack();
   }
+  updateSpellState(dt);
   updateFoes(dt);updateBuilds(dt);updateShots(dt);updatePicks(dt);updateParts(dt);
   core.flash=Math.max(0,core.flash-dt);
   core.beam=lerp(core.beam,S.phase==='night'?1:.25,dt*2);

@@ -10,7 +10,8 @@ function makeGlow(col){
   g.fillStyle=rg;g.fillRect(0,0,128,128);return c;
 }
 const GLOW={amber:makeGlow('255,170,80'),lantern:makeGlow('255,190,110'),mint:makeGlow('143,227,208'),
-  cyan:makeGlow('87,230,255'),leaf:makeGlow('111,224,138'),violet:makeGlow('160,107,255'),fog:makeGlow('159,216,207'),white:makeGlow('255,255,255')};
+  cyan:makeGlow('87,230,255'),leaf:makeGlow('111,224,138'),violet:makeGlow('160,107,255'),fog:makeGlow('159,216,207'),white:makeGlow('255,255,255'),
+  fire:makeGlow('255,122,69'),frost:makeGlow('111,216,255'),arcane:makeGlow('180,140,255')};
 function resize(){
   W=innerWidth;H=innerHeight;DPR=Math.min(devicePixelRatio||1,2);
   cv.width=Math.floor(W*DPR);cv.height=Math.floor(H*DPR);

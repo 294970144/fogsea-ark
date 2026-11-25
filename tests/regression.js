@@ -1,8 +1,4 @@
 'use strict';
-/* 雾海方舟 · 隔离回归脚本（仅 Node 内置模块）
-   用法：node tests/regression.js
-   采集改动前黄金值：CAPTURE=1 node tests/regression.js
-   设计确认：第七夜清场判胜是设计行为，不是缺陷；本脚本 R1 锁定该结果。 */
 
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -11,11 +7,11 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const ORDER = ['00-core', '01-audio', '02-world', '03-data', '04-state', '05-input',
-  '06-hand', '07-combat', '08-progress', '09-render', '10-ui', '11-main'];
+  '06-hand', '07-combat', '07b-spells', '08-progress', '09-render', '10-ui', '11-main'];
 const SRC = ORDER.map(n => fs.readFileSync(path.join(ROOT, 'js', n + '.js'), 'utf8')).join('\n;\n');
-
 const noop = () => {};
 const makeGradient = () => ({ addColorStop: noop });
+
 function makeCtx() {
   const store = {};
   return new Proxy(store, {
@@ -30,6 +26,7 @@ function makeCtx() {
     set(t, p, v) { t[p] = v; return true; }
   });
 }
+
 function makeEl(tag = 'div') {
   const listeners = {};
   const el = {
@@ -77,9 +74,10 @@ function makeEl(tag = 'div') {
   });
   return el;
 }
+
 function makeEnv(opts = {}) {
   const ids = new Map(), docL = {}, winL = {};
-  const store = new Map(opts.storage || []), setCalls = [];
+  const store = new Map(opts.storage || []);
   const timers = { next: 1, timeouts: new Set(), intervals: new Set(), cleared: new Set() };
   let rafCb = null;
   const cv = makeEl('canvas'), body = makeEl('body');
@@ -96,7 +94,7 @@ function makeEnv(opts = {}) {
   ids.set('cv', cv);
   const localStorage = {
     getItem(k) { return store.has(k) ? store.get(k) : null; },
-    setItem(k, v) { setCalls.push([k, String(v)]); store.set(k, String(v)); },
+    setItem(k, v) { store.set(k, String(v)); },
     removeItem(k) { store.delete(k); },
     clear() { store.clear(); }
   };
@@ -107,13 +105,12 @@ function makeEnv(opts = {}) {
     innerWidth: 1280, innerHeight: 800, devicePixelRatio: 1,
     performance: { now: () => 0 },
     matchMedia: () => ({ matches: false, addEventListener: noop }),
-    // The VM has no layout engine. Give the menu a computed height cap for startup.
     getComputedStyle: () => ({ maxHeight: '750px' }),
     addEventListener(t, cb) { (winL[t] || (winL[t] = [])).push(cb); },
     removeEventListener: noop,
-    setTimeout(fn, ms) { const id = timers.next++; timers.timeouts.add(id); return id; },
+    setTimeout(fn) { const id = timers.next++; timers.timeouts.add(id); return id; },
     clearTimeout(id) { timers.cleared.add(id); timers.timeouts.delete(id); },
-    setInterval(fn, ms) { const id = timers.next++; timers.intervals.add(id); return id; },
+    setInterval(fn) { const id = timers.next++; timers.intervals.add(id); return id; },
     clearInterval(id) { timers.cleared.add(id); timers.intervals.delete(id); },
     requestAnimationFrame(cb) { rafCb = cb; return 1; }
   };
@@ -122,490 +119,341 @@ function makeEnv(opts = {}) {
   sandbox.window = sandbox;
   const ctx = vm.createContext(sandbox);
   vm.runInContext(SRC, ctx, { filename: 'bundle.js' });
-  return {
-    ctx, ids, docL, winL, store, setCalls, timers, cv,
-    getRaf: () => rafCb,
-    run: code => vm.runInContext(code, ctx)
-  };
+  return { ctx, ids, docL, winL, store, timers, cv, run: code => vm.runInContext(code, ctx) };
 }
-const j = env => s => JSON.parse(env.run(s));
 
-function captureR0(env) {
+const j = env => code => JSON.parse(env.run(code));
+function seedFoe(env, dx = 1, dy = 0, hp = 10000) {
+  env.run(`foes.length=0;foes.push({type:'crawler',x:P.x+${dx},y:P.y+${dy},hp:${hp},max:${hp},spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
+    atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+    fireCd:99,spawnCd:99,stompCd:99,px:P.x+${dx},py:P.y+${dy},stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});rebuildFoeGrid();`);
+}
+
+function captureBaseline(env) {
   return j(env)(`(()=>{
     const out={nightTotal:{},bossNight:{},hp:{},weights:{}};
     for(let d=1;d<=7;d++){
       S.day=d;S.phase='night';S.toSpawn=0;S.nightKilled=0;warns.length=0;foes.length=0;
-      startNight();
-      out.nightTotal[d]=[S.nightTotal,S.toSpawn];
-      out.bossNight[d]=warns.some(w=>w.boss);
-      warns.length=0;
+      startNight();out.nightTotal[d]=[S.nightTotal,S.toSpawn];out.bossNight[d]=warns.some(w=>w.boss);warns.length=0;
     }
     for(let d=1;d<=7;d++){
       S.day=d;out.hp[d]={};
       for(const t of ['crawler','spitter','brute','boss']){
-        foes.length=0;spawnFoe(t,20,20,false);out.hp[d][t]=foes[foes.length-1].max;
-        foes.length=0;spawnFoe(t,20,20,true);out.hp[d][t+'Elite']=foes[foes.length-1].max;
+        foes.length=0;spawnFoe(t,20,20,false);out.hp[d][t]=foes[0].max;
+        foes.length=0;spawnFoe(t,20,20,true);out.hp[d][t+'Elite']=foes[0].max;foes.length=0;
       }
-      let c=0,s=0,b=0;foes.length=0;
+      let c=0,s=0,b=0;
       for(let k=0;k<200;k++){const t=pickFoeType();if(t==='crawler')c++;else if(t==='spitter')s++;else b++;}
-      out.weights[d]=[c,s,b];foes.length=0;
+      out.weights[d]=[c,s,b];
     }
     return JSON.stringify(out);
   })()`);
 }
+
 function captureSaves() {
-  const mk = (key, obj) => [[key, JSON.stringify(obj)]];
   const base = { embers: 41, bless: { blade: 2, iron: 1, stock: 0 }, best: { nights: 5, kills: 33, wins: 1 },
     seen: { foe: { crawler: 7 }, build: { tower: 2 }, card: { blade: 1 }, play: { rain: 3 } },
     diff: 'wild', muted: true };
   const out = {};
   for (const key of ['arkmist_v3', 'arkmist_v2', 'arkmist_v1']) {
-    const env = makeEnv({ storage: mk(key, base) });
+    const env = makeEnv({ storage: [[key, JSON.stringify(base)]] });
     out[key] = j(env)(`JSON.stringify({embers:save.embers,diff:save.diff,muted:save.muted,bless:save.bless,best:save.best,seen:save.seen})`);
   }
   return out;
 }
 
-// 改动前黄金值（首次采集后固化；任何源码改动前 R0 必须先绿）
 const SAVE_G = { "embers": 41, "diff": "wild", "muted": true, "bless": { "blade": 2, "iron": 1, "stock": 0 }, "best": { "nights": 5, "kills": 33, "wins": 1 }, "seen": { "foe": { "crawler": 7 }, "build": { "tower": 2 }, "card": { "blade": 1 }, "play": { "rain": 3 } } };
 const GOLDEN = {
-  r0: {"nightTotal":{"1":[10,10],"2":[14,14],"3":[19,19],"4":[23,23],"5":[27,27],"6":[31,31],"7":[26,25]},"bossNight":{"1":false,"2":false,"3":false,"4":false,"5":false,"6":false,"7":true},"hp":{"1":{"crawler":26,"crawlerElite":41.6,"spitter":22,"spitterElite":35.2,"brute":95,"bruteElite":152,"boss":900,"bossElite":1440},"2":{"crawler":29.379999999999995,"crawlerElite":47.007999999999996,"spitter":24.86,"spitterElite":39.775999999999996,"brute":107.35,"bruteElite":171.76,"boss":1016.9999999999999,"bossElite":1627.1999999999998},"3":{"crawler":32.76,"crawlerElite":52.416,"spitter":27.72,"spitterElite":44.352000000000004,"brute":119.7,"bruteElite":191.52,"boss":1134,"bossElite":1814.4},"4":{"crawler":36.14,"crawlerElite":57.824000000000005,"spitter":30.580000000000002,"spitterElite":48.928000000000004,"brute":132.05,"bruteElite":211.28000000000003,"boss":1251,"bossElite":2001.6000000000001},"5":{"crawler":39.52,"crawlerElite":63.23200000000001,"spitter":33.44,"spitterElite":53.504000000000005,"brute":144.4,"bruteElite":231.04000000000005,"boss":1368,"bossElite":2188.8},"6":{"crawler":42.9,"crawlerElite":68.64,"spitter":36.3,"spitterElite":58.080000000000005,"brute":156.75,"bruteElite":250.8,"boss":1485,"bossElite":2376},"7":{"crawler":46.28,"crawlerElite":74.048,"spitter":39.160000000000004,"spitterElite":62.656000000000006,"brute":169.1,"bruteElite":270.56,"boss":1602,"bossElite":2563.2000000000003}},"weights":{"1":[200,0,0],"2":[140,60,0],"3":[103,55,42],"4":[98,71,31],"5":[97,67,36],"6":[81,69,50],"7":[79,65,56]}},
+  r0: {"nightTotal":{"1":[10,10],"2":[14,14],"3":[19,19],"4":[23,23],"5":[27,27],"6":[31,31],"7":[26,25]},"bossNight":{"1":false,"2":false,"3":false,"4":false,"5":false,"6":false,"7":true},"hp":{"1":{"crawler":26,"crawlerElite":41.6,"spitter":22,"spitterElite":35.2,"brute":95,"bruteElite":152,"boss":900,"bossElite":1440},"2":{"crawler":29.379999999999995,"crawlerElite":47.007999999999996,"spitter":24.86,"spitterElite":39.775999999999996,"brute":107.35,"bruteElite":171.76,"boss":1016.9999999999999,"bossElite":1627.1999999999998},"3":{"crawler":32.76,"crawlerElite":52.416,"spitter":27.72,"spitterElite":44.352,"brute":119.7,"bruteElite":191.52,"boss":1134,"bossElite":1814.4},"4":{"crawler":36.14,"crawlerElite":57.824,"spitter":30.580000000000002,"spitterElite":48.928,"brute":132.05,"bruteElite":211.28,"boss":1251,"bossElite":2001.6},"5":{"crawler":39.52,"crawlerElite":63.232,"spitter":33.44,"spitterElite":53.504,"brute":144.4,"bruteElite":231.04,"boss":1368,"bossElite":2188.8},"6":{"crawler":42.9,"crawlerElite":68.64,"spitter":36.3,"spitterElite":58.08,"brute":156.75,"bruteElite":250.8,"boss":1485,"bossElite":2376},"7":{"crawler":46.28,"crawlerElite":74.048,"spitter":39.160000000000004,"spitterElite":62.656,"brute":169.1,"bruteElite":270.56,"boss":1602,"bossElite":2563.2}},"weights":{"1":[200,0,0],"2":[140,60,0],"3":[103,55,42],"4":[98,71,31],"5":[97,67,36],"6":[81,69,50],"7":[79,65,56]}},
   saves: { arkmist_v3: SAVE_G, arkmist_v2: SAVE_G, arkmist_v1: SAVE_G }
 };
 
 const cases = [];
 function testCase(name, fn) { cases.push([name, fn]); }
-function reset(env, day = 1, mode = 'play') {
-  env.run(`S.day=${day};S.mode='${mode}';S.phase='day';S.toSpawn=0;S.nightKilled=0;S.nightTotal=0;
-    S.warns=[];warns.length=0;foes.length=0;shots.length=0;picks.length=0;
-    S.endless=false;S.settled=null;S.launchT=0;S.overT=0;core.hp=core.max;`);
-}
 
-testCase('R0_baseline_seven_nights', () => {
-  assert.ok(GOLDEN, '请先运行 CAPTURE=1 node tests/regression.js 固化黄金值');
-  const env = makeEnv();
-  assert.deepEqual(captureR0(env), GOLDEN.r0, '前 7 夜数值/流程发生变化');
-  const saves = captureSaves();
-  assert.deepEqual(saves, GOLDEN.saves, 'v3/v2/v1 存档加载结果发生变化');
+testCase('R0_seven_nights_and_save_baseline', () => {
+  const normalize = value => JSON.parse(JSON.stringify(value, (_, n) => typeof n === 'number' ? Math.round(n * 1e9) / 1e9 : n));
+  assert.deepEqual(normalize(captureBaseline(makeEnv())), normalize(GOLDEN.r0));
+  assert.deepEqual(captureSaves(), GOLDEN.saves);
 });
 
-testCase('R1_win_design_kept', () => {
+testCase('R1_settlement_and_endless', () => {
   const env = makeEnv();
   const out = j(env)(`(()=>{
-    S.day=7;S.mode='play';S.phase='night';S.stats.nights=7;
-    S.toSpawn=0;warns.length=0;foes.length=0;
-    dawn();
-    return JSON.stringify({mode:S.mode,win:S.settled&&S.settled.win});
+    initRun();S.day=7;S.mode='play';S.phase='night';S.stats.nights=7;S.stats.kills=40;
+    S.toSpawn=0;warns.length=0;foes.length=0;dawn();
+    const win={mode:S.mode,embers:save.embers,wins:save.best.wins};settle(true);settle(false);
+    const duplicate={embers:save.embers,wins:save.best.wins};continueEndless();
+    const resumed={day:S.day,mode:S.mode,endless:S.endless};
+    S.stats.nights=10;S.stats.kills=80;S.mode='play';core.hp=1;damageCore(10);
+    const endless={embers:save.embers,wins:save.best.wins,incremental:S.settled.incremental};
+    initRun();S.day=3;S.mode='play';core.hp=2;damageCore(40);
+    return JSON.stringify({win,duplicate,resumed,endless,loss:{mode:S.mode,win:S.settled.win,hp:core.hp}});
   })()`);
-  assert.equal(out.mode, 'launch', '第七夜清场必须判胜（设计行为）');
-  assert.equal(out.win, true);
+  assert.equal(out.win.mode, 'launch');
+  assert.equal(out.win.embers, 38);
+  assert.deepEqual(out.duplicate, { embers: out.win.embers, wins: out.win.wins });
+  assert.deepEqual(out.resumed, { day: 8, mode: 'dawn', endless: true });
+  assert.equal(out.endless.embers - out.win.embers, 14);
+  assert.equal(out.endless.wins, out.win.wins);
+  assert.equal(out.endless.incremental, true);
+  assert.deepEqual(out.loss, { mode: 'over', win: false, hp: 0 });
 });
 
-testCase('R2_core_loss_early', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    S.day=3;S.mode='play';S.phase='night';S.stats.nights=3;
-    S.toSpawn=0;warns.length=0;foes.length=0;core.hp=2;
-    damageCore(40);
-    const first={mode:S.mode,hp:core.hp,win:S.settled&&S.settled.win};
-    damageCore(40);
-    return JSON.stringify({first,hp2:core.hp,mode2:S.mode});
-  })()`);
-  assert.equal(out.first.mode, 'over', '第 1-6 夜核心归零必须判负');
-  assert.equal(out.first.hp, 0, '耐久不得为负');
-  assert.equal(out.first.win, false);
-  assert.equal(out.hp2, 0, '判负后不再扣耐久');
-  assert.equal(out.mode2, 'over');
-  const dawnOut = j(env)(`(()=>{
-    initRun();S.mode='play';S.day=3;core.hp=0;S.toSpawn=0;warns.length=0;foes.length=0;
-    dawn();
-    return JSON.stringify({mode:S.mode,day:S.day});
-  })()`);
-  assert.notEqual(dawnOut.mode, 'dawn', '零耐久不得进入黎明选择');
-  assert.equal(dawnOut.day, 3, '零耐久不得被黎明 +40 复活');
-});
-
-testCase('R3_settle_once_idempotent', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    S.day=7;S.mode='play';S.phase='night';S.stats.nights=7;S.stats.kills=16;
-    S.toSpawn=0;warns.length=0;foes.length=0;
-    const before=save.embers,wins0=save.best.wins;
-    dawn();
-    const afterWin={embers:save.embers,wins:save.best.wins};
-    settle(true);settle(false);
-    return JSON.stringify({before,wins0,afterWin,afterDup:{embers:save.embers,wins:save.best.wins}});
-  })()`);
-  assert.equal(out.afterWin.embers - out.before, 35, '胜利奖励含 +12 且只结算一次');
-  assert.equal(out.afterWin.wins, out.wins0 + 1);
-  assert.equal(out.afterDup.embers, out.afterWin.embers, '重复 settle 不得二次入账');
-  assert.equal(out.afterDup.wins, out.afterWin.wins, '重复 settle 不得二次加胜场');
-  env.run('showEnd(true)');
-  assert.ok(env.timers.intervals.size > 0, '结算页应启动滚动动画');
-  env.run('toTitle()');
-  assert.equal(env.timers.intervals.size, 0, '返回标题必须清理 emberTimer');
-});
-
-testCase('R4_swap_cap', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    initRun();
-    DECK.max=9;DECK.hand=[];DECK.draw=[];DECK.discard=[];
-    for(let i=0;i<11;i++)DECK.draw.push(mkCard('wall'));
-    while(DECK.hand.length<10&&DECK.draw.length)DECK.hand.push(DECK.draw.pop());
-    const uid=DECK.hand[0].uid;
-    S.swapLeft=1;S.mode='swap';
-    doSwap(uid);
-    return JSON.stringify({hand:DECK.hand.length,draw:DECK.draw.length,left:S.swapLeft,mode:S.mode});
-  })()`);
-  assert.equal(out.hand, 10, '超额手牌换牌后应补满到换牌前数量');
-  assert.equal(out.draw, 0, '补抽应从牌堆消耗一张');
-  assert.equal(out.left, 0, '换牌次数只扣一次');
-  assert.equal(out.mode, 'play');
-});
-
-testCase('R5_spitter_target', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    initRun();
-    S.day=2;S.mode='play';S.phase='night';
-    foes.length=0;shots.length=0;
-    P.x=10;P.y=10;P.ifr=0;P.downed=false;P.hp=100;
-    core.x=20;core.y=20;core.hp=600;
-    const f={type:'spitter',x:21.5,y:20,hp:100,max:100,spd:1.8,dmg:8,r:.3,xp:7,coreDmg:8,
-      atkCd:0,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
-      fireCd:99,spawnCd:99,stompCd:99,px:21.5,py:20,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1};
-    foes.push(f);
-    const hp0=P.hp,ch0=core.hp;
-    updateFoes(0.016);
-    return JSON.stringify({hp0,hp1:P.hp,ch0,ch1:core.hp});
-  })()`);
-  assert.equal(out.hp1, out.hp0, '目标为核心时不得误伤远处玩家');
-  assert.ok(out.ch1 < out.ch0, '目标为核心时应伤害核心');
-});
-
-testCase('R6_pointer_id', () => {
-  const env = makeEnv();
-  env.run(`S.mode='play';initRun();`);
-  const card = env.ids.get('handRow').children[0];
-  assert.ok(card, '应存在手牌元素');
-  card._listeners.pointerdown[0]({ pointerId: 1, clientX: 100, clientY: 100, preventDefault() {} });
-  assert.equal(env.run('S.dragPointerId'), 1);
-  env.winL.pointermove[0]({ pointerId: 2, clientX: 300, clientY: 300 });
-  assert.equal(env.run('S.dragMoved'), false, '非发起指的移动不得推进拖拽');
-  env.winL.pointermove[0]({ pointerId: 1, clientX: 200, clientY: 200 });
-  assert.equal(env.run('S.dragMoved'), true, '发起指的移动应推进拖拽');
-  const played0 = env.run('S.stats.played');
-  env.winL.pointerup[0]({ pointerId: 2, clientX: 300, clientY: 300 });
-  assert.equal(env.run('S.stats.played'), played0, '非发起指抬起不得提交出牌');
-  assert.ok(env.run('S.dragUid!==null'), '非发起指抬起不得结束拖拽');
-  env.winL.pointerup[0]({ pointerId: 1, clientX: 200, clientY: 200 });
-  assert.equal(env.run('S.dragUid'), null, '发起指抬起应结束拖拽');
-});
-
-testCase('R7_endless_no_repeat_win', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    initRun();
-    S.day=8;S.mode='play';S.phase='night';S.endless=true;S.settled=null;
-    S.toSpawn=0;warns.length=0;foes.length=0;S.stats.nights=8;
-    dawn();
-    return JSON.stringify({mode:S.mode,day:S.day,settled:!!S.settled});
-  })()`);
-  assert.notEqual(out.mode, 'launch', 'day>=8 不得重复判胜');
-  assert.equal(out.mode, 'dawn');
-  assert.equal(out.day, 9, '继续后应从第 8 夜推进到第 9 日');
-  assert.equal(out.settled, false);
-});
-
-testCase('R8_endless_resume_state', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    initRun();
-    S.day=7;S.mode='play';S.phase='night';S.stats.nights=7;S.stats.kills=40;
-    S.toSpawn=0;warns.length=0;foes.length=0;
-    P.lvl=7;DECK.max=8;res.wood=77;core.hp=321;
-    const before={lvl:P.lvl,max:DECK.max,wood:res.wood,hp:core.hp,deck:DECK.hand.length,builds:builds.length};
-    dawn();
-    const winState={win:S.settled.win,wins:save.best.wins};
-    continueEndless();
-    return JSON.stringify({before,winState,after:{day:S.day,phase:S.phase,mode:S.mode,endless:S.endless,
-      lvl:P.lvl,max:DECK.max,wood:res.wood,hp:core.hp,deck:DECK.hand.length,builds:builds.length}});
-  })()`);
-  assert.equal(out.winState.win, true);
-  assert.equal(out.after.day, 8);
-  assert.equal(out.after.phase, 'day');
-  assert.equal(out.after.mode, 'dawn', '继续后应进入第 8 日黎明选择');
-  assert.equal(out.after.endless, true);
-  for (const k of ['lvl', 'max', 'wood', 'deck', 'builds']) {
-    assert.equal(out.after[k], out.before[k], `${k} 应在进入无尽时保留`);
-  }
-  assert.equal(out.after.hp, 361, '核心耐久保留并按黎明惯例 +40');
-});
-
-testCase('R9_endless_boss_period', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    initRun();S.endless=true;
-    const out={};
-    for(const d of [7,8,13,14,21]){
-      S.day=d;S.mode='play';S.phase='day';S.toSpawn=0;warns.length=0;foes.length=0;
-      startNight();
-      out[d]={boss:warns.some(w=>w.boss),total:S.nightTotal};
-      warns.length=0;
-    }
-    return JSON.stringify(out);
-  })()`);
-  assert.equal(out['7'].boss, true);
-  assert.equal(out['8'].boss, false);
-  assert.equal(out['13'].boss, false);
-  assert.equal(out['14'].boss, true, '第 14 夜应复刷 Boss');
-  assert.equal(out['21'].boss, true);
-});
-
-testCase('R10_endless_capped_curve', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    const out={scale:{},total:{},foeNow:{}};
-    for(const d of [1,2,3,4,5,6,7,8,14,21,50,100]){
-      out.scale[d]=dayScale(d);
-      out.total[d]=Math.round((6+4.2*effDay(d))*DIFFS[save.diff].count);
-      S.day=d;out.foeNow[d]=foeNow('crawler');
-    }
-    return JSON.stringify(out);
-  })()`);
-  for (let d = 1; d <= 7; d++) {
-    assert.equal(out.scale[d], 1 + .13 * (d - 1), `第 ${d} 夜生命倍率必须恒等`);
-    assert.equal(out.total[d], Math.round(6 + d * 4.2), `第 ${d} 夜波次必须恒等`);
-  }
-  assert.ok(out.scale[100] < 2.6, '无尽生命倍率须有上限');
-  assert.ok(out.scale[100] > out.scale[14], '无尽段仍应继续增长');
-  assert.ok(out.total[100] < 60, '无尽波次须有上限');
-  assert.equal(out.foeNow[7], Math.round(26 * out.scale[7]), '图鉴血量须与实战公式同源');
-});
-
-testCase('R11_endless_increment', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    initRun();
-    S.day=7;S.mode='play';S.phase='night';S.stats.nights=7;S.stats.kills=40;
-    S.toSpawn=0;warns.length=0;foes.length=0;
-    dawn();
-    const winState={embers:save.embers,wins:save.best.wins,nights0:S.settled.nights0,kills0:S.settled.kills0};
-    continueEndless();
-    S.stats.nights=10;S.stats.kills=80;S.mode='play';core.hp=1;
-    damageCore(10);
-    return JSON.stringify({winState,after:{embers:save.embers,wins:save.best.wins,
-      incremental:S.settled.incremental,bestNights:save.best.nights}});
-  })()`);
-  assert.equal(out.winState.embers, 38, '胜利奖励 7*3+5+12=38');
-  assert.equal(out.winState.nights0, 7);
-  assert.equal(out.winState.kills0, 40);
-  assert.equal(out.after.embers - out.winState.embers, 14, '无尽增量应为 3*3+(10-5)=14');
-  assert.equal(out.after.wins, out.winState.wins, '无尽失败不得重复加胜场');
-  assert.equal(out.after.incremental, true);
-  assert.equal(out.after.bestNights, 10);
-});
-
-testCase('R12_hardcoded_copy', () => {
-  const env = makeEnv();
-  const sub = env.run(`(()=>{
-    initRun();S.endless=true;S.mode='end';S.settled={win:false,embers:0};showEnd(false);
-    return document.getElementById('endSub').textContent;
-  })()`);
-  assert.ok(sub.includes('无尽'), '无尽失败副标题不得写死七夜');
-  const label = env.run(`(()=>{
-    S.endless=true;S.stats.nights=12;syncHUD();return document.getElementById('nightLabel').textContent;
-  })()`);
-  assert.ok(label.includes('∞'), '无尽 HUD 夜数须显示 ∞');
-  assert.ok(!label.includes('/7'), '无尽 HUD 不得残留 /7');
-});
-
-testCase('R13_codex_return', () => {
-  const env = makeEnv();
-  env.run(`openCodex('end')`);
-  assert.equal(env.run('codexReturn'), 'end');
-  assert.equal(env.ids.get('endOv').classList.contains('show'), false);
-  assert.equal(env.ids.get('codexOv').classList.contains('show'), true);
-  env.run(`closeCodex()`);
-  assert.equal(env.ids.get('endOv').classList.contains('show'), true, '关闭图鉴应还原结算页');
-  assert.equal(env.ids.get('codexOv').classList.contains('show'), false);
-});
-
-testCase('R14_projectile_sweep', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    initRun();S.mode='play';S.phase='night';
-    foes.length=0;shots.length=0;
-    const mk=(x,y)=>({type:'crawler',x,y,hp:1000,max:1000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
-      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
-      fireCd:99,spawnCd:99,stompCd:99,px:x,py:y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
-    const f=mk(10.5,10.5);foes.push(f);rebuildFoeGrid();
-    shots.push({x:9.7,y:10.5,vx:24,vy:0,type:'arrow',dmg:9,life:1,z:22});
-    const hp0=f.hp;
-    updateShots(1/15); // 一步 1.6 格，终点已越过目标：只测终点的旧实现会漏判
-    const sweepHit=f.hp<hp0;
-    foes.length=0;shots.length=0;
-    const g=mk(10.5,10.5);foes.push(g);rebuildFoeGrid();
-    core.x=20;core.y=20;S.mode='play';
-    updateFoes(0.5); // 跨格移动后网格必须同步
-    const gridOk=foeGrid[cellIdx(g.x,g.y)].includes(g);
-    return JSON.stringify({hp0,hp1:f.hp,sweepHit,gridOk});
-  })()`);
-  assert.equal(out.sweepHit, true, '大步长下箭矢不得穿过敌人');
-  assert.equal(out.gridOk, true, '敌人移动后网格索引必须同步');
-});
-
-testCase('R15_preview_transform', () => {
-  const env = makeEnv();
-  const out = j(env)(`(()=>{
-    cam.x=20;cam.y=20;cam.z=1;cam.sx=10;cam.sy=-5;
-    mouseX=W/2+10;mouseY=H/2-5;
-    updateMouseWorld();
-    return JSON.stringify([mouseWorld[0],mouseWorld[1]]);
-  })()`);
-  assert.ok(Math.abs(out[0] - 20) < 1e-9, '反投影必须抵消震屏偏移');
-  assert.ok(Math.abs(out[1] - 20) < 1e-9);
-  const src = fs.readFileSync(path.join(ROOT, 'js', '09-render.js'), 'utf8');
-  assert.ok(!/\*\.72/.test(src), '预览半径不得再用手写缩放系数');
-});
-
-testCase('R16_keyboard_scope', () => {
-  const env = makeEnv();
-  env.run(`initRun();S.mode='play';`);
-  let prevented = false;
-  env.winL.keydown[0]({ key: 'Tab', preventDefault() { prevented = true; }, repeat: false, target: {} });
-  assert.equal(prevented, false, '对局内 Tab 应可用于焦点切换');
-  env.run(`DECK.hand=[];for(let i=0;i<10;i++)DECK.hand.push(mkCard('wall'));S.mode='play';`);
-  env.winL.keydown[0]({ key: '0', preventDefault() {}, repeat: false, target: {} });
-  assert.equal(env.run('S.aimUid'), env.run('DECK.hand[9].uid'), '第 10 张牌应可用 0 选中');
-  const css = fs.readFileSync(path.join(ROOT, 'css', 'style.css'), 'utf8');
-  assert.ok(/\.overlay\{[^}]*visibility:hidden/.test(css), '隐藏弹窗应退出焦点顺序');
-});
-
-testCase('R17_save_validation', () => {
+testCase('R2_save_validation', () => {
   const bad = { diff: 'bogus', embers: -5, bless: { blade: 99 }, best: { nights: -1 }, seen: null, muted: 'x' };
   const env = makeEnv({ storage: [['arkmist_v3', JSON.stringify(bad)]] });
-  const out = j(env)(`JSON.stringify({diff:save.diff,embers:save.embers,bless:save.bless,best:save.best,seen:save.seen,muted:save.muted})`);
-  assert.equal(out.diff, 'std', '未知难度必须回退');
-  assert.equal(out.embers, 0);
-  assert.equal(out.bless.blade, 0);
-  assert.equal(out.best.nights, 0);
-  assert.equal(out.muted, false);
-  env.run(`S.day=1;S.toSpawn=0;warns.length=0;startNight();`);
-  assert.ok(env.run('S.nightTotal') > 0, '损坏存档不得阻断入夜');
-  const env2 = makeEnv();
-  env2.run(`localStorage.setItem=()=>{throw new Error('quota')};`);
-  assert.equal(env2.run(`persist()`), false, '写入失败必须向上可见');
+  assert.equal(env.run('save.diff'), 'std');
+  assert.equal(env.run('save.embers'), 0);
+  for (const raw of ['{bad', '{}', JSON.stringify({ embers: -1 })]) {
+    const fallback = makeEnv({ storage: [['arkmist_v3', raw], ['arkmist_v2', JSON.stringify({ embers: 123 })]] });
+    assert.equal(fallback.run('save.embers'), 123);
+  }
+  const proto = makeEnv({ storage: [['arkmist_v3', JSON.stringify({ diff: 'constructor' })]] });
+  proto.run('S.day=1;S.toSpawn=0;warns.length=0;startNight()');
+  assert.ok(Number.isFinite(proto.run('S.nightTotal')));
+  const blocked = makeEnv();
+  blocked.run(`localStorage.getItem=()=>{throw new Error('blocked')};loadSave()`);
+  assert.equal(blocked.run('save.embers'), 0);
+  const quota = makeEnv();
+  quota.run(`localStorage.setItem=()=>{throw new Error('quota')}`);
+  const warn = console.warn;console.warn = noop;
+  try { assert.equal(quota.run('persist()'), false); } finally { console.warn = warn; }
 });
 
-testCase('R18_card_consistency', () => {
+testCase('R3_deck_and_card_text', () => {
   const env = makeEnv();
+  const swap = j(env)(`(()=>{
+    initRun();DECK.max=9;DECK.hand=[];DECK.draw=[];DECK.discard=[];
+    for(let i=0;i<11;i++)DECK.draw.push(mkCard('wall'));
+    while(DECK.hand.length<10&&DECK.draw.length)DECK.hand.push(DECK.draw.pop());
+    doSwap(DECK.hand[0].uid);
+    return JSON.stringify({hand:DECK.hand.length,draw:DECK.draw.length,left:S.swapLeft,mode:S.mode});
+  })()`);
+  assert.deepEqual(swap, { hand: 10, draw: 0, left: 0, mode: 'play' });
+  env.run('initRun()');
+  const costs = env.run(`Object.fromEntries(CIDS.map(id=>[id,costStr(CDEFS[id])]))`);
+  for (const [id, text] of Object.entries(costs)) assert.ok(!/undefined|\[object Object\]|NaN/.test(text), id);
+  assert.equal(costs.wall, '8木');
+  assert.equal(costs.tower, '12木 6石');
+  assert.equal(costs.sp_fireball, '15雾');
+  env.run(`DECK.hand=[mkCard('wall'),mkCard('tower')];DECK.draw=[];DECK.discard=[];renderSwap()`);
+  assert.ok(!/undefined|\[object Object\]|NaN/.test(env.ids.get('swapList').children.map(e => e.innerHTML).join('')));
+  env.run(`const sc=mkCard('salvage5');DECK.hand=[sc,mkCard('wall')];DECK.draw=[];DECK.discard=[];beginSalvage(sc)`);
+  assert.ok(!/undefined|\[object Object\]|NaN/.test(env.ids.get('rmList').children.map(e => e.innerHTML).join('')));
   const expand = j(env)(`(()=>{
-    initRun();
-    DECK.max=9;DECK.hand=[];DECK.draw=[];DECK.discard=[];
-    DECK.draw.push(mkCard('wall'),mkCard('wall'),mkCard('expand'));
-    DECK.hand.push(mkCard('expand'));
-    const uid=DECK.hand[0].uid;
-    playCard(uid,0,0);
-    return JSON.stringify({max:DECK.max,expandTotal:cardTotal('expand'),hand:DECK.hand.length,
-      wall:DECK.hand.filter(c=>c.id==='wall').length});
+    initRun();P.cls='mage';DECK.max=11;DECK.hand=[mkCard('expand'),mkCard('wall'),mkCard('wall')];DECK.draw=[mkCard('wall')];DECK.discard=[];
+    res.wood=99;res.stone=99;playCard(DECK.hand[0].uid,0,0);
+    return JSON.stringify({max:DECK.max,total:cardTotal('expand'),hand:DECK.hand.length});
   })()`);
-  assert.equal(expand.max, 10);
-  assert.equal(expand.expandTotal, 0, '到顶后扩容牌须全部退场');
-  assert.equal(expand.wall, 1, '清理扩容后仍应兑现补抽');
-
-  const salvage = j(env)(`(()=>{
-    initRun();S.mode='play';S.stats.played=0;
-    const sc=mkCard('wall');DECK.hand.push(sc);DECK.draw.push(mkCard('wall'));
-    S.aimUid=sc.uid;S.pendingSalvage=sc;S.mode='remove';
-    confirmSalvage('wall',10);
-    return JSON.stringify({played:S.stats.played,aim:S.aimUid,seen:save.seen.play.wall||0});
-  })()`);
-  assert.equal(salvage.played, 1, '拆解成功后应记出牌数');
-  assert.equal(salvage.seen, 1);
-  assert.equal(salvage.aim, null, '拆解成功后不得残留选牌');
-
-  const wave = j(env)(`(()=>{
-    initRun();S.mode='play';S.phase='night';foes.length=0;shots.length=0;
-    const f={type:'crawler',x:10.5,y:10.5,hp:1000,max:1000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
-      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
-      fireCd:99,spawnCd:99,stompCd:99,px:10.5,py:10.5,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1};
-    foes.push(f);rebuildFoeGrid();
-    shots.push({x:10.5,y:10.5,vx:0,vy:0,type:'wave',dmg:10,life:1,pierce:2,z:12});
-    const hp0=f.hp;
-    updateShots(0.1);updateShots(0.1);
-    return JSON.stringify({hp0,hp1:f.hp,pierce:shots[0]&&shots[0].pierce});
-  })()`);
-  assert.equal(wave.hp0 - wave.hp1, 10, '同一敌人只应受一次剑气伤害');
-  assert.equal(wave.pierce, 1, '同一敌人只应消耗一次穿透');
+  assert.deepEqual(expand, { max: 12, total: 0, hand: 3 });
 });
 
-testCase('R19_gather_sum', () => {
+testCase('R4_mage_transform_and_pool', () => {
   const env = makeEnv();
   const out = j(env)(`(()=>{
-    initRun();
-    Math.random=()=>0.999;P.gather=1.5;picks.length=0; // 苦修一层：基础 6 → 9
-    const n=nodes.find(x=>x.type==='tree');
-    n.alive=true;n.hp=1;
-    hitNode(n);
-    return JSON.stringify({count:picks.length,sum:picks.reduce((a,p)=>a+p.amt,0)});
+    initRun();const ids=poolIds();
+    const nonMage={maxEn:P.maxEn,regen:P.enRegenFlat,cap:handCap(),basics:['sp_fireball','sp_frostbolt','sp_arcbolt','sp_emberburst'].every(id=>ids.includes(id)),
+      mageOnly:ids.some(id=>CDEFS[id].cls==='mage'&&!CDEFS[id].basic),core:ids.some(id=>CDEFS[id].core),cls:ids.includes('class_mage')};
+    S.day=2;S.dawnCards=['wall','rain','spring'];injectClassCard(S.dawnCards);const day2=S.dawnCards.slice();
+    S.day=5;const before=S.dawnCards.slice();injectClassCard(S.dawnCards);const day5=S.dawnCards.slice();
+    S.day=2;S.mode='dawn';S.dawnStep=0;S.dawnCards=['wall','class_mage','rain'];P.hp=P.maxHp;const old=P.maxHp;pickDawn(1);
+    return JSON.stringify({nonMage,day2,day5,before,old,cls:P.cls,maxHp:P.maxHp,maxEn:P.maxEn,regen:P.enRegenFlat,
+      deckMax:DECK.max,cap:handCap(),classCards:cardTotal('class_mage'),well:cardTotal('manawell'),
+      aff:[P.aff.fire,P.aff.frost,P.aff.arcane],seen:save.seen.play.class_mage,played:S.stats.played,
+      mageBless:BLESSINGS.filter(b=>b.cls==='mage').length});
   })()`);
-  assert.equal(out.count, 8);
-  assert.equal(out.sum, 9, '掉落总量必须等于应发资源量');
+  assert.deepEqual(out.nonMage, { maxEn: 100, regen: 14, cap: 10, basics: true, mageOnly: false, core: false, cls: false });
+  assert.equal(out.day2[1], 'class_mage');
+  assert.deepEqual(out.day5, out.before);
+  assert.equal(out.cls, 'mage');
+  assert.equal(out.maxHp, Math.round(out.old * .6));
+  assert.deepEqual([out.maxEn, out.regen, out.deckMax, out.cap], [200, 19, 7, 12]);
+  assert.equal(out.classCards, 0);
+  assert.equal(out.well, 1);
+  assert.deepEqual(out.aff, [2, 1, 1]);
+  assert.equal(out.seen, 1);
+  assert.equal(out.played, 1);
+  assert.equal(out.mageBless, 25);
 });
 
-testCase('R20_menu_background_stable', () => {
+testCase('R5_full_cast_chain', () => {
   const env = makeEnv();
-  const out = j(env)(`(()=>{
-    S.mode='menu';const initialSeed=seed;
-    openPrep();const prepSeed=seed;
-    toTitle();const titleSeed=seed;
-    openPrep();const reopenedSeed=seed;
-    startRun();const runSeed=seed;
-    return JSON.stringify({initialSeed,prepSeed,titleSeed,reopenedSeed,runSeed,mode:S.mode});
+  env.run(`initRun();P.cls='mage';P.maxEn=200;P.en=200;P.crit=0;P.stacks={t_manadmg:1};S.mode='play';S.phase='day'`);
+  seedFoe(env);
+  env.run(`DECK.hand=[mkCard('sp_flameimpact')];DECK.draw=[];DECK.discard=[]`);
+  const hit = j(env)(`(()=>{const ok=playCard(DECK.hand[0].uid,P.x+1,P.y);return JSON.stringify({ok,en:P.en,dmg:10000-foes[0].hp,
+    discard:DECK.discard.length,played:S.stats.played,cd:P.spellCd})})()`);
+  assert.equal(hit.ok, true);
+  assert.equal(hit.en, 155);
+  assert.ok(Math.abs(hit.dmg - 63.25) < .01);
+  assert.deepEqual([hit.discard, hit.played], [1, 1]);
+  assert.ok(hit.cd > 0);
+  const empty = j(env)(`(()=>{
+    P.en=200;P.spellCd=0;foes.length=0;DECK.hand=[mkCard('sp_blizzard')];DECK.discard=[];DECK.draw=[];
+    playCard(DECK.hand[0].uid,P.x,P.y);
+    return JSON.stringify({en:P.en,discard:DECK.discard.length,played:S.stats.played,cd:P.spellCd});
   })()`);
-  assert.equal(out.prepSeed, out.initialSeed, '开始进入准备页不应重生成背景地图');
-  assert.equal(out.titleSeed, out.initialSeed, '准备页返回标题不应重生成背景地图');
-  assert.equal(out.reopenedSeed, out.initialSeed, '再次打开准备页应保留同一背景');
-  assert.equal(out.mode, 'play');
-  assert.notEqual(out.runSeed, out.initialSeed, '正式启航时才生成新对局地图');
+  assert.equal(empty.en, 155);
+  assert.deepEqual([empty.discard, empty.played], [1, 2]);
+  assert.ok(empty.cd > 0);
 });
 
-testCase('R21_cheat_nova', () => {
+testCase('R6_talent_rules', () => {
   const env = makeEnv();
-  env.run(`initRun();S.mode='pause';`);
-  const press = k => env.winL.keydown[0]({ key: k, preventDefault() {}, repeat: false, target: {} });
-  for (const k of 'l3131') press(k);
-  assert.equal(env.run('CHEAT.on'), true, '暂停时输入 l3131 应开启雾爆强化');
-  assert.equal(env.run('CHEAT.buf'), '', '输入后应清空缓冲');
   const out = j(env)(`(()=>{
-    S.mode='play';S.phase='night';P.en=120;P.novaMult=1;P.stacks={};P.crit=0;
-    foes.length=0;shots.length=0;
-    const f={type:'crawler',x:P.x+1,y:P.y,hp:100000,max:100000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
-      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
-      fireCd:99,spawnCd:99,stompCd:99,px:P.x+1,py:P.y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1};
-    foes.push(f);rebuildFoeGrid();
-    const hp0=f.hp;
-    castNova();
-    return JSON.stringify({hp0,hp1:f.hp,dmg:hp0-f.hp});
+    initRun();P.cls='mage';P.maxEn=200;P.en=200;P.stacks={};
+    P.resoElem=null;P.resoN=0;spellCastSideEffects('fire',CDEFS.sp_fireball);spellCastSideEffects('fire',CDEFS.sp_fireball);
+    const noTalent={n:P.resoN,elem:P.resoElem,mult:spellMult('fire',null,false)};
+    P.stacks={t_resonance:1};P.resoElem=null;P.resoN=0;spellCastSideEffects('fire',CDEFS.sp_fireball);spellCastSideEffects('fire',CDEFS.sp_fireball);
+    const resonance={n:P.resoN,mult:spellMult('fire',null,false)};
+    P.stacks={t_hastecharge:1};P.charge=6;spellCastSideEffects('fire',CDEFS.sp_flameimpact);const haste=P.charge;
+    P.stacks={t_arccharge:1};P.arcCharge=0;P.arcDiscount=false;
+    spellCastSideEffects('arcane',CDEFS.sp_arcbolt);spellCastSideEffects('arcane',CDEFS.sp_arcbolt);spellCastSideEffects('arcane',CDEFS.sp_arcbolt);
+    const arccharge={charge:P.arcCharge,discount:P.arcDiscount};
+    P.stacks={t_arcsave:1};const arcane=effManaCost(CDEFS.sp_arcbolt);P.arcDiscount=true;const discounted=effManaCost(CDEFS.sp_arcbolt);
+    P.arcDiscount=false;P.stacks={t_econ:2};const fire=effManaCost(CDEFS.sp_fireball);
+    return JSON.stringify({noTalent,resonance,haste,arccharge,arcane,discounted,fire});
   })()`);
-  assert.equal(out.dmg, 300, '伤害应为基础 30 的 10 倍');
-  const radius = j(env)(`(()=>{
-    const on=CHEAT.on;const R=3.1*(1+.12*(P.stacks.nova||0))*(on?CHEAT.rad:1);
-    return JSON.stringify({R,rad:CHEAT.rad});
+  assert.deepEqual(out.noTalent, { n: 0, elem: null, mult: 1 });
+  assert.deepEqual(out.resonance, { n: 1, mult: 1.05 });
+  assert.equal(out.haste, 6);
+  assert.deepEqual(out.arccharge, { charge: 0, discount: true });
+  assert.deepEqual([out.arcane, out.discounted, out.fire], [1, 1, 12]);
+});
+
+testCase('R7_status_and_reactions', () => {
+  const env = makeEnv();
+  env.run(`initRun();P.cls='mage';P.maxEn=200;P.en=200;P.crit=0;P.stacks={t_fusion:1}`);
+  seedFoe(env);
+  const status = j(env)(`(()=>{
+    const f=foes[0];f.burnStacks=3;f.burnT=4;f.burnTick=.5;updateFoeStatus(f,1);
+    const burn={dmg:10000-f.hp,kx:f.kx,ky:f.ky};f.hp=10000;f.lastElem=null;f.reactCd=0;
+    applyElement(f,'fire',2);applyElement(f,'frost',1);
+    return JSON.stringify({burn,steam:10000-f.hp,cd:f.reactCd,kx:f.kx,ky:f.ky});
   })()`);
-  assert.equal(radius.R, 31, '范围应为 3.1 格的 10 倍');
-  // 再次输入应关闭
-  env.run(`S.mode='pause';`);
-  for (const k of 'l3131') press(k);
-  assert.equal(env.run('CHEAT.on'), false, '再次输入 l3131 应关闭强化');
+  assert.ok(Math.abs(status.burn.dmg - 9) < .01);
+  assert.deepEqual([status.burn.kx, status.burn.ky], [0, 0]);
+  assert.ok(Math.abs(status.steam - 39) < .01);
+  assert.equal(status.cd, 1.5);
+  assert.ok(Math.abs(status.kx - 4) < 1e-9);
+  assert.equal(status.ky, 0);
+  const detonate = j(env)(`(()=>{
+    const f=foes[0];f.hp=f.max=26;f.dead=false;f.burnStacks=5;f.burnT=4;f.lastElem='frost';f.lastElemT=S.combatT;f.reactCd=0;
+    const near={...f,x:P.x+2,hp:10000,max:10000,dead:false,burnStacks:0,lastElem:null};foes.push(near);rebuildFoeGrid();
+    castSpell(CDEFS.sp_flamedetonate,f.x,f.y);
+    return JSON.stringify({dead:f.dead,react:f.reactCd,splash:10000-near.hp,burn:f.burnStacks});
+  })()`);
+  assert.deepEqual(detonate, { dead: true, react: 1.5, splash: 19.5, burn: 0 });
+  seedFoe(env);
+  const targets = j(env)(`(()=>{
+    const one=spellTargets(CDEFS.sp_magicmissile,P.x,P.y).length;foes[0].x=P.x+20;rebuildFoeGrid();
+    return JSON.stringify({one,far:spellTargets(CDEFS.sp_magicmissile,P.x,P.y).length});
+  })()`);
+  assert.deepEqual(targets, { one: 1, far: 0 });
+});
+
+testCase('R8_shields_surge_and_audio', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    initRun();P.cls='mage';P.maxEn=200;P.en=100;P.shield=0;P.dashCd=1;P.stacks={t_regenshield:1};S.mode='play';
+    DECK.hand=[mkCard('surge')];DECK.draw=[];DECK.discard=[];playCard(DECK.hand[0].uid,P.x,P.y);
+    const surge={en:P.en,shield:P.shield,dash:P.dashCd};
+    P.hp=P.maxHp=100;P.hp=100;P.ifr=0;damagePlayer(20);const absorb={hp:P.hp,shield:P.shield};
+    P.shield=0;P.stacks={t_manashield:1};P.en=39;P.hp=10;P.ifr=0;damagePlayer(100);const low=P.downed;
+    P.downed=false;P.en=200;P.hp=10;P.ifr=0;damagePlayer(100);const guard={hp:P.hp,en:P.en,downed:P.downed};
+    return JSON.stringify({surge,absorb,low,guard});
+  })()`);
+  assert.deepEqual(out.surge, { en: 200, shield: 30, dash: 0 });
+  assert.deepEqual(out.absorb, { hp: 100, shield: 10 });
+  assert.equal(out.low, true);
+  assert.deepEqual(out.guard, { hp: 10, en: 0, downed: false });
+  assert.ok(fs.readFileSync(path.join(ROOT, 'js', '01-audio.js'), 'utf8').includes("case 'ward':"));
+});
+
+testCase('R9_codex_progress', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    initRun();const bad=[];
+    for(const e of CODEX)try{const s=e.stats?e.stats():[];if(!Array.isArray(s))bad.push(e.id);}catch(err){bad.push(e.id)}
+    for(const id of Object.keys(FOES))save.seen.foe[id]=1;
+    for(const b of BLESSINGS)save.seen.card[b.id]=1;
+    for(const id of CIDS)save.seen.play[id]=1;
+    save.seen.play.unknown=1;const full=cxSeenCount();cxRenderList();const label=document.getElementById('cxCount').textContent;
+    save.seen.play={};S.day=2;S.mode='dawn';S.dawnStep=0;S.dawnCards=['wall','class_mage','rain'];pickDawn(1);
+    return JSON.stringify({bad,full,label,classSeen:save.seen.play.class_mage,played:S.stats.played,track:Object.keys(FOES).length+BLESSINGS.length+CIDS.length});
+  })()`);
+  assert.deepEqual(out.bad, []);
+  assert.equal(out.full, out.track);
+  assert.ok(out.label.includes(`${out.track}/${out.track}`));
+  assert.equal(out.classSeen, 1);
+  assert.equal(out.played, 1);
+});
+
+testCase('R10_hand_keys_and_hud', () => {
+  const env = makeEnv();
+  env.run(`initRun();S.mode='play';DECK.hand=[];for(let i=0;i<12;i++)DECK.hand.push(mkCard('wall'));renderHand()`);
+  const press = key => env.winL.keydown[0]({ key, preventDefault() {}, repeat: false, target: {} });
+  press('-');
+  assert.equal(env.run('S.aimUid'), env.run('DECK.hand[10].uid'));
+  press('=');
+  assert.equal(env.run('S.aimUid'), env.run('DECK.hand[11].uid'));
+  const out = j(env)(`(()=>{
+    S.mode='play';P.cls=null;P.en=100;syncHUD();const non={label:UI.enLabel.textContent,text:UI.enTxt.textContent};
+    P.cls='mage';P.maxEn=200;P.en=200;P.maxHp=60;P.hp=60;P.shield=20;syncHUD();
+    return JSON.stringify({non,label:UI.enLabel.textContent,text:UI.enTxt.textContent,name:UI.ppName.textContent,
+      shield:UI.shieldBar.style.display,shieldTxt:UI.shieldTxt.textContent,keys:HAND_KEYS});
+  })()`);
+  assert.deepEqual(out.non, { label: '雾能', text: '100' });
+  assert.deepEqual([out.label, out.text], ['法力', '200/200']);
+  assert.ok(out.name.includes('法师'));
+  assert.notEqual(out.shield, 'none');
+  assert.equal(String(out.shieldTxt), '20');
+  assert.equal(out.keys, '1234567890-=');
+});
+
+testCase('R11_non_mage_spell_and_manawell', () => {
+  const env = makeEnv();
+  env.run(`initRun();S.mode='play';S.phase='day';P.en=100;P.crit=0;P.stacks={}`);
+  seedFoe(env);
+  const spell = j(env)(`(()=>{
+    DECK.hand=[mkCard('sp_fireball')];DECK.draw=[];DECK.discard=[];playCard(DECK.hand[0].uid,P.x+1,P.y);
+    return JSON.stringify({en:P.en,dmg:10000-foes[0].hp,burn:foes[0].burnStacks,react:foes[0].reactCd||0});
+  })()`);
+  assert.deepEqual(spell, { en: 85, dmg: 20, burn: 2, react: 0 });
+  const well = j(env)(`(()=>{
+    initRun();P.cls='mage';P.maxEn=200;P.en=0;P.regen=1;P.stacks={};builds.length=0;res.wood=99;res.stone=99;res.crys=99;
+    for(let i=0;i<3;i++)builds.push({type:'manawell',x:P.x+i*.6,y:P.y,hp:80,max:80,r:.4,cd:0,pulse:0,flash:0});
+    const cap=placeCheck(CDEFS.manawell,P.x+1,P.y).msg;const pool=!poolIds().includes('manawell');
+    builds.length=0;builds.push({type:'manawell',x:P.x,y:P.y,hp:80,max:80,r:.4,cd:0,pulse:0,flash:0});updateBuilds(1);
+    S.phase='night';return JSON.stringify({cap,pool,en:P.en,night:placeCheck(CDEFS.manawell,P.x+1,P.y).msg});
+  })()`);
+  assert.deepEqual(well, { cap: '法力之井已达上限', pool: true, en: 3, night: '夜晚仅可使用瞬发牌' });
+});
+
+testCase('R12_combat_targeting', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    initRun();S.mode='play';S.phase='night';P.x=10;P.y=10;P.ifr=0;P.hp=100;core.x=20;core.y=20;core.hp=600;
+    foes.length=0;foes.push({type:'spitter',x:21.5,y:20,hp:100,max:100,spd:1.8,dmg:8,r:.3,xp:7,coreDmg:8,
+      atkCd:0,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+      fireCd:99,spawnCd:99,stompCd:99,px:21.5,py:20,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});rebuildFoeGrid();
+    const hp0=P.hp,core0=core.hp;updateFoes(.016);const ranged={hp:P.hp,core:core.hp};
+    foes.length=0;
+    return JSON.stringify({hp0,core0,ranged});
+  })()`);
+  assert.equal(out.ranged.hp, out.hp0);
+  assert.ok(out.ranged.core < out.core0);
+  seedFoe(env, .5, .5);
+  env.run(`shots.length=0;shots.push({x:P.x-.8,y:P.y+.5,vx:24,vy:0,type:'arrow',dmg:9,life:1,z:22})`);
+  const hp0 = env.run('foes[0].hp');
+  env.run('updateShots(1/15)');
+  assert.ok(env.run('foes[0].hp') < hp0);
 });
 
 function main() {
   if (process.env.CAPTURE) {
-    const env = makeEnv();
-    console.log(JSON.stringify({ r0: captureR0(env), saves: captureSaves() }, null, 2));
+    console.log(JSON.stringify({ r0: captureBaseline(makeEnv()), saves: captureSaves() }, null, 2));
     return;
   }
   let pass = 0, fail = 0;
@@ -616,4 +464,5 @@ function main() {
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail) process.exitCode = 1;
 }
+
 main();

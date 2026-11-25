@@ -128,6 +128,16 @@ function drawBuild(b){
     ctx.fillStyle=g;ctx.beginPath();ctx.arc(px,py-34,12*p,0,TAU);ctx.fill();
     ctx.strokeStyle='rgba(111,224,138,.5)';ctx.lineWidth=1.5;
     ctx.beginPath();ctx.ellipse(px,py-34,9,4,b.pulse,0,TAU);ctx.stroke();
+  }else if(b.type==='manawell'){
+    ctx.fillStyle='#243b4a';
+    ctx.beginPath();ctx.ellipse(px,py-4,18,9,0,0,TAU);ctx.fill();
+    ctx.fillStyle='#162a36';
+    ctx.beginPath();ctx.ellipse(px,py-8,14,7,0,0,TAU);ctx.fill();
+    const p=.7+.3*Math.sin(b.pulse*3),g=ctx.createRadialGradient(px,py-14,1,px,py-14,18);
+    g.addColorStop(0,'#dffaff');g.addColorStop(.35,'#57e6ff');g.addColorStop(1,'rgba(87,230,255,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(px,py-14,18*p,0,TAU);ctx.fill();
+    ctx.strokeStyle='rgba(87,230,255,.55)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.ellipse(px,py-14,12,5,b.pulse,0,TAU);ctx.stroke();
   }else{
     ctx.fillStyle='#2c3e46';
     ctx.beginPath();ctx.moveTo(px-15,py-6);ctx.lineTo(px,py-14);ctx.lineTo(px+15,py-6);ctx.lineTo(px,py+2);ctx.closePath();ctx.fill();
@@ -238,6 +248,20 @@ function drawFoe(f){
     ctx.fillStyle='rgba(7,15,22,.85)';ctx.fillRect(px-w/2,py-92,w,8);
     ctx.fillStyle='#ff4d6d';ctx.fillRect(px-w/2+1,py-91,(w-2)*r,6);
     ctx.strokeStyle='rgba(160,107,255,.6)';ctx.lineWidth=1;ctx.strokeRect(px-w/2,py-92,w,8);
+  }
+  const marks=[];
+  if((f.burnT||0)>0)marks.push('#ff7a45');
+  if((f.chillT||0)>0)marks.push('#6fd8ff');
+  if((f.freezeT||0)>0)marks.push('#dffaff');
+  if((f.markT||0)>0)marks.push('#b48cff');
+  if(marks.length){
+    const y=py-(f.boss?106:f.r*52+18);
+    let x=px-(marks.length-1)*5;
+    for(const col of marks){
+      ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,3,0,TAU);ctx.fill();
+      ctx.strokeStyle='rgba(5,10,16,.8)';ctx.lineWidth=1;ctx.stroke();
+      x+=10;
+    }
   }
 }
 function drawPickup(p){
@@ -356,6 +380,11 @@ function render(){
       const r=lerp(p.r1,p.r0,t);
       ctx.strokeStyle=p.col;ctx.globalAlpha=t;ctx.lineWidth=3*t+1;
       ctx.beginPath();ctx.ellipse(px,py,r*TW/2,r*TH/2,0,0,TAU);ctx.stroke();ctx.globalAlpha=1;
+    }else if(p.shape&&FX_SHAPE[p.shape]!==undefined){
+      const sz=(p.size*t+.5)*2.6;
+      ctx.globalAlpha=t;
+      ctx.drawImage(fxAtlas(p.col),FX_SHAPE[p.shape]*64,0,64,64,px-sz/2,py-p.z-sz/2,sz,sz);
+      ctx.globalAlpha=1;
     }else{ctx.globalAlpha=t;ctx.fillStyle=p.col;
       ctx.beginPath();ctx.arc(px,py-p.z,p.size*t+.5,0,TAU);ctx.fill();ctx.globalAlpha=1;}
   }
@@ -384,9 +413,12 @@ function render(){
       if(b.type==='tower')light(b.x,b.y,70,GLOW.mint,.3);
       else if(b.type==='cannon')light(b.x,b.y,90,GLOW.cyan,.35);
       else if(b.type==='totem')light(b.x,b.y,90,GLOW.leaf,.3);
+      else if(b.type==='manawell')light(b.x,b.y,100,GLOW.cyan,.4);
     }
     for(const n of nodes)if(n.alive&&n.type==='crys')light(n.x,n.y,60,GLOW.cyan,.3);
-    for(const s of shots)if(s.type==='cannon'||s.type==='fog')light(s.x,s.y,40,s.type==='cannon'?GLOW.cyan:GLOW.violet,.35);
+    for(const s of shots)if(s.type==='cannon'||s.type==='fog'){
+      light(s.x,s.y,40,s.type==='fog'?GLOW.violet:GLOW.cyan,.35);
+    }
     ctx.globalAlpha=1;
     const cpr=proj(core.x,core.y),cpx=(cpr[0]-cp[0])*cam.z+W/2+cam.sx,cpy=(cpr[1]-cp[1])*cam.z+H/2+cam.sy;
     const beamA=(S.mode==='launch'?Math.min(1,S.launchT/1.2):core.beam*.35)*night;

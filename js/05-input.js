@@ -45,7 +45,8 @@ addEventListener('keydown',e=>{
     return;
   }
   if(S.mode==='play'){
-    if(k>='0'&&k<='9'){const i=k==='0'?9:+k-1;if(DECK.hand[i])selectCard(DECK.hand[i].uid);}
+    const hi=HAND_KEYS.indexOf(k);
+    if(hi>=0&&DECK.hand[hi])selectCard(DECK.hand[hi].uid);
     if(k==='q')castNova();
     if(k===' ')tryDash();
     if(k==='f')tryRepair();
@@ -90,7 +91,7 @@ addEventListener('pointerup',e=>{
   const uid=S.dragUid,moved=S.dragMoved;
   const overCanvas=document.elementFromPoint(e.clientX,e.clientY)===cv;
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
-  endDrag(true);
+  endDrag();
   if(S.mode!=='play')return;
   if(moved){
     if(overCanvas){updateMouseWorld();tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}

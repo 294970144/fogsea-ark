@@ -44,14 +44,28 @@ const BLESS={
 };
 // 存档加载必须在 DIFFS / BLESS 定义之后：按白名单逐项校验，非法值回退默认
 function loadSave(){
-  const s=localStorage.getItem(SAVE_KEY)||localStorage.getItem('arkmist_v2')||localStorage.getItem('arkmist_v1');
-  if(!s)return;
-  let p;
-  try{p=JSON.parse(s);}catch(e){return;}
-  if(!p||typeof p!=='object'||Array.isArray(p))return;
+  let p=null;
+  try{
+    for(const key of [SAVE_KEY,'arkmist_v2','arkmist_v1']){
+      const raw=localStorage.getItem(key);
+      if(!raw)continue;
+      try{
+        const next=JSON.parse(raw);
+        const seenValid=next.seen&&typeof next.seen==='object'&&['foe','build','card','play'].some(k=>
+          next.seen[k]&&typeof next.seen[k]==='object'&&Object.values(next.seen[k]).some(v=>Number.isFinite(v)&&v>=0));
+        const valid=next&&typeof next==='object'&&!Array.isArray(next)&&(
+          (Number.isFinite(next.embers)&&next.embers>=0)||typeof next.muted==='boolean'||
+          (typeof next.diff==='string'&&Object.prototype.hasOwnProperty.call(DIFFS,next.diff))||
+          (next.bless&&typeof next.bless==='object'&&Object.keys(BLESS).some(k=>Number.isInteger(next.bless[k])&&next.bless[k]>=0&&next.bless[k]<=BLESS[k].max))||
+          (next.best&&typeof next.best==='object'&&['nights','kills','wins'].some(k=>Number.isInteger(next.best[k])&&next.best[k]>=0))||seenValid);
+        if(valid){p=next;break;}
+      }catch(e){}
+    }
+  }catch(e){return;}
+  if(!p)return;
   if(Number.isFinite(p.embers)&&p.embers>=0)save.embers=Math.floor(p.embers);
   if(typeof p.muted==='boolean')save.muted=p.muted;
-  if(typeof p.diff==='string'&&DIFFS[p.diff])save.diff=p.diff;
+  if(typeof p.diff==='string'&&Object.prototype.hasOwnProperty.call(DIFFS,p.diff))save.diff=p.diff;
   if(p.bless&&typeof p.bless==='object')for(const k in BLESS){
     const v=p.bless[k];
     if(Number.isInteger(v)&&v>=0&&v<=BLESS[k].max)save.bless[k]=v;
@@ -118,7 +132,16 @@ clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 skull:'<path d="M5 11a7 7 0 1114 0v4l-2 1v3H7v-3l-2-1v-4z"/><circle cx="9.5" cy="11" r="1.4"/><circle cx="14.5" cy="11" r="1.4"/>',
 shield:'<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5l8-3z"/>',
 map:'<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3V6zM9 3v15M15 6v15"/>',
-cards:'<rect x="3" y="6" width="11" height="14" rx="2"/><path d="M8 4h11v14"/>'
+cards:'<rect x="3" y="6" width="11" height="14" rx="2"/><path d="M8 4h11v14"/>',
+flame:'<path d="M12 22c4 0 7-3 7-7 0-3-2-5-4-8-1 3-3 4-5 6 0-3-1-5-2-7-2 3-3 6-3 9 0 4 3 7 7 7z"/><path d="M12 22c-2 0-3-1.5-3-3 0-1.5 1-2.5 2-4 0 2 1 3 2 4 1 1 1 3-1 3z"/>',
+snow:'<path d="M12 7V3.75M12 3.75L10.25 2M12 3.75L13.75 2"/><path transform="rotate(45 12 12)" d="M12 7V3.75M12 3.75L10.25 2M12 3.75L13.75 2"/><path transform="rotate(90 12 12)" d="M12 7V3.75M12 3.75L10.25 2M12 3.75L13.75 2"/><path transform="rotate(135 12 12)" d="M12 7V3.75M12 3.75L10.25 2M12 3.75L13.75 2"/><path transform="rotate(180 12 12)" d="M12 7V3.75M12 3.75L10.25 2M12 3.75L13.75 2"/><path transform="rotate(225 12 12)" d="M12 7V3.75M12 3.75L10.25 2M12 3.75L13.75 2"/><path transform="rotate(270 12 12)" d="M12 7V3.75M12 3.75L10.25 2M12 3.75L13.75 2"/><path transform="rotate(315 12 12)" d="M12 7V3.75M12 3.75L10.25 2M12 3.75L13.75 2"/><path d="M12 8.25l3.25 1.875v3.75L12 15.75l-3.25-1.875v-3.75L12 8.25z"/>',
+rune:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="5.5" opacity=".5"/><path d="M12 6l5 9H7z"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="4" r=".75" fill="currentColor"/><circle cx="12" cy="20" r=".75" fill="currentColor"/><circle cx="4" cy="12" r=".75" fill="currentColor"/><circle cx="20" cy="12" r=".75" fill="currentColor"/>',
+well:'<path d="M4 8h16l-2 12H6L4 8z"/><path d="M7 8V5h10v3M8 13c2 1 3 1 4 0s2-1 4 0M8 17c2 1 3 1 4 0s2-1 4 0"/>',
+spark:'<path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2 2-8z"/>',
+mage:'<path d="M12 2L6 12h12L12 2z"/><path d="M4.5 12q7.5 2.5 15 0"/><path d="M8 9.5q4 1 8 0"/><path d="M9 17q3-1.5 6 0l-1 3.5q-2 1-4 0L9 17z"/><path d="M9 17L6.5 22h11L15 17"/><circle cx="10.5" cy="14.5" r=".6" fill="currentColor"/><circle cx="13.5" cy="14.5" r=".6" fill="currentColor"/><path d="M18.5 3l.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4.4-1.1z"/>',
+emberburst:'<circle cx="12" cy="12" r="3"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.5 6.5l3 3M14.5 14.5l3 3M17.5 6.5l-3 3M9.5 14.5l-3 3"/><circle cx="12" cy="2.5" r=".75" fill="currentColor"/><circle cx="12" cy="21.5" r=".75" fill="currentColor"/><circle cx="2.5" cy="12" r=".75" fill="currentColor"/><circle cx="21.5" cy="12" r=".75" fill="currentColor"/>',
+steam:'<path d="M5.5 16a3.5 3.5 0 013.5-3.5 4.5 4.5 0 018.5-1 3.5 3.5 0 011 4.5z"/><path d="M9.5 11.5c-1.5-2.5 1.5-3.5 0-6M14.5 11.5c1.5-2.5-1.5-3.5 0-6"/>',
+reso:'<circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="5" opacity=".7"/><circle cx="12" cy="12" r="8" opacity=".4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'
 };
 const svg=(n,sz=24,col='currentColor')=>`<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]||''}</svg>`;
 

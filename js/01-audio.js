@@ -85,10 +85,15 @@ function sfx(n){
     case 'salvage':tone(500,180,.22,'sawtooth',.14);noise(.18,.18,900);break;
     case 'swap':tone(420,700,.1,'sine',.12);tone(700,980,.09,'sine',.08,.06);break;
     case 'heal':[523,784,1046].forEach((f,i)=>tone(f,f,.2,'sine',.12,i*.06));break;
+    case 'ward':tone(320,760,.16,'sine',.14);tone(640,960,.12,'sine',.08,.04);break;
     case 'repair':tone(220,180,.05,'triangle',.2);tone(260,220,.05,'triangle',.2,.09);tone(880,1100,.12,'sine',.1,.18);break;
     case 'coreHit':tone(120,50,.2,'triangle',.3);tone(1200,900,.08,'square',.06);break;
     case 'respawn':tone(330,660,.4,'sine',.15);tone(440,880,.4,'sine',.1,.1);break;
     case 'warn':tone(500,380,.18,'sine',.08);break;
+    case 'fire':noise(.18,.22,700,'lowpass');tone(190,70,.14,'sawtooth',.18);break;
+    case 'frost':tone(1200,620,.12,'sine',.12);noise(.08,.1,3000,'highpass');break;
+    case 'arcane':tone(420,880,.12,'sine',.12);tone(880,1320,.1,'triangle',.06,.03);break;
+    case 'cast':tone(520,760,.08,'sine',.08);break;
   }
 }
 function auPhase(night){

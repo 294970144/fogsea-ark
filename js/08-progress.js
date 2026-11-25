@@ -1,15 +1,24 @@
 'use strict';
 /* ---------------- 黎明选择 ---------------- */
-function openDawn(){
-  S.mode='dawn';S.dawnStep=0;
-  S.dawnCards=rollRewards(3);
-  const pool=BLESSINGS.filter(b=>(P.stacks[b.id]||0)<(b.max||(S.endless?8:Infinity)));
+function rollDawnBless(){
+  const pool=BLESSINGS.filter(b=>{
+    if(b.cls==='mage'&&!isMage())return false;
+    if(b.id==='t_nirvana'&&P.nirvanaUsed)return false;
+    return (P.stacks[b.id]||0)<(b.max||(S.endless?8:Infinity));
+  });
   const weights={c:60,r:30,e:12},bag=[];
   pool.forEach(b=>{for(let i=0;i<weights[b.rar];i++)bag.push(b);});
   S.dawnBless=[];let guard=0;
   while(S.dawnBless.length<Math.min(3,pool.length)&&bag.length&&guard++<400){
     const b=bag[irand(0,bag.length-1)];if(!S.dawnBless.includes(b))S.dawnBless.push(b);
   }
+}
+function openDawn(){
+  S.mode='dawn';S.dawnStep=0;
+  S.dawnCards=rollRewards(3);
+  injectClassCard(S.dawnCards);
+  injectCoreCards(S.dawnCards);
+  rollDawnBless();
   renderDawn();showOv('dawnOv',true);
 }
 function renderDawn(){
@@ -25,11 +34,10 @@ function renderDawn(){
       const d=CDEFS[id],own=cardTotal(id);
       const el=document.createElement('button');
       el.className='pcard';el.style.borderColor=d.color+'88';
-      const ck=Object.keys(d.cost);
-      const cost=ck.length?ck.map(k=>`<b style="color:${RESCOL[k]}">${d.cost[k]}${RESNAME[k]}</b>`).join(''):'<b style="color:#6fe08a">免费</b>';
+      const cost=d.cls==='class'?'<b style="color:#b48cff">职业</b>':costHtml(d);
       el.innerHTML=`<span class="pcHk kb kb-hint">${i+1}</span>${own?`<span class="pcOwn">已有 ×${own}</span>`:''}
         <div class="pcArt" style="color:${d.color}">${svg(d.icon,34)}</div>
-        <b>${d.name}</b><div class="pcKind" style="color:${d.color}">${KINDNAME[d.kind]}</div>
+        <b>${d.name}</b><div class="pcKind" style="color:${d.color}">${d.cls==='class'?'职业':KINDNAME[d.kind]+(d.elem?' · '+ELEMNAME[d.elem]:'')}</div>
         <p>${d.desc}</p><div class="pcCost">${cost}</div>`;
       el.addEventListener('click',()=>pickDawn(i));
       row.appendChild(el);
@@ -57,12 +65,20 @@ function pickDawn(i){
   if(S.mode!=='dawn')return;
   if(S.dawnStep===0){
     const id=S.dawnCards[i];if(!id)return;
+    if(id==='class_mage'){
+      S.stats.played++;bumpSeen('play','class_mage');
+      becomeMage();
+      rollDawnBless();
+      S.dawnStep=1;renderDawn();sfx('card');
+      return;
+    }
     DECK.discard.push(mkCard(id));
+    if(CDEFS[id].elem)P.aff[CDEFS[id].elem]++;
     toast('获得 '+CDEFS[id].name,'good');sfx('card');
     S.dawnStep=1;renderDawn();
   }else{
     const b=S.dawnBless[i];if(!b)return;
-    b.f();P.stacks[b.id]=(P.stacks[b.id]||0)+1;
+    if(b.f)b.f();P.stacks[b.id]=(P.stacks[b.id]||0)+1;
     bumpSeen('card',b.id);refreshStacks();
     toast('祝福 '+b.n,'good');sfx('level');
     finishDawn();
@@ -77,7 +93,7 @@ function finishDawn(){
   showOv('dawnOv',false);S.mode='play';
   const before=DECK.hand.length;
   const full=drawToFull();
-  const cap=Math.min(HAND_CAP,DECK.max+P.bonusDraw);
+  const cap=Math.min(handCap(),DECK.max+P.bonusDraw);
   const extra=drawN(P.bonusDraw,cap);
   const n=full+extra;
   const hasCards=DECK.draw.length+DECK.discard.length>0;

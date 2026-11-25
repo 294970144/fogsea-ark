@@ -1,15 +1,15 @@
 'use strict';
 /* ---------------- 手牌 UI ---------------- */
+const HAND_KEYS='1234567890-=';
 function cardInner(def,hot){
-  const ck=Object.keys(def.cost);
-  const cost=ck.length?ck.map(k=>`<b data-k="${k}" style="color:${RESCOL[k]}">${def.cost[k]}${RESNAME[k]}</b>`).join('')
-    :'<b class="free">免费</b>';
+  const cost=def.cls==='class'?'<b style="color:#b48cff">职业</b>':costHtml(def);
+  const kind=def.cls==='class'?'职业':(KINDNAME[def.kind]+(def.elem?' · '+ELEMNAME[def.elem]:''));
   return `<span class="hcHot kb-hint">${hot||''}</span>
     <div class="hcCost">${cost}</div>
     <div class="hcArt" style="color:${def.color}">${svg(def.icon,26)}</div>
     <div class="hcName">${def.name}</div>
-    <div class="hcKind" style="color:${def.color}">${KINDNAME[def.kind]}</div>
-    <div class="hcDesc">${def.desc}</div>`;
+    <div class="hcKind" style="color:${def.color}">${kind}</div>
+    <div class="hcDesc">${CARD_BRIEF[def.id]||def.desc}</div>`;
 }
 function renderHand(){
   const row=$('handRow');row.innerHTML='';
@@ -17,7 +17,7 @@ function renderHand(){
     const def=CDEFS[c.id];
     const el=document.createElement('div');
     el.className='hcard';el.dataset.uid=c.uid;
-    el.innerHTML=cardInner(def,i<10?(i===9?'0':String(i+1)):'');
+    el.innerHTML=cardInner(def,HAND_KEYS[i]||'');
     el.addEventListener('pointerdown',e=>{
       if(S.mode!=='play')return;
       e.preventDefault();auInit();
@@ -31,8 +31,6 @@ function renderHand(){
         S.dragMoved=true;showDragCard(uid);moveDragCard(mouseX,mouseY);sfx('card');
       },HOLD_MS);
     });
-    el.addEventListener('pointerenter',()=>showCardInfo(def));
-    el.addEventListener('pointerleave',()=>{if(!S.aimUid)hideCardInfo();else{const a=handCard(S.aimUid);if(a)showCardInfo(CDEFS[a.id]);}});
     row.appendChild(el);
   });
   layoutHand();S.handDirty=false;syncHand(true);
@@ -51,13 +49,6 @@ function layoutHand(){
   });
 }
 function handCard(uid){return DECK.hand.find(c=>c.uid===uid);}
-function showCardInfo(def){
-  const el=$('cardInfo');
-  const extra=def.tier?` <i>当前回收率 ${DECK.recycle}%</i>`:'';
-  el.innerHTML=`<b style="color:${def.color}">${def.name}</b>${def.desc}${extra} <i>${costStr(def.cost)}</i>`;
-  el.classList.add('show');
-}
-function hideCardInfo(){$('cardInfo').classList.remove('show');}
 let dragBuildType=null;
 function showDragCard(uid){
   const c=handCard(uid);if(!c)return;
@@ -101,9 +92,9 @@ function endDrag(){
 }
 function selectCard(uid){
   const c=handCard(uid);if(!c)return;
-  S.aimUid=uid;showCardInfo(CDEFS[c.id]);sfx('card');syncHand(true);
+  S.aimUid=uid;sfx('card');syncHand(true);
 }
-function clearAim(){S.aimUid=null;hideCardInfo();syncHand(true);}
+function clearAim(){S.aimUid=null;syncHand(true);}
 function syncHand(force){
   const night=S.phase==='night';
   document.querySelectorAll('#handRow .hcard').forEach(el=>{
@@ -117,6 +108,10 @@ function syncHand(force){
     if(force||el._sel!==sel){el._sel=sel;el.classList.toggle('sel',sel);}
     el.querySelectorAll('.hcCost b[data-k]').forEach(b=>{
       const no=res[b.dataset.k]<def.cost[b.dataset.k];
+      if(b._no!==no){b._no=no;b.classList.toggle('no',no);}
+    });
+    el.querySelectorAll('.hcCost b[data-mana]').forEach(b=>{
+      const no=P.en<effManaCost(def);
       if(b._no!==no){b._no=no;b.classList.toggle('no',no);}
     });
   });
@@ -140,8 +135,11 @@ function ghostTile(){
 }
 function placeCheck(def,tx,ty){
   if(S.phase==='night'&&def.kind==='build')return{ok:false,msg:'夜晚仅可使用瞬发牌'};
-  if(!afford(def))return{ok:false,msg:'资源不足'};
+  if(def.elem&&P.spellCd>0)return{ok:false,msg:'施法冷却中'};
+  if(!afford(def))return{ok:false,msg:def.mana?(isMage()?'法力不足':'雾能不足'):'资源不足'};
   if(def.kind==='build'){
+    if(def.build==='manawell'&&builds.filter(b=>b.type==='manawell').length>=3)
+      return{ok:false,msg:'法力之井已达上限'};
     if(!walk(tx,ty))return{ok:false,msg:'不可建于此处'};
     if(dist(tx,ty,P.x,P.y)>5.5)return{ok:false,msg:'超出建造范围'};
     if(dist(tx,ty,core.x,core.y)<core.r+.8)return{ok:false,msg:'核心区域'};
@@ -152,7 +150,7 @@ function placeCheck(def,tx,ty){
     if(blocked)return{ok:false,msg:'雾裔占据此处'};
   }else if(def.target==='point'){
     if(!walk(tx,ty))return{ok:false,msg:'目标不在陆地'};
-    if(dist(tx,ty,P.x,P.y)>7.5)return{ok:false,msg:'超出施法距离'};
+    if(dist(tx,ty,P.x,P.y)>7.5*(1+.20*tLv('t_reach')))return{ok:false,msg:'超出施法距离'};
   }
   return{ok:true,msg:''};
 }
@@ -170,9 +168,10 @@ function playCard(uid,tx,ty){
   if(def.target==='pick'){beginSalvage(card);return false;}
   const chk=placeCheck(def,tx,ty);
   if(!chk.ok){toast(chk.msg,'warn');sfx('deny');return false;}
+  const overflow=!!def.elem&&isMage()&&P.en>P.maxEn*.8;
   payCost(def);
   DECK.hand.splice(idx,1);
-  S.aimUid=null;hideCardInfo();
+  S.aimUid=null;
   S.stats.played++;bumpSeen('play',def.id);
   if(def.kind==='build'){
     const b=BUILDS[def.build];
@@ -183,19 +182,21 @@ function playCard(uid,tx,ty){
     sfx('build');
     DECK.discard.push(card);
   }else{
-    applyInstant(def,tx,ty);
+    applyInstant(def,tx,ty,overflow);
     DECK.discard.push(card);
   }
   if(def.id==='expand'){
-    DECK.max=Math.min(HAND_CAP,DECK.max+1);
+    DECK.max=Math.min(handCap(),DECK.max+1);
     floater(P.x,P.y,'手牌上限 '+DECK.max,'#ffb454',true);
-    if(DECK.max>=HAND_CAP){purgeCard('expand');toast('手牌已达上限 10 · 扩容牌退场','good');}
+    if(DECK.max>=handCap()){purgeCard('expand');toast('手牌已达上限 '+handCap()+' · 扩容牌退场','good');}
     drawN(1);
   }
   S.handDirty=true;
   return true;
 }
-function applyInstant(def,tx,ty){
+function applyInstant(def,tx,ty,overflow){
+  if(def.elem)return castSpell(def,tx,ty,overflow);
+  if(def.kind==='class')return;
   if(def.id==='rain'||def.id==='mine'){
     const R=def.radius,col=def.id==='rain'?'rgba(255,209,102,.9)':'rgba(87,230,255,.9)';
     ring(tx,ty,col,.2,R,.45);
@@ -226,7 +227,7 @@ function applyInstant(def,tx,ty){
     if(n<2&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
       offerSwap(Math.min(2-n,DECK.hand.length),'战术重整 · 手牌已满');
   }else if(def.id==='surge'){
-    P.en=P.maxEn;P.dashCd=0;ring(P.x,P.y,'rgba(87,230,255,.9)',.2,1.6,.4);
+    gainMana(P.maxEn-P.en);P.dashCd=0;ring(P.x,P.y,'rgba(87,230,255,.9)',.2,1.6,.4);
     puff(P.x,P.y,16,'#57e6ff',2.5,.6,3);sfx('nova');
   }
 }
@@ -251,7 +252,7 @@ function beginSalvage(card){
     const el=document.createElement('button');
     el.className='rmItem';
     el.innerHTML=`<span class="ri" style="color:${d.color}">${svg(d.icon,17)}</span>
-      <span class="rt"><b>${d.name}</b><span>${costStr(d.cost)} · 共 ${u.n} 张</span></span>
+      <span class="rt"><b>${d.name}</b><span>${costStr(d)} · 共 ${u.n} 张</span></span>
       <span class="rf">${backTxt}</span>`;
     el.addEventListener('click',()=>confirmSalvage(id,rate));
     list.appendChild(el);
@@ -282,7 +283,7 @@ function confirmSalvage(id,rate){
   }
   S.stats.played++;bumpSeen('play',sc.id);
   S.pendingSalvage=null;S.mode='play';S.handDirty=true;S.aimUid=null;
-  showOv('removeOv',false);hideCardInfo();
+  showOv('removeOv',false);
   puff(P.x,P.y,14,'#6fe08a',2.5,.6,3);sfx('salvage');
 }
 function cancelSalvage(){S.pendingSalvage=null;S.mode='play';showOv('removeOv',false);}
@@ -302,7 +303,7 @@ function renderSwap(){
     const el=document.createElement('button');
     el.className='rmItem';
     el.innerHTML=`<span class="ri" style="color:${d.color}">${svg(d.icon,17)}</span>
-      <span class="rt"><b>${d.name}</b><span>${costStr(d.cost)}</span></span>
+      <span class="rt"><b>${d.name}</b><span>${costStr(d)}</span></span>
       <span class="rf">弃置<br>补抽</span>`;
     el.addEventListener('click',()=>doSwap(c.uid));
     list.appendChild(el);
@@ -324,7 +325,7 @@ function doSwap(uid){
   else closeSwap(true);
 }
 function closeSwap(playSfx){
-  showOv('swapOv',false);S.mode='play';S.swapLeft=0;hideCardInfo();
+  showOv('swapOv',false);S.mode='play';S.swapLeft=0;
   if(playSfx)sfx('ui');
 }
 $('swapSkip').addEventListener('click',()=>closeSwap(true));
@@ -332,12 +333,34 @@ $('swapSkip').addEventListener('click',()=>closeSwap(true));
 /* ---------------- 粒子 ---------------- */
 const partPool=[];
 function newPart(){return partPool.pop()||{};}
-function puff(x,y,n,col,spd=2,life=.5,size=3,grav=0){
+const fxAtlasCache=Object.create(null);
+const FX_SHAPE={soft:0,shard:1,rune:2,spark:3};
+function fxAtlas(col){
+  if(fxAtlasCache[col])return fxAtlasCache[col];
+  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
+  const g=cv.getContext('2d');
+  let gr=g.createRadialGradient(32,32,1,32,32,30);
+  gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.45,'rgba(255,255,255,.75)');gr.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=gr;g.beginPath();g.arc(32,32,30,0,TAU);g.fill();
+  g.fillStyle='rgba(255,255,255,.95)';
+  g.beginPath();g.moveTo(96,6);g.lineTo(104,32);g.lineTo(96,58);g.lineTo(88,32);g.closePath();g.fill();
+  g.strokeStyle='rgba(255,255,255,.6)';g.lineWidth=2;
+  g.beginPath();g.moveTo(76,32);g.lineTo(116,32);g.moveTo(96,12);g.lineTo(96,52);g.stroke();
+  g.fillStyle='rgba(255,255,255,.95)';
+  g.beginPath();g.moveTo(160,4);g.lineTo(166,26);g.lineTo(188,32);g.lineTo(166,38);g.lineTo(160,60);g.lineTo(154,38);g.lineTo(132,32);g.lineTo(154,26);g.closePath();g.fill();
+  g.fillStyle='rgba(255,255,255,.5)';g.beginPath();g.arc(160,32,5,0,TAU);g.fill();
+  g.strokeStyle='rgba(255,255,255,.9)';g.lineWidth=2;
+  g.beginPath();g.moveTo(224,10);g.lineTo(224,20);g.moveTo(224,44);g.lineTo(224,54);g.moveTo(202,32);g.lineTo(212,32);g.moveTo(236,32);g.lineTo(246,32);g.stroke();
+  g.fillStyle='rgba(255,255,255,1)';g.beginPath();g.arc(224,32,8,0,TAU);g.fill();
+  g.globalCompositeOperation='source-in';g.fillStyle=col;g.fillRect(0,0,256,64);g.globalCompositeOperation='source-over';
+  fxAtlasCache[col]=cv;return cv;
+}
+function puff(x,y,n,col,spd=2,life=.5,size=3,grav=0,shape=null){
   for(let i=0;i<n;i++){
     if(parts.length>420)partPool.push(parts.shift());
     const a=rand(TAU),v=rand(.3,1)*spd,p=newPart();
     p.x=x;p.y=y;p.z=rand(2,14);p.vx=Math.cos(a)*v;p.vy=Math.sin(a)*v;p.vz=rand(10,50);
-    p.life=life*rand(.6,1.2);p.max=p.life;p.col=col;p.size=size*rand(.6,1.3);p.grav=grav;p.ring=false;
+    p.life=life*rand(.6,1.2);p.max=p.life;p.col=col;p.size=size*rand(.6,1.3);p.grav=grav;p.ring=false;p.shape=shape;
     parts.push(p);
   }
 }

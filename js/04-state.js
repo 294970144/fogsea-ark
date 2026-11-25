@@ -3,10 +3,10 @@
 const P={},res={wood:0,stone:0,crys:0};
 const DECK={draw:[],hand:[],discard:[],max:5,recycle:0,uid:1};
 const S={mode:'menu',phase:'day',day:1,timeLeft:70,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,
-  speed:1,hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,stats:null,hints:{},elapsed:0,
+  speed:1,hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,stats:null,hints:{},elapsed:0,combatT:0,
   aimUid:null,dragUid:null,dragMoved:false,dragStart:[0,0],dragPointerId:null,
   endless:false,endlessBase:null,settled:null,handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],
-  pendingSalvage:null,bonusDrawPending:0};
+  pendingSalvage:null};
 const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=80,FOE_CAP=44;
 /* 个人测试作弊码（仅个人测试用，不在页面呈现任何入口或文案）
    暂停时键入 l3131 切换：雾爆伤害 ×10（提升至 1000%）、范围 ×10（提升 1000%）。 */
@@ -23,6 +23,9 @@ function resetPlayer(){
     lvl:1,xp:0,next:24,dmg:12*(1+.08*b.blade),atkCd:0,atkSpd:1,range:1.75,spd:4.3,face:0,moving:false,
     dashT:0,dashCd:0,dashCdMax:1.6,dashDx:0,dashDy:0,ifr:0,downed:false,respT:0,
     crit:0,ls:0,thorns:0,wave:0,magnet:2.3,gather:1,towerMult:1,novaMult:1,regen:1,bonusDraw:0,
+    cls:null,shield:0,regenAcc:0,enRegenFlat:14,spellCd:0,charge:0,chargeAcc:0,arcCharge:0,arcDiscount:false,
+    resoElem:null,resoN:0,stormCount:0,empowerN:0,empowerT:0,nirvanaUsed:false,
+    aff:{fire:0,frost:0,arcane:0,lightning:0},
     stacks:{},anim:0,hurtT:0,swingT:0});
 }
 function initRun(){
@@ -32,7 +35,7 @@ function initRun(){
   resetPlayer();
   res.wood=24+20*save.bless.stock;res.stone=14+20*save.bless.stock;res.crys=4;
   Object.assign(S,{phase:'day',day:1,timeLeft:DAY_LEN,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,
-    hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,elapsed:0,hints:{},aimUid:null,dragUid:null,
+    hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,elapsed:0,combatT:0,hints:{},aimUid:null,dragUid:null,
     dragMoved:false,dragStart:[0,0],dragPointerId:null,endless:false,endlessBase:null,settled:null,
     handDirty:true,dawnStep:0,pendingSalvage:null,
     stats:{kills:0,gathered:0,dmg:0,nights:0,level:1,played:0}});
@@ -61,8 +64,20 @@ function drawOne(cap){
 }
 function drawToFull(){let n=0;while(DECK.hand.length<DECK.max&&drawOne())n++;if(n)sfx('draw');return n;}
 function drawN(n,cap){let c=0;for(let i=0;i<n;i++){if(drawOne(cap))c++;else break;}if(c)sfx('draw');return c;}
-function afford(def){for(const k in def.cost)if(res[k]<def.cost[k])return false;return true;}
-function payCost(def){for(const k in def.cost)res[k]-=def.cost[k];refreshRes();}
+function afford(def){
+  if(def.mana&&P.en<effManaCost(def))return false;
+  for(const k in def.cost)if(res[k]<def.cost[k])return false;
+  return true;
+}
+function payCost(def){
+  for(const k in def.cost)res[k]-=def.cost[k];
+  if(def.mana){
+    const c=effManaCost(def);
+    P.en=Math.max(0,P.en-c);
+    if(P.arcDiscount)P.arcDiscount=false;
+  }
+  refreshRes();
+}
 function cardTotal(id){
   let n=0;
   for(const p of [DECK.draw,DECK.hand,DECK.discard])for(const c of p)if(c.id===id)n++;
@@ -76,15 +91,21 @@ function purgeCard(id){
 }
 function poolIds(){
   return CIDS.filter(id=>{
-    if(id==='expand'&&DECK.max>=HAND_CAP)return false;
-    if(CDEFS[id].tier&&DECK.recycle>=REC_CAP)return false;
+    const d=CDEFS[id];
+    if(d.cls==='class')return false;
+    if(d.core)return false;
+    if(d.cls==='mage'&&!isMage()&&!d.basic)return false;
+    if(id==='expand'&&DECK.max>=handCap())return false;
+    if(d.tier&&DECK.recycle>=REC_CAP)return false;
+    if(id==='manawell'&&builds.filter(b=>b.type==='manawell').length>=3)return false;
     return true;
   });
 }
 function rollRewards(n){
   const ids=poolIds(),bag=[];
   ids.forEach(id=>{
-    let w=CDEFS[id].w;
+    const d=CDEFS[id];
+    let w=isMage()?d.w:(d.wNonMage??d.w);
     if(S.day>=3&&(id==='cannon'||id==='mine'))w+=6;
     if(S.day>=4&&id==='salvage20')w+=3;
     for(let i=0;i<w;i++)bag.push(id);

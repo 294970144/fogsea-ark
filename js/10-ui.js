@@ -6,8 +6,9 @@ function cacheUI(){
   UI.phaseChip=$('phaseChip');UI.phaseIcon=UI.phaseChip.querySelector('svg');UI.phaseName=$('phaseName');
   UI.dayLabel=$('dayLabel');UI.nightLabel=$('nightLabel');UI.phaseBar=$('phaseBar');
   UI.hpBar=$('hpBar');UI.hpFill=UI.hpBar.firstElementChild;UI.hpTxt=$('hpTxt');
-  UI.enBar=$('enBar');UI.enFill=UI.enBar.firstElementChild;UI.enTxt=$('enTxt');
-  UI.xpBar=$('xpBar');UI.xpFill=UI.xpBar.firstElementChild;UI.lvl=$('lvlNum');UI.stacks=$('ppStacks');
+  UI.enBar=$('enBar');UI.enFill=UI.enBar.firstElementChild;UI.enTxt=$('enTxt');UI.enLabel=$('enLabel');
+  UI.shieldBar=$('shieldBar');UI.shieldFill=UI.shieldBar?UI.shieldBar.firstElementChild:null;UI.shieldTxt=$('shieldTxt');
+  UI.xpBar=$('xpBar');UI.xpFill=UI.xpBar.firstElementChild;UI.lvl=$('lvlNum');UI.stacks=$('ppStacks');UI.ppName=$('ppName');
   UI.dashPip=$('dashPip');UI.dashFill=UI.dashPip.querySelector('.fill');
   UI.novaPip=$('novaPip');UI.novaFill=UI.novaPip.querySelector('.fill');
   UI.coreBar=$('coreBar');UI.coreFill=UI.coreBar.firstElementChild;UI.coreTxt=$('coreTxt');UI.coreWrap=$('coreWrap');
@@ -34,7 +35,20 @@ function syncHUD(){
   const low=P.hp/P.maxHp<.3;
   if(UI.hpBar._low!==low){UI.hpBar._low=low;UI.hpBar.classList.toggle('low',low);}
   setTxt(UI.hpTxt,`${Math.ceil(P.hp)}/${P.maxHp}`);
-  setBar(UI.enBar,UI.enFill,P.en/P.maxEn);setTxt(UI.enTxt,Math.floor(P.en));
+  const mage=isMage();
+  if(UI.enBar._m!==mage){
+    UI.enBar._m=mage;
+    UI.enBar.classList.toggle('mage',mage);
+    setTxt(UI.enLabel,mage?'法力':'雾能');
+    setTxt(UI.ppName,mage?'守灯人 · 法师':'守灯人');
+  }
+  setBar(UI.enBar,UI.enFill,P.en/P.maxEn);
+  setTxt(UI.enTxt,mage?`${Math.floor(P.en)}/${P.maxEn}`:String(Math.floor(P.en)));
+  const sh=P.shield>0;
+  if(UI.shieldBar){
+    if(UI.shieldBar._s!==sh){UI.shieldBar._s=sh;UI.shieldBar.style.display=sh?'':'none';}
+    if(sh){setBar(UI.shieldBar,UI.shieldFill,P.shield/Math.max(1,P.maxHp));setTxt(UI.shieldTxt,Math.ceil(P.shield));}
+  }
   setBar(UI.xpBar,UI.xpFill,P.xp/P.next);setTxt(UI.lvl,P.lvl);
   setBar(UI.dashPip,UI.dashFill,1-P.dashCd/P.dashCdMax);
   const dr=P.dashCd<=0;if(UI.dashPip._r!==dr){UI.dashPip._r=dr;UI.dashPip.classList.toggle('ready',dr);}
@@ -87,6 +101,12 @@ const CODEX=[
      ['攻击间隔',(0.42/P.atkSpd).toFixed(2)+' 秒'],['攻击范围',P.range.toFixed(2)+' 格'],
      ['移动速度',P.spd.toFixed(2)+' 格/秒'],['暴击率',Math.round(P.crit*100)+'%'],['等级','Lv.'+P.lvl]],
    rel:['core','dash','nova','hand']},
+  {id:'mage',cat:'role',name:'法师',icon:'mage',color:'#b48cff',
+   desc:'转职后的守灯人。以法力施放元素法术，生命上限降低但手牌上限提高。',
+   stats:()=>[['生命上限',P.maxHp],['法力',`${Math.floor(P.en)} / ${P.maxEn}`],
+     ['法力回复',manaRegenRate().toFixed(1)+' /秒'],['手牌上限',handCap()],
+     ['火/冰/奥亲和',`${P.aff.fire} / ${P.aff.frost} / ${P.aff.arcane}`]],
+   rel:['mana','spell','status','reaction']},
   {id:'core',cat:'role',name:'方舟核心',icon:'core',color:'#ffb454',sprite:'core',
    desc:'家园的心脏，雾潮的最终目标。核心被毁即失败；靠近按 F 或打出修补术可修复。',
    stats:()=>[['当前耐久',`${Math.ceil(core.hp)} / ${core.max}`],['修复消耗','10 木 + 6 石'],
@@ -106,7 +126,7 @@ const CODEX=[
       sprite:d.kind==='build'?d.build:null,
       desc:d.desc+(d.kind==='build'?' 建筑永久留场，卡牌回到弃牌堆，洗牌后可再次抽到。':''),
       stats:()=>{
-        const s=[['类型',KINDNAME[d.kind]],['费用',costStr(d.cost)],
+        const s=[['类型',KINDNAME[d.kind]],['费用',costStr(d)],
           ['牌库中',cardTotal(id)+' 张'],['累计打出',save.seen.play[id]||0]];
         if(d.kind==='build'){
           const b=BUILDS[d.build];
@@ -114,10 +134,17 @@ const CODEX=[
           if(b.range)s.push(['射程',b.range+' 格']);
           if(b.dmg)s.push(['伤害',(b.dmg*P.towerMult).toFixed(1)]);
           if(b.rate)s.push(['间隔',b.rate+' 秒']);
+          if(b.regen)s.push(['回蓝',b.regen+' /秒'],['范围',b.range+' 格']);
           s.push(['场上数量',builds.filter(x=>x.type===d.build).length]);
         }
         if(d.radius)s.push(['作用半径',d.radius+' 格'],['伤害',d.dmg]);
-        if(d.id==='expand')s.push(['当前上限',DECK.max+' / '+HAND_CAP]);
+        if(d.mana)s.push(['法力',effManaCost(d)],['元素',ELEMNAME[d.elem]||'—']);
+        if(d.shape)s.push(['施法形态',d.shape]);
+        if(d.status){
+          const sn={burn:'灼烧',chill:'冰缓',freeze:'冻结',mark:'奥术标记'}[d.status.kind]||d.status.kind;
+          s.push(['附加状态',sn+' ×'+d.status.n]);
+        }
+        if(d.id==='expand')s.push(['当前上限',DECK.max+' / '+handCap()]);
         if(d.tier)s.push(['回收率增益','+'+d.tier+'%'],['当前回收率',DECK.recycle+'%']);
         if(d.kind==='build')s.push(['使用时段','仅白昼']);
         else s.push(['使用时段','昼夜皆可']);
@@ -147,7 +174,7 @@ const CODEX=[
      ['对核心',FOES.boss.coreDmg],['召唤间隔','6 秒'],['累计击杀',save.seen.foe.boss||0]],
    rel:['seven','c_mine','c_cannon']},
   ...BLESSINGS.map(b=>({id:'b_'+b.id,cat:'bless',name:b.n,icon:b.icon,color:RARCOL[b.rar],
-    desc:b.d+'。黎明第二步三选一获得，永久被动生效，不占用牌库。',
+    desc:b.d+'。'+(b.cls==='mage'?'法师专属。':'')+'黎明第二步三选一获得，永久被动生效，不占用牌库。',
     stats:()=>[['稀有度',RARNAME[b.rar]],['叠加上限',b.max?b.max+' 层':'无上限'],
       ['本局叠加','×'+(P.stacks[b.id]||0)],['累计选用',save.seen.card[b.id]||0]],
     rel:['dawn','keeper','hand']})),
@@ -157,8 +184,8 @@ const CODEX=[
       ['下级花费',save.bless[k]>=b.max?'已满级':b.costs[save.bless[k]]+' 火种'],['火种库存',save.embers]],
     rel:['ember','keeper']})),
   {id:'hand',cat:'term',name:'手牌与上限',icon:'cards',color:'#ffb454',
-   desc:'初始上限 5 张。打出扩容牌 +1，最高 10；到顶后扩容牌从牌库与奖励池永久退场。夜晚保留手牌。',
-   stats:()=>[['当前手牌',DECK.hand.length],['当前上限',DECK.max],['上限天花板',HAND_CAP],
+   desc:'初始上限 5 张。打出扩容牌 +1，最高 10（法师 12）；到顶后扩容牌从牌库与奖励池永久退场。夜晚保留手牌。',
+   stats:()=>[['当前手牌',DECK.hand.length],['当前上限',DECK.max],['上限天花板',handCap()],
      ['扩容存世',cardTotal('expand')+' 张']],rel:['c_expand','dawn','deck']},
   {id:'deck',cat:'term',name:'牌库循环',icon:'cards',color:'#8fe3d0',
    desc:'抽牌堆 → 手牌 → 弃牌堆 → 洗牌回到抽牌堆。建筑留场，卡牌回库，所以同一张箭塔可以反复部署。',
@@ -191,10 +218,29 @@ const CODEX=[
    stats:()=>[['冷却',P.dashCdMax.toFixed(2)+' 秒'],['持续','0.16 秒'],['无敌','0.28 秒'],['倍率','3.4×']],
    rel:['keeper','b_shadow']},
   {id:'nova',cat:'term',name:'雾爆',icon:'burst',color:'#57e6ff',
-   desc:'Q 释放的自身范围新星，消耗 60 雾能，与卡牌系统互不干扰。',
-   stats:()=>[['雾能消耗','60'],['伤害',(30*P.novaMult).toFixed(1)],
-     ['半径',(3.1*(1+.12*(P.stacks.nova||0))).toFixed(2)+' 格'],['雾能回复',(14*P.regen).toFixed(1)+' /秒']],
+   desc:'Q 释放的自身范围新星，消耗 60 雾能（法师为法力），与卡牌系统互不干扰。',
+   stats:()=>[[isMage()?'法力消耗':'雾能消耗','60'],['伤害',(30*P.novaMult).toFixed(1)],
+     ['半径',(3.1*(1+.12*(P.stacks.nova||0))).toFixed(2)+' 格'],['回复',manaRegenRate().toFixed(1)+' /秒']],
    rel:['keeper','b_nova','c_surge']},
+  {id:'mana',cat:'term',name:'法力',icon:'crys',color:'#57e6ff',
+   desc:'法师转职后的施法资源。非法师仍使用雾能；基础法术对两者都消耗当前资源。',
+   stats:()=>[['当前上限',P.maxEn],['基础回复',P.enRegenFlat+' /秒'],['实际回复',manaRegenRate().toFixed(1)+' /秒'],
+     ['1 费',MANA_UNIT+' 法力'],['雾爆消耗','60']],
+   rel:['mage','spell','c_surge']},
+  {id:'spell',cat:'term',name:'法术与施法',icon:'rune',color:'#b48cff',
+   desc:'法术牌消耗法力/雾能，受施法冷却限制；法师额外获得元素亲和、法术强度与职业天赋。',
+   stats:()=>[['施法冷却',(MAGE_TUNE.spellGcd/castSpeedMult()).toFixed(2)+' 秒'],['当前法力',Math.floor(P.en)],
+     ['法术牌',CIDS.filter(id=>CDEFS[id].elem).length+' 张'],['基础法术','非法师也可获得']],
+   rel:['mana','mage','status']},
+  {id:'status',cat:'term',name:'元素状态',icon:'flame',color:'#ff7a45',
+   desc:'灼烧持续掉血，冰缓减速，冻结停止行动，奥术标记提高受到的法术伤害。',
+   stats:()=>[['灼烧','3 /秒/层 · 10 层'],['冰缓','12% 减速/层 · 3 层'],['冻结','1 秒（首领 0.35 秒）'],
+     ['奥术标记','法术伤害 +10%']],
+   rel:['spell','reaction','mage']},
+  {id:'reaction',cat:'term',name:'元素反应',icon:'steam',color:'#8fe3d0',
+   desc:'需要法师天赋「元素融合」。同一敌人 2 秒内被两种元素命中触发，每敌人 1.5 秒冷却。',
+   stats:()=>[['火+冰','蒸汽爆炸'],['奥术+火/冰','共鸣扩散'],['雷系','接口保留，未实装']],
+   rel:['status','spell','b_t_fusion']},
   {id:'downed',cat:'term',name:'灯芯熄灭',icon:'skull',color:'#ff4d6d',
    desc:'生命归零后 3 秒于核心重燃，恢复六成生命并损失两成雾晶。',
    stats:()=>[['重燃时间','3 秒'],['重燃生命','60%'],['雾晶损失','20%'],['重燃无敌','2 秒']],
@@ -210,8 +256,9 @@ function sizeCodexCv(){
   cxCv.width=Math.floor(cxW*DPR);cxCv.height=Math.floor(cxH*DPR);
 }
 function cxSeenCount(){
+  const groups={foe:Object.keys(FOES),card:BLESSINGS.map(b=>b.id),play:CIDS};
   let n=0;
-  for(const k of ['foe','card','play'])for(const id in save.seen[k])if(save.seen[k][id]>0)n++;
+  for(const k in groups)for(const id of groups[k])if(save.seen[k][id]>0)n++;
   return n;
 }
 function cxBuildCats(){
@@ -247,8 +294,8 @@ function cxRenderList(){
   }
   if(!cxFiltered.some(e=>e.id===cxSel))cxSelect(cxFiltered.length?cxFiltered[0].id:null,false);
   else cxSelect(cxSel,false);
-  const track=4+BLESSINGS.length+CIDS.length,got=cxSeenCount();
-  $('cxCount').textContent=`共 ${CODEX.length} 条 · 显示 ${cxFiltered.length} 条 · 已记录 ${Math.min(got,track)}/${track}`;
+  const track=Object.keys(FOES).length+BLESSINGS.length+CIDS.length,got=cxSeenCount();
+  $('cxCount').textContent=`共 ${CODEX.length} 条 · 显示 ${cxFiltered.length} 条 · 已记录 ${got}/${track}`;
   $('cxProgFill').style.width=clamp(got/track,0,1)*100+'%';
 }
 function cxSelect(id,scroll){
