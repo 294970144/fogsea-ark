@@ -192,9 +192,22 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   opacity:0;transform:translateX(100%);pointer-events:none;visibility:hidden;
   transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1),visibility 0s .3s}
 #menuPanel[data-view="title"] .menuView[data-view="title"],
-#menuPanel[data-view="prep"] .menuView[data-view="prep"]{opacity:1;transform:translateX(0);pointer-events:auto;visibility:visible;transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1)}
-#menuPanel[data-view="prep"] .menuView[data-view="title"]{transform:translateX(-100%)}
-#menuPanel[data-view="title"] .menuView[data-view="prep"]{transform:translateX(100%)}
+#menuPanel[data-view="prep"] .menuView[data-view="prep"],
+#menuPanel[data-view="load"] .menuView[data-view="load"]{opacity:1;transform:translateX(0);pointer-events:auto;visibility:visible;transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1)}
+#menuPanel[data-view="prep"] .menuView[data-view="title"],
+#menuPanel[data-view="load"] .menuView[data-view="title"]{transform:translateX(-100%)}
+#menuPanel[data-view="title"] .menuView[data-view="prep"],
+#menuPanel[data-view="title"] .menuView[data-view="load"]{transform:translateX(100%)}
+#menuSlotList{display:flex;flex-direction:column;gap:9px}
+/* 仅主菜单「继续」页：悬浮遮罩覆盖卡片，不占布局高度；#slotOv 弹窗不命中 */
+#menuSlotList .slotCard{position:relative;overflow:hidden;cursor:pointer}
+#menuSlotList .slotCard.open{border-color:var(--line2)}
+#menuSlotList .slotActions{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;background:rgba(6,18,26,.93);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);animation:slotOpsIn .16s ease-out}
+@keyframes slotOpsIn{from{opacity:0}to{opacity:1}}
+#menuSlotList .slotAct{flex:1;padding:9px 6px;border-radius:9px;border:1px solid var(--line2);background:rgba(143,227,208,.08);color:var(--mist);font-weight:900;font-size:13px;letter-spacing:2px;transition:all .15s}
+#menuSlotList .slotAct.load:hover{border-color:var(--amber);color:var(--amber);box-shadow:0 0 14px rgba(255,180,84,.25)}
+#menuSlotList .slotAct.del:hover{border-color:var(--danger);color:var(--danger)}
+#menuSlotList .slotAct.del.arm{border-color:var(--danger);color:var(--danger);background:rgba(255,77,109,.14);box-shadow:0 0 16px rgba(255,77,109,.25)}
 .menuHead,.prepHead{flex:none}
 .menuScroll{flex:1 1 auto;min-height:0;overflow:hidden;margin:0 -6px;padding:0 6px;
   scrollbar-width:thin;scrollbar-color:var(--ember) rgba(143,227,208,.06)}

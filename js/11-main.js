@@ -23,7 +23,7 @@ function setMenuView(view,focus=true){
   // Only enable scrolling when the content cannot fit after the height transition.
   el.classList.toggle('needs-scroll',naturalHeight>maxHeight);
   panel.style.height=Math.min(naturalHeight,maxHeight)+'px';
-  if(focus)$(view==='prep'?'launchBtn':'startBtn').focus({preventScroll:true});
+  if(focus)$(view==='prep'?'launchBtn':view==='load'?'btnLoadBack':'startBtn').focus({preventScroll:true});
 }
 function openPrep(){
   const needsFreshRun=S.mode!=='menu'&&S.mode!=='prep';
@@ -31,6 +31,46 @@ function openPrep(){
   clearInterval(emberTimer);codexOpen=false;blurFocus();closeOverlays('menu');showOv('menu',true);
   S.mode='prep';
   UI.hud.classList.add('hidden');refreshPrep();setMenuView('prep');sfx('ui');
+}
+function openLoadView(){
+  blurFocus();codexOpen=false;S.mode='menu';
+  resetLoadUi();renderLoadList(true);sfx('ui');
+}
+function renderLoadList(focus=true){
+  const row=$('menuSlotList');row.innerHTML='';
+  slots.slots.forEach((s,i)=>{
+    const open=loadExpanded===i&&!!s;
+    const el=document.createElement('div');
+    el.className='slotCard'+(s?'':' empty')+(slots.active===i?' active':'')+(open?' open':'');
+    const mage=s&&s.snap&&s.snap.P&&s.snap.P.cls==='mage'?' · 法师':'';
+    el.innerHTML=`<span class="si">${i+1}</span><span class="sb"><b>${s?`第 ${s.day} 日 · ${s.phase==='night'?'雾潮':'白昼'}${mage}`:'空'}</b>${s?`<span class="slotMeta">夜 ${s.summary.nights} · 击杀 ${s.summary.kills} · 核心 ${s.summary.core}<br>${new Date(s.ts).toLocaleString('zh-CN')}</span>`:''}</span>`;
+    el.addEventListener('click',()=>{
+      if(!s){toast('该存档位为空','warn');return;}
+      loadExpanded=open?null:i;loadDeleteArm=false;renderLoadList(false);sfx('ui');
+    });
+    if(open){
+      const acts=document.createElement('div');acts.className='slotActions';
+      const bLoad=document.createElement('button');
+      bLoad.className='slotAct load';bLoad.textContent='载入';
+      bLoad.addEventListener('click',e=>{e.stopPropagation();doLoadSlot(i);resetLoadUi();});
+      const bDel=document.createElement('button');
+      bDel.className='slotAct del'+(loadDeleteArm?' arm':'');
+      bDel.textContent=loadDeleteArm?'确认删除':'删除';
+      bDel.addEventListener('click',e=>{
+        e.stopPropagation();
+        if(!loadDeleteArm){
+          loadDeleteArm=true;bDel.textContent='确认删除';bDel.classList.add('arm');
+          toast('再点一次确认删除','warn');return;
+        }
+        if(deleteSlot(i)){
+          toast('已删除存档 '+(i+1),'good');resetLoadUi();refreshContinue();renderLoadList(false);sfx('ui');
+        }else toast('删除失败','warn');
+      });
+      acts.appendChild(bLoad);acts.appendChild(bDel);el.appendChild(acts);
+    }
+    row.appendChild(el);
+  });
+  setMenuView('load',focus!==false);
 }
 function startRun(){
   blurFocus();auInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
@@ -86,6 +126,8 @@ function refreshPrep(){
 
 /* ---------------- 存档位 ---------------- */
 let slotUi=null,slotPick=null,slotDeleteArm=false,slotPrevMode='play';
+let loadExpanded=null,loadDeleteArm=false;
+function resetLoadUi(){loadExpanded=null;loadDeleteArm=false;}
 
 function refreshContinue(){
   $('btnContinue').classList.toggle('noSave',!slots.slots.some(Boolean));
@@ -164,7 +206,7 @@ function closeSlots(){
   slotUi=null;slotPick=null;slotDeleteArm=false;sfx('ui');
 }
 function renderSlots(){
-  $('slotTitle').textContent=slotUi==='load'?'继续游戏':slotUi==='new'?'新局':'存档';
+  $('slotTitle').textContent=slotUi==='load'?'继续':slotUi==='new'?'新局':'存档';
   const row=$('slotList');row.innerHTML='';
   slots.slots.forEach((s,i)=>{
     const el=document.createElement('button');
@@ -260,10 +302,11 @@ $('btnToTitle').addEventListener('click',toTitle);
 $('btnAgain').addEventListener('click',openPrep);
 $('btnTitle2').addEventListener('click',toTitle);
 $('btnEndless').addEventListener('click',()=>{auInit();continueEndless();});
-$('btnContinue').addEventListener('click',()=>openSlots('load'));
+$('btnContinue').addEventListener('click',openLoadView);
 $('startBtn').addEventListener('click',openPrep);
 $('launchBtn').addEventListener('click',beginRun);
 $('btnPrepBack').addEventListener('click',toTitle);
+$('btnLoadBack').addEventListener('click',()=>{resetLoadUi();setMenuView('title');sfx('ui');});
 $('slotDelete').addEventListener('click',confirmDelete);
 $('slotBack').addEventListener('click',closeSlots);
 $('repairBtn').addEventListener('click',tryRepair);
