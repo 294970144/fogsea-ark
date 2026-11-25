@@ -112,7 +112,8 @@ $('dawnSkip').addEventListener('click',skipDawn);
 function stopEmberTimer(){clearInterval(emberTimer);emberTimer=null;}
 function awardEmbers(win){
   const st=S.stats;
-  let e=st.nights*3+Math.floor(st.kills/8)+(win?12:0);
+  const em=TUNE.ember;
+  let e=st.nights*em.perNight+Math.floor(st.kills/em.killsDiv)+(win?em.winBonus:0);
   return Math.round(e*DIFFS[save.diff].ember);
 }
 // 胜负一旦确定即结算并写档；S.settled 同时是幂等闸门与展示快照
@@ -122,7 +123,8 @@ function settle(win){
   if(S.endless&&S.endlessBase){
     // 无尽阶段只补发胜利基线之后的增量：不重复 +12、不重复 wins++、DIFFS 只施加一次
     const b=S.endlessBase;
-    const delta=3*(st.nights-b.nights0)+Math.floor(st.kills/8)-Math.floor(b.kills0/8);
+    const em=TUNE.ember;
+    const delta=em.perNight*(st.nights-b.nights0)+Math.floor(st.kills/em.killsDiv)-Math.floor(b.kills0/em.killsDiv);
     const e=Math.round(delta*DIFFS[save.diff].ember);
     save.embers+=e;
     save.best.nights=Math.max(save.best.nights,st.nights);

@@ -19,7 +19,7 @@ function autoAttack(){
   swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));
 }
 function swing(ang){
-  P.atkCd=.42/P.atkSpd;P.swingT=.18;P.face=ang;
+  P.atkCd=TUNE.player.atkInterval/P.atkSpd;P.swingT=.18;P.face=ang;
   slashes.push({x:P.x,y:P.y,ang,t:0,R:P.range});
   sfx('swing');
   const inArc=(t,extra)=>{
@@ -58,14 +58,15 @@ function killFoe(f){
   bumpSeen('foe',f.type);gainXP(f.xp);
   puff(f.x,f.y,f.boss?36:12,'#a06bff',3,.7,f.boss?6:3.5);
   ring(f.x,f.y,'rgba(160,107,255,.7)',.2,f.boss?3:1.2,.5);
-  const crys=f.boss?12:f.type==='brute'?3:f.type==='spitter'?2:1;
+  const crys=FOES[f.type].crysDrop;
   for(let i=0;i<crys;i++)dropPickup(f.x,f.y,'crys',1);
   if(P.ls>0)healPlayer(P.ls);
   if(isMage()&&tLv('t_burnspread')>0&&(f.burnStacks||0)>0){
+    const bt=TALENT_TUNE.t_burnspread;
     let n=0;
-    forFoes(f.x,f.y,2.5,o=>{
-      if(n>=2||o===f||o.dead||dist(f.x,f.y,o.x,o.y)>=2.5+o.r)return;
-      applyStatus(o,'burn',Math.min(5,f.burnStacks));n++;
+    forFoes(f.x,f.y,bt.radius,o=>{
+      if(n>=bt.count||o===f||o.dead||dist(f.x,f.y,o.x,o.y)>=bt.radius+o.r)return;
+      applyStatus(o,'burn',Math.min(bt.maxStacks,f.burnStacks));n++;
     });
   }
   sfx('kill');shake(f.boss?10:2);
@@ -78,9 +79,9 @@ function hitNode(n){
   sfx(n.type==='tree'?'chop':n.type==='rock'?'stone':'crystal');
   if(n.hp<=0){
     n.alive=false;rebuildSolids();rebuildTileCost();fieldDirty=true;
-    const amt=Math.round((n.type==='crys'?irand(3,5):irand(4,6))*P.gather);
-    const type=n.type==='tree'?'wood':n.type==='rock'?'stone':'crys';
-    const drops=Math.min(amt,8),q=Math.floor(amt/drops),r=amt%drops;
+    const yld=TUNE.node.yield[n.type],amt=Math.round(irand(yld[0],yld[1])*P.gather);
+    const type=TUNE.resourceDrop[n.type];
+    const drops=Math.min(amt,TUNE.node.dropCap),q=Math.floor(amt/drops),r=amt%drops;
     for(let i=0;i<drops;i++)dropPickup(n.x,n.y,type,q+(i<r?1:0));
     gainXP(3);puff(n.x,n.y,10,cols[n.type],3,.6,3);
   }
@@ -98,8 +99,9 @@ let hurtFxT=null;
 function damagePlayer(dmg,src){
   if(P.ifr>0||P.downed)return;
   dmg*=DIFFS[save.diff].dmg;
-  if(isMage()&&P.en>=P.maxEn*.5&&tLv('t_armor')>0)
-    dmg=Math.max(1,dmg-3*tLv('t_armor'));
+  const ar=TALENT_TUNE.t_armor;
+  if(isMage()&&P.en>=P.maxEn*ar.threshold&&tLv('t_armor')>0)
+    dmg=Math.max(1,dmg-ar.flat*tLv('t_armor'));
   if(P.shield>0){
     const absorb=Math.min(P.shield,dmg);
     P.shield-=absorb;dmg-=absorb;
@@ -111,11 +113,12 @@ function damagePlayer(dmg,src){
   }
   if(dmg>=P.hp&&isMage()){
     if(tLv('t_nirvana')>0&&!P.nirvanaUsed&&P.en>0){
-      P.nirvanaUsed=true;P.en=0;P.hp=Math.max(1,Math.round(P.maxHp*.5));P.ifr=2;
+      const nv=TALENT_TUNE.t_nirvana;
+      P.nirvanaUsed=true;P.en=0;P.hp=Math.max(1,Math.round(P.maxHp*nv.hpRatio));P.ifr=TUNE.down.iframe;
       delete P.stacks.t_nirvana;refreshStacks();
       const elems=['fire','frost','arcane'],elem=elems[irand(0,elems.length-1)];
       for(const f of foes)if(!f.dead){
-        damageFoe(f,80,0,false,{noKnock:true});
+        damageFoe(f,TALENT_TUNE.t_nirvana.dmg,0,false,{noKnock:true});
         if(!f.dead)applyElement(f,elem,2);
       }
       ring(P.x,P.y,'rgba(255,180,84,.95)',.3,4.5,.7);
@@ -123,7 +126,7 @@ function damagePlayer(dmg,src){
       toast('魔能涅槃 · 每局一次','good');sfx('boom');shake(10);
       return;
     }
-    if(tLv('t_manashield')>0&&P.en>=P.maxEn*.2){
+    if(tLv('t_manashield')>0&&P.en>=P.maxEn*TALENT_TUNE.t_manashield.threshold){
       P.en=0;P.ifr=Math.max(P.ifr,1.2);P.hurtT=.2;
       ring(P.x,P.y,'rgba(143,227,208,.95)',.2,2.2,.5);
       puff(P.x,P.y,20,'#8fe3d0',3,.6,3);
@@ -140,9 +143,9 @@ function damagePlayer(dmg,src){
     if(src.hp<=0)killFoe(src);
   }
   if(P.hp<=0){
-    P.hp=0;P.downed=true;P.respT=3;
-    res.crys=Math.floor(res.crys*.8);refreshRes();
-    puff(P.x,P.y,24,'#ffb454',3,.8,4);toast('灯芯熄灭 · 3 秒重燃','bad');sfx('defeat');
+    P.hp=0;P.downed=true;P.respT=TUNE.down.time;
+    res.crys=Math.floor(res.crys*TUNE.down.crysKeep);refreshRes();
+    puff(P.x,P.y,24,'#ffb454',3,.8,4);toast('灯芯熄灭 · '+TUNE.down.time+' 秒重燃','bad');sfx('defeat');
   }
 }
 function damageCore(dmg){
@@ -167,11 +170,11 @@ function tryDash(){
   if(isTouch&&(stickVec[0]||stickVec[1])){dx=stickVec[0]+stickVec[1];dy=stickVec[1]-stickVec[0];}
   if(!dx&&!dy){dx=Math.cos(P.face);dy=Math.sin(P.face);}
   const m=Math.hypot(dx,dy)||1;
-  P.dashDx=dx/m;P.dashDy=dy/m;P.dashT=.16;P.dashCd=P.dashCdMax;P.ifr=Math.max(P.ifr,.28);sfx('dash');
+  P.dashDx=dx/m;P.dashDy=dy/m;P.dashT=TUNE.dash.dur;P.dashCd=P.dashCdMax;P.ifr=Math.max(P.ifr,TUNE.dash.iframe);sfx('dash');
 }
 function castNova(){
-  if(S.mode!=='play'||P.downed||P.en<60)return;
-  P.en-=60;
+  if(S.mode!=='play'||P.downed||P.en<TUNE.nova.cost)return;
+  P.en-=TUNE.nova.cost;
   // 个人测试作弊：暂停时键入 l3131 可整体放大雾爆（不新增任何页面元素）
   const R=novaRadius(),dmg=novaDmgValue();
   ring(P.x,P.y,'rgba(87,230,255,.9)',.3,R,.5);ring(P.x,P.y,'rgba(160,107,255,.7)',.2,R*.7,.4);
@@ -190,10 +193,11 @@ function tryRepair(){
   if(S.mode!=='play'||P.downed)return;
   if(dist(P.x,P.y,core.x,core.y)>2.8)return;
   if(core.hp>=core.max){toast('核心完好');return;}
-  if(res.wood<10||res.stone<6){toast('资源不足','warn');sfx('deny');return;}
-  res.wood-=10;res.stone-=6;refreshRes();
-  core.hp=Math.min(core.max,core.hp+70);
-  puff(core.x,core.y,16,'#ffb454',2,.7,3);floater(core.x,core.y,'+70','#ffb454',true);sfx('repair');
+  const rc=TUNE.core.repair;
+  if(res.wood<rc.wood||res.stone<rc.stone){toast('资源不足','warn');sfx('deny');return;}
+  res.wood-=rc.wood;res.stone-=rc.stone;refreshRes();
+  core.hp=Math.min(core.max,core.hp+rc.heal);
+  puff(core.x,core.y,16,'#ffb454',2,.7,3);floater(core.x,core.y,'+'+rc.heal,'#ffb454',true);sfx('repair');
 }
 function gainXP(v){
   P.xp+=v;
@@ -229,7 +233,8 @@ function spawnFoe(type,x,y,elite){
   const[fx,fy]=type==='boss'?[x,y]:freeSpawnNear(x,y);
   foes.push({type,x:fx,y:fy,hp:d.hp*hpM,max:d.hp*hpM,spd:d.spd*rand(.9,1.1),dmg:d.dmg,r:d.r,
     xp:elite?d.xp*2:d.xp,coreDmg:d.coreDmg,atkCd:rand(.5,1.2),retarget:0,target:'core',kx:0,ky:0,flash:0,
-    anim:rand(TAU),elite,boss:type==='boss',dead:false,fireCd:rand(1,2.5),spawnCd:5,stompCd:3,
+    anim:rand(TAU),elite,boss:type==='boss',dead:false,fireCd:rand(1,2.5),
+    spawnCd:d.summonFirst||5,stompCd:d.stompFirst||3,
     px:fx,py:fy,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:Math.random()<.5?-1:1});
 }
 function pickFoeType(){
@@ -257,7 +262,7 @@ function startNight(){
 }
 function enterNextDay(){
   S.day++;S.phase='day';S.timeLeft=DAY_LEN;
-  core.hp=Math.min(core.max,core.hp+40);
+  core.hp=Math.min(core.max,core.hp+TUNE.core.dawnHeal);
   if(!P.downed)healPlayer(P.maxHp*.25);
   let regrew=0;
   nodes.forEach(n=>{
@@ -317,12 +322,13 @@ function updateFoes(dt){
     if(!attacking){
       const reach=f.target==='player'?f.r+.42:core.r+f.r+.25;
       if(f.type==='spitter'){
+        const sd=FOES.spitter;
         f.fireCd-=dt;
-        if(d>6.8)wants=true;
-        else if(d<3.6){dx=-gx;dy=-gy;wants=true;}
+        if(d>sd.keepAway)wants=true;
+        else if(d<sd.closeIn){dx=-gx;dy=-gy;wants=true;}
         else{dx=-gy*f.strafe*.55;dy=gx*f.strafe*.55;wants=true;if(Math.random()<dt*.4)f.strafe*=-1;}
-        if(f.fireCd<=0&&d<7.6){
-          f.fireCd=2.3;
+        if(f.fireCd<=0&&d<sd.fireRange){
+          f.fireCd=sd.fireInterval;
           shots.push({x:f.x,y:f.y,vx:gx*6.5,vy:gy*6.5,type:'fog',dmg:f.dmg,life:2.5,z:12});sfx('warn');
         }
         if(d<=reach&&f.atkCd<=0){
@@ -368,12 +374,15 @@ function updateFoes(dt){
     f.kx*=Math.pow(.0015,dt);f.ky*=Math.pow(.0015,dt);
     if(f.boss){
       f.spawnCd-=dt;f.stompCd-=dt;
+      const bd=FOES.boss;
       if(f.spawnCd<=0&&foes.length<FOE_CAP){
-        f.spawnCd=6;for(let i=0;i<2;i++)spawnFoe('crawler',f.x+rand(-1,1),f.y+rand(-1,1));
+        f.spawnCd=bd.summonInterval;
+        for(let i=0;i<bd.summonCount;i++)spawnFoe('crawler',f.x+rand(-1,1),f.y+rand(-1,1));
         sfx('boss');ring(f.x,f.y,'rgba(160,107,255,.6)',.5,2,.5);
       }
-      if(f.stompCd<=0&&!P.downed&&dist(f.x,f.y,P.x,P.y)<2.4){
-        f.stompCd=4;damagePlayer(25,f);ring(f.x,f.y,'rgba(255,77,109,.8)',.3,2.6,.45);shake(9);sfx('boom');
+      if(f.stompCd<=0&&!P.downed&&dist(f.x,f.y,P.x,P.y)<bd.stompRange){
+        f.stompCd=bd.stompInterval;damagePlayer(bd.stompDmg,f);
+        ring(f.x,f.y,'rgba(255,77,109,.8)',.3,2.6,.45);shake(9);sfx('boom');
       }
     }
   }
@@ -407,7 +416,7 @@ function updateBuilds(dt){
       b.cd-=dt;
       if(b.cd<=0){b.cd=.6;puff(b.x,b.y,1,'#57e6ff',.6,.6,2);}
       if(!P.downed&&dist(b.x,b.y,P.x,P.y)<=def.range)
-        gainMana(def.regen*P.regen*(1+.25*tLv('t_spring'))*dt);
+        gainMana(def.regen*P.regen*(1+TALENT_TUNE.t_spring.regen*tLv('t_spring'))*dt);
     }
   }
 }
@@ -495,7 +504,7 @@ function update(dt){
     S.timeLeft-=dt;S.nightAmt=Math.max(0,S.nightAmt-dt*.5);
     if(S.timeLeft<10&&S.timeLeft+dt>=10){toast('夜幕将至 · 构筑即将封存','warn');sfx('warn');}
     if(S.timeLeft<=0)startNight();
-    core.hp=Math.min(core.max,core.hp+dt);
+    core.hp=Math.min(core.max,core.hp+dt*TUNE.core.regen);
     if(!P.downed&&dist(P.x,P.y,core.x,core.y)<3)healPlayer(dt*2);
   }else{
     S.nightAmt=Math.min(1,S.nightAmt+dt*.4);S.spawnT-=dt;
@@ -522,7 +531,7 @@ function update(dt){
     P.respT-=dt;
     if(P.respT<=0){
       P.downed=false;const[rx,ry]=freeSpawnNear(core.x+1.6,core.y);
-      P.x=rx;P.y=ry;P.hp=P.maxHp*.6;P.en=50;P.ifr=2;
+      P.x=rx;P.y=ry;P.hp=P.maxHp*TUNE.down.hpRatio;P.en=TUNE.down.en;P.ifr=TUNE.down.iframe;
       puff(P.x,P.y,18,'#ffb454',2.5,.7,3);ring(P.x,P.y,'rgba(255,180,84,.8)',.2,1.6,.5);
       sfx('respawn');toast('灯芯重燃','good');
     }
@@ -533,7 +542,7 @@ function update(dt){
     if(isTouch&&(Math.abs(stickVec[0])>.12||Math.abs(stickVec[1])>.12)){dx=stickVec[0]+stickVec[1];dy=stickVec[1]-stickVec[0];}
     const m=Math.hypot(dx,dy);P.moving=m>0;
     if(P.dashT>0){
-      P.dashT-=dt;moveCircle(P,P.dashDx*P.spd*moveSpeedMult()*3.4*dt,P.dashDy*P.spd*moveSpeedMult()*3.4*dt,.3,false);
+      P.dashT-=dt;moveCircle(P,P.dashDx*P.spd*moveSpeedMult()*TUNE.dash.mult*dt,P.dashDy*P.spd*moveSpeedMult()*TUNE.dash.mult*dt,.3,false);
       ghosts.push({x:P.x,y:P.y,t:0});
       if(Math.random()<.5)puff(P.x,P.y,1,'#8fe3d0',.5,.3,2);
     }else if(m>0){

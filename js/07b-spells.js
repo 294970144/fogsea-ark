@@ -11,17 +11,24 @@ const CORE_CARDS={
 
 function isMage(){return P.cls==='mage';}
 function tLv(id){return P.stacks[id]||0;}
+// 施法距离唯一来源：放置校验与法术索敌都走这里，避免两处公式漂移
+const spellCastRange=()=>TUNE.spell.range*(1+TUNE.spell.reachPer*tLv('t_reach'));
 function handCap(){return HAND_CAP+(isMage()?MAGE_TUNE.handAdd:0);}
-function manaRegenRate(){return P.enRegenFlat*P.regen*(1+.25*tLv('t_spring'));}
-function moveSpeedMult(){return isMage()&&P.en>=P.maxEn*.5?1+.08*tLv('t_manaturb'):1;}
+function manaRegenRate(){return P.enRegenFlat*P.regen*(1+TALENT_TUNE.t_spring.regen*tLv('t_spring'));}
+function moveSpeedMult(){
+  const t=TALENT_TUNE.t_manaturb;
+  return isMage()&&P.en>=P.maxEn*t.threshold?1+t.move*tLv('t_manaturb'):1;
+}
 function castSpeedMult(){
+  const t=TALENT_TUNE.t_manaturb;
   let m=1;
-  if(isMage()&&P.en>=P.maxEn*.5)m*=1+.08*tLv('t_manaturb');
-  if(P.empowerN>0)m*=1+.20;
+  if(isMage()&&P.en>=P.maxEn*t.threshold)m*=1+t.cast*tLv('t_manaturb');
+  if(P.empowerN>0)m*=1+TALENT_TUNE.t_surge.speed;
   return m;
 }
 function shieldCapNow(){
-  return Math.max(.15*P.maxEn*tLv('t_regenshield'),30*tLv('t_iceshield'));
+  return Math.max(TALENT_TUNE.t_regenshield.capRatio*P.maxEn*tLv('t_regenshield'),
+    TALENT_TUNE.t_iceshield.cap*tLv('t_iceshield'));
 }
 function gainShield(v){
   if(!isMage()||v<=0)return;
@@ -35,7 +42,7 @@ function gainMana(v){
   if(gained>0&&isMage()){
     const l=tLv('t_regenshield');
     if(l>0){
-      P.regenAcc+=gained*.30*l;
+      P.regenAcc+=gained*TALENT_TUNE.t_regenshield.convert*l;
       const add=Math.floor(P.regenAcc);
       if(add>0){P.regenAcc-=add;gainShield(add);}
     }
@@ -44,9 +51,9 @@ function gainMana(v){
 }
 function effManaCost(def){
   let c=def.mana||0;
-  if(def.elem==='arcane')c-=15*tLv('t_arcsave');
-  if(P.arcDiscount)c-=15;
-  c*=1-.10*tLv('t_econ');
+  if(def.elem==='arcane')c-=TALENT_TUNE.t_arcsave.flat*tLv('t_arcsave');
+  if(P.arcDiscount)c-=TALENT_TUNE.t_arcmaster.discount;
+  c*=1-TALENT_TUNE.t_econ.cost*tLv('t_econ');
   return def.mana?Math.max(1,Math.round(c)):0;
 }
 
@@ -113,7 +120,7 @@ function spellTargets(def,tx,ty){
   }
   if(def.shape==='multi'){
     const list=[];
-    const range=7.5*(1+.20*tLv('t_reach'));
+    const range=spellCastRange();
     forFoes(P.x,P.y,range,f=>{if(!f.dead&&dist(P.x,P.y,f.x,f.y)<range+f.r)list.push(f);});
     list.sort((a,b)=>dist(P.x,P.y,a.x,a.y)-dist(P.x,P.y,b.x,b.y));
     if(!list.length)return out;
@@ -130,16 +137,17 @@ function spellTargets(def,tx,ty){
 }
 
 function spellMult(elem,f,overflow){
+  const T=TALENT_TUNE;
   let m=1;
-  if(elem==='fire')m*=1+.15*tLv('t_firemaster');
-  else if(elem==='frost')m*=1+.15*tLv('t_frostmaster');
-  else if(elem==='arcane')m*=1+.15*tLv('t_arcanemaster');
-  if(isMage()&&overflow)m*=1+.15*tLv('t_manadmg');
-  if(isMage()&&tLv('t_resonance')>0)m*=1+.05*P.resoN;
+  if(elem==='fire')m*=1+T.t_firemaster.dmg*tLv('t_firemaster');
+  else if(elem==='frost')m*=1+T.t_frostmaster.dmg*tLv('t_frostmaster');
+  else if(elem==='arcane')m*=1+T.t_arcanemaster.dmg*tLv('t_arcanemaster');
+  if(isMage()&&overflow)m*=1+T.t_manadmg.overflow*tLv('t_manadmg');
+  if(isMage()&&tLv('t_resonance')>0)m*=1+T.t_resonance.per*P.resoN;
   if(f&&(f.markT||0)>0)m*=1+ST_DEF.mark.amp;
-  if(f&&(f.freezeT||0)>0)m*=1+.30*tLv('t_shatter');
-  else if(f&&(f.chillT||0)>0)m*=1+.15*tLv('t_shatter');
-  if(isMage())m*=1+.02*P.charge;
+  if(f&&(f.freezeT||0)>0)m*=1+T.t_shatter.freeze*tLv('t_shatter');
+  else if(f&&(f.chillT||0)>0)m*=1+T.t_shatter.chill*tLv('t_shatter');
+  if(isMage())m*=1+T.t_charge.per*P.charge;
   return m;
 }
 
@@ -175,7 +183,7 @@ function castSpell(def,tx,ty,overflow=isMage()&&P.en>P.maxEn*.8){
       f.burnStacks=0;f.burnT=0;f.burnTick=0;
     }
   }
-  if(isMage()&&elem==='arcane'&&tLv('t_arcecho')>0&&Math.random()<.30){
+  if(isMage()&&elem==='arcane'&&tLv('t_arcecho')>0&&Math.random()<TALENT_TUNE.t_arcecho.chance){
     for(const f of targets){
       if(!f||f.dead)continue;
       let dmg=def.dmg||0;
@@ -184,7 +192,7 @@ function castSpell(def,tx,ty,overflow=isMage()&&P.en>P.maxEn*.8){
       if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),false);
     }
   }
-  if(isMage()&&elem==='frost'&&tLv('t_iceshield')>0)gainShield(8*tLv('t_iceshield'));
+  if(isMage()&&elem==='frost'&&tLv('t_iceshield')>0)gainShield(TALENT_TUNE.t_iceshield.per*tLv('t_iceshield'));
   spellFx(def,tx,ty,elem,targets);
   if(isMage())spellCastSideEffects(elem,def);
   P.spellCd=MAGE_TUNE.spellGcd/speed;
@@ -193,21 +201,23 @@ function castSpell(def,tx,ty,overflow=isMage()&&P.en>P.maxEn*.8){
 
 function spellCastSideEffects(elem,def){
   if(P.empowerN>0)P.empowerN=Math.max(0,P.empowerN-1);
+  const T=TALENT_TUNE;
   if(tLv('t_resonance')>0){
-    if(P.resoElem===elem)P.resoN=Math.min(5,P.resoN+1);
+    if(P.resoElem===elem)P.resoN=Math.min(T.t_resonance.max,P.resoN+1);
     else{P.resoElem=elem;P.resoN=0;}
   }
   const am=tLv('t_arcmaster'),ac=tLv('t_arccharge');
   const inc=am+(elem==='arcane'?ac+(am>0?1:0):0);
   if(inc>0){
     P.arcCharge+=inc;
-    if(P.arcCharge>=3){P.arcCharge-=3;P.arcDiscount=true;}
+    const every=T.t_arcmaster.every;
+    if(P.arcCharge>=every){P.arcCharge-=every;P.arcDiscount=true;}
   }
   if(tLv('t_storm')>0){
     P.stormCount++;
-    if(P.stormCount>=12){P.stormCount=0;triggerElementStorm();}
+    if(P.stormCount>=T.t_storm.every){P.stormCount=0;triggerElementStorm();}
   }
-  if((def.mana||0)>=45&&tLv('t_surge')>0){P.empowerN=2;P.empowerT=8;}
+  if((def.mana||0)>=T.t_surge.cost&&tLv('t_surge')>0){P.empowerN=T.t_surge.stacks;P.empowerT=T.t_surge.duration;}
 }
 
 function triggerElementStorm(){
@@ -215,7 +225,7 @@ function triggerElementStorm(){
   const elem=elems[irand(0,elems.length-1)];
   for(const f of foes){
     if(f.dead)continue;
-    damageFoe(f,40,0,false,{noKnock:true});
+    damageFoe(f,TALENT_TUNE.t_storm.dmg,0,false,{noKnock:true});
     if(!f.dead)applyElement(f,elem,1);
   }
   ring(P.x,P.y,'rgba(180,140,255,.9)',.3,5.2,.65);
@@ -232,9 +242,11 @@ function applyStatus(f,kind,n){
     if(!f.burnTick)f.burnTick=ST_DEF.burn.tick;
   }else if(kind==='chill'){
     f.chillStacks=Math.min(ST_DEF.chill.max,(f.chillStacks||0)+n);
-    f.chillT=ST_DEF.chill.dur+.4*tLv('t_frostmaster')+.8*tLv('t_frostreach');
+    f.chillT=ST_DEF.chill.dur+TALENT_TUNE.t_frostmaster.chillDur*tLv('t_frostmaster')
+      +TALENT_TUNE.t_frostreach.chillDur*tLv('t_frostreach');
   }else if(kind==='freeze'){
-    f.freezeT=Math.max(f.freezeT||0,(f.boss?ST_DEF.freeze.bossMul:ST_DEF.freeze.dur)+.5*tLv('t_frostreach'));
+    f.freezeT=Math.max(f.freezeT||0,(f.boss?ST_DEF.freeze.bossMul:ST_DEF.freeze.dur)
+      +TALENT_TUNE.t_frostreach.freezeDur*tLv('t_frostreach'));
     f.kx=0;f.ky=0;
   }else if(kind==='mark'){
     f.markT=ST_DEF.mark.dur;
@@ -246,12 +258,12 @@ function applyStatus(f,kind,n){
 function triggerElementReaction(f,elem){
   if(!f||!isMage()||tLv('t_fusion')<=0)return;
   const prev=f.lastElem,tt=S.combatT,prevT=f.lastElemT===undefined?-99:f.lastElemT;
-  if(prev&&prev!==elem&&tt-prevT<=2&&(f.reactCd||0)<=0){
+  if(prev&&prev!==elem&&tt-prevT<=TUNE.reaction.window&&(f.reactCd||0)<=0){
     const key=[prev,elem].sort().join('|');
     const rx=RX_DEF[key];
     if(rx&&rx.enabled){
       triggerReaction(f,rx,prev,elem);
-      f.reactCd=1.5;
+      f.reactCd=TUNE.reaction.cooldown;
     }
   }
 }
@@ -265,8 +277,9 @@ function applyElement(f,elem,n,kind){
 }
 
 function triggerReaction(f,rx,prev,elem){
-  const m=1+.30*tLv('t_fusion');
-  const R=rx.radius*(1+.15*tLv('t_fusion'));
+  const t=TALENT_TUNE.t_fusion;
+  const m=1+t.dmg*tLv('t_fusion');
+  const R=rx.radius*(1+t.radius*tLv('t_fusion'));
   if(rx.id==='steam'){
     const dmg=rx.dmg*m;
     damageFoe(f,dmg,0,false,{noKnock:true});
@@ -303,7 +316,7 @@ function updateFoeStatus(f,dt){
     f.burnTick=(f.burnTick||ST_DEF.burn.tick)-dt;
     while(f.burnTick<=0&&(f.burnT||0)>0&&!f.dead){
       f.burnTick+=ST_DEF.burn.tick;
-      const dps=(f.burnStacks||0)*ST_DEF.burn.dps*(1+.20*tLv('t_firemaster'));
+      const dps=(f.burnStacks||0)*ST_DEF.burn.dps*(1+TALENT_TUNE.t_firemaster.burn*tLv('t_firemaster'));
       damageFoe(f,dps*ST_DEF.burn.tick,0,false,{dot:true,noKnock:true});
     }
     if((f.burnT||0)<=0){f.burnT=0;f.burnStacks=0;f.burnTick=0;}
@@ -319,8 +332,8 @@ function updateFoeStatus(f,dt){
 
 function foeSlowMult(f){
   if(!(f.chillT||0))return 1;
-  const per=ST_DEF.chill.slowPer+.06*tLv('t_frostreach');
-  return Math.max(.55,1-per*(f.chillStacks||0));
+  const per=ST_DEF.chill.slowPer+TALENT_TUNE.t_frostreach.slowAdd*tLv('t_frostreach');
+  return Math.max(TALENT_TUNE.t_frostreach.slowCap,1-per*(f.chillStacks||0));
 }
 
 function updateSpellState(dt){
@@ -332,8 +345,9 @@ function updateSpellState(dt){
   }
   const l=tLv('t_hastecharge');
   if(l>0){
-    P.chargeAcc+=dt*(manaRegenRate()/19)*(1+.5*l);
-    const n=Math.floor(P.chargeAcc/2);
-    if(n>0){P.chargeAcc-=n*2;P.charge=Math.min(10,P.charge+n);}
+    const t=TALENT_TUNE.t_hastecharge;
+    P.chargeAcc+=dt*(manaRegenRate()/t.chargeDiv)*(1+t.perStack*l);
+    const n=Math.floor(P.chargeAcc/t.step);
+    if(n>0){P.chargeAcc-=n*t.step;P.charge=Math.min(TALENT_TUNE.t_charge.max,P.charge+n);}
   }
 }

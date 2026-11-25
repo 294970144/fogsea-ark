@@ -11,8 +11,8 @@ const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=80,FOE_CAP=44;
 /* 个人测试作弊码（仅个人测试用，不在页面呈现任何入口或文案）
    暂停时键入 l3131 切换：雾爆伤害 ×10（提升至 1000%）、范围 ×10（提升 1000%）。 */
 const CHEAT={code:'l3131',buf:'',on:false,dmg:10,rad:10};
-const novaDmgValue=()=>30*P.novaMult*(CHEAT.on?CHEAT.dmg:1);
-const novaRadius=()=>3.1*(1+.12*(P.stacks.nova||0))*(CHEAT.on?CHEAT.rad:1);
+const novaDmgValue=()=>TUNE.nova.dmg*P.novaMult*(CHEAT.on?CHEAT.dmg:1);
+const novaRadius=()=>TUNE.nova.radius*(1+TUNE.nova.radiusPer*(P.stacks.nova||0))*(CHEAT.on?CHEAT.rad:1);
 // 无尽段难度渐近封顶；day<=MAX_NIGHT 时必须与原公式逐值恒等
 const effDay=day=>day<=MAX_NIGHT?day:MAX_NIGHT+5*(1-Math.exp(-(day-MAX_NIGHT)/14));
 const dayScale=day=>1+.13*(effDay(day)-1);
@@ -31,7 +31,7 @@ function resetPlayer(){
 function initRun(){
   genWorld();
   builds=[];foes=[];shots=[];picks=[];parts=[];floats=[];slashes=[];ghosts=[];warns=[];
-  core.hp=core.max=600;core.flash=0;core.beam=0;
+  core.hp=core.max=TUNE.core.max;core.flash=0;core.beam=0;
   resetPlayer();
   res.wood=24+20*save.bless.stock;res.stone=14+20*save.bless.stock;res.crys=4;
   Object.assign(S,{phase:'day',day:1,timeLeft:DAY_LEN,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,

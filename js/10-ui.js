@@ -52,8 +52,8 @@ function syncHUD(){
   setBar(UI.xpBar,UI.xpFill,P.xp/P.next);setTxt(UI.lvl,P.lvl);
   setBar(UI.dashPip,UI.dashFill,1-P.dashCd/P.dashCdMax);
   const dr=P.dashCd<=0;if(UI.dashPip._r!==dr){UI.dashPip._r=dr;UI.dashPip.classList.toggle('ready',dr);}
-  setBar(UI.novaPip,UI.novaFill,P.en/60);
-  const nr=P.en>=60;if(UI.novaPip._r!==nr){UI.novaPip._r=nr;UI.novaPip.classList.toggle('ready',nr);}
+  setBar(UI.novaPip,UI.novaFill,P.en/TUNE.nova.cost);
+  const nr=P.en>=TUNE.nova.cost;if(UI.novaPip._r!==nr){UI.novaPip._r=nr;UI.novaPip.classList.toggle('ready',nr);}
   setBar(UI.coreBar,UI.coreFill,core.hp/core.max);
   setTxt(UI.coreTxt,`${Math.ceil(core.hp)}/${core.max}`);
   const crit=core.hp/core.max<.3;
@@ -98,7 +98,7 @@ const CODEX=[
   {id:'keeper',cat:'role',name:'守灯人',icon:'lantern',color:'#ffb454',sprite:'player',
    desc:'你操控的角色。挥刃自动：范围内只要有雾裔或资源，就会持续朝目标方向攻击。',
    stats:()=>[['当前生命',`${Math.ceil(P.hp)} / ${P.maxHp}`],['挥刃伤害',P.dmg.toFixed(1)],
-     ['攻击间隔',(0.42/P.atkSpd).toFixed(2)+' 秒'],['攻击范围',P.range.toFixed(2)+' 格'],
+     ['攻击间隔',(TUNE.player.atkInterval/P.atkSpd).toFixed(2)+' 秒'],['攻击范围',P.range.toFixed(2)+' 格'],
      ['移动速度',P.spd.toFixed(2)+' 格/秒'],['暴击率',Math.round(P.crit*100)+'%'],['等级','Lv.'+P.lvl]],
    rel:['core','dash','nova','hand']},
   {id:'mage',cat:'role',name:'法师',icon:'mage',color:'#b48cff',
@@ -109,17 +109,21 @@ const CODEX=[
    rel:['mana','spell','status','reaction']},
   {id:'core',cat:'role',name:'方舟核心',icon:'core',color:'#ffb454',sprite:'core',
    desc:'家园的心脏，雾潮的最终目标。核心被毁即失败；靠近按 F 或打出修补术可修复。',
-   stats:()=>[['当前耐久',`${Math.ceil(core.hp)} / ${core.max}`],['修复消耗','10 木 + 6 石'],
-     ['单次修复','+70'],['白昼自愈','1 /秒'],['黎明恢复','+40']],rel:['keeper','c_mend','wood','stone']},
-  {id:'wood',cat:'res',name:'木材',icon:'wood',color:'#e0b070',sprite:'tree',
-   desc:'砍伐树木获得。既是资源也是卡牌费用，没有第二种货币。',
-   stats:()=>[['当前库存',res.wood],['来源','树木 · 3 次挥刃'],['单次产出','4–6'],['用途','木墙 / 箭塔 / 图腾 / 箭雨']],rel:['c_wall','c_tower','c_rain']},
-  {id:'stone',cat:'res',name:'石料',icon:'stone',color:'#b9c4c9',sprite:'rock',
-   desc:'敲碎岩石获得，需 4 次挥刃。远程火力与扩容的主要费用。',
-   stats:()=>[['当前库存',res.stone],['来源','岩石 · 4 次挥刃'],['单次产出','4–6'],['用途','箭塔 / 雾晶炮 / 扩容']],rel:['c_tower','c_cannon','c_expand']},
-  {id:'crys',cat:'res',name:'雾晶',icon:'crys',color:'#57e6ff',sprite:'crys',
-   desc:'雾中凝结的能量。矿脉与击杀雾裔均可获得，高阶卡牌的燃料。',
-   stats:()=>[['当前库存',res.crys],['矿脉产出','3–5'],['击杀掉落','1 / 2 / 3 / 12'],['倒下损失','−20%']],rel:['c_cannon','c_mine','c_ward']},
+   stats:()=>[['当前耐久',`${Math.ceil(core.hp)} / ${core.max}`],
+     ['修复消耗',TUNE.core.repair.wood+' 木 + '+TUNE.core.repair.stone+' 石'],
+     ['单次修复','+'+TUNE.core.repair.heal],['白昼自愈',TUNE.core.regen+' /秒'],['黎明恢复','+'+TUNE.core.dawnHeal]],
+   rel:['keeper','c_mend','wood','stone']},
+  ...[['wood','木材','wood','tree','砍伐树木获得。既是资源也是卡牌费用，没有第二种货币。','木墙 / 箭塔 / 图腾 / 箭雨',['c_wall','c_tower','c_rain']],
+      ['stone','石料','stone','rock','敲碎岩石获得，需 '+TUNE.node.hits.rock+' 次挥刃。远程火力与扩容的主要费用。','箭塔 / 雾晶炮 / 扩容',['c_tower','c_cannon','c_expand']],
+      ['crys','雾晶','crys','crys','雾中凝结的能量。矿脉与击杀雾裔均可获得，高阶卡牌的燃料。','雾晶炮 / 雾晶雷 / 灯焰护盾',['c_cannon','c_mine','c_ward']]]
+    .map(([id,name,icon,sprite,desc,use,rel])=>{
+      const src={wood:'tree',stone:'rock',crys:'crys'}[id];
+      const y=TUNE.node.yield[src],hits=TUNE.node.hits[src];
+      const stats=()=>[['当前库存',res[id]],
+        ...(id==='crys'?([['矿脉产出',y[0]+'–'+y[1]],['击杀掉落',Object.values(FOES).map(f=>f.crysDrop).join(' / ')],['倒下损失','−'+Math.round((1-TUNE.down.crysKeep)*100)+'%']]):
+          ([['来源',name+' · '+hits+' 次挥刃'],['单次产出',y[0]+'–'+y[1]],['用途',use]]))];
+      return {id,cat:'res',name,icon,color:RESCOL[id],sprite,desc,stats,rel};
+    }),
   ...CIDS.map(id=>{
     const d=CDEFS[id];
     return {id:'c_'+id,cat:'card',name:d.name,icon:d.icon,color:d.color,
@@ -153,26 +157,16 @@ const CODEX=[
       rel:d.kind==='build'?['wood','stone','crys','hand'].slice(0,3).concat(['hand']):
         d.tier?['recycle','hand','deck']:['hand','deck','keeper']};
   }),
-  {id:'crawler',cat:'foe',name:'雾裔爬行者',icon:'crawler',color:'#a06bff',sprite:'crawler',
-   desc:'最常见的雾潮单位，成群直扑核心。数量是它唯一的武器。',
-   stats:()=>[['基础生命',FOES.crawler.hp],['本局生命',foeNow('crawler')],['速度',FOES.crawler.spd],
-     ['对玩家',FOES.crawler.dmg],['对核心',FOES.crawler.coreDmg],['首次出现','第 1 夜'],['累计击杀',save.seen.foe.crawler||0]],
-   rel:['core','c_cannon','tide']},
-  {id:'spitter',cat:'foe',name:'掷雾者',icon:'spitter',color:'#c9a8ff',sprite:'spitter',
-   desc:'悬浮远程单位，保持距离吐出雾弹。雾弹会被建筑挡下。',
-   stats:()=>[['基础生命',FOES.spitter.hp],['本局生命',foeNow('spitter')],['雾弹伤害',FOES.spitter.dmg],
-     ['射击间隔','2.3 秒'],['射程','7.6 格'],['首次出现','第 2 夜'],['累计击杀',save.seen.foe.spitter||0]],
-   rel:['c_wall','dash','c_ward']},
-  {id:'brute',cat:'foe',name:'雾兽',icon:'brute',color:'#8b5fd6',sprite:'brute',
-   desc:'披甲巨兽，优先啃噬挡路建筑，对核心伤害极高。',
-   stats:()=>[['基础生命',FOES.brute.hp],['本局生命',foeNow('brute')],['对玩家',FOES.brute.dmg],
-     ['对核心',FOES.brute.coreDmg],['首次出现','第 3 夜'],['累计击杀',save.seen.foe.brute||0]],
-   rel:['c_wall','c_tower','nova']},
-  {id:'boss',cat:'foe',name:'雾潮之主',icon:'boss',color:'#ff4d6d',sprite:'boss',
-   desc:'每七夜重现的巨影。每 6 秒召唤两只爬行者，近身践踏。击溃它即可完成远航或继续守护。',
-   stats:()=>[['基础生命',FOES.boss.hp],['本局生命',foeNow('boss')],['践踏伤害','25'],
-     ['对核心',FOES.boss.coreDmg],['召唤间隔','6 秒'],['累计击杀',save.seen.foe.boss||0]],
-   rel:['seven','c_mine','c_cannon']},
+  ...Object.entries(FOES).map(([id,d])=>({id,cat:'foe',name:d.name,icon:d.icon,color:d.color,
+    sprite:id,desc:d.desc,rel:d.rel,
+    stats:()=>{
+      const s=[['基础生命',d.hp],['本局生命',foeNow(id)],['速度',d.spd]];
+      if(d.fireInterval)s.push(['雾弹伤害',d.dmg],['射击间隔',d.fireInterval+' 秒'],['射程',d.fireRange+' 格']);
+      else s.push(['对玩家',d.dmg]);
+      if(d.stompDmg)s.push(['践踏伤害',d.stompDmg],['召唤间隔',d.summonInterval+' 秒'],['召唤数量',d.summonCount]);
+      s.push(['对核心',d.coreDmg],['首次出现','第 '+d.firstNight+' 夜'],['累计击杀',save.seen.foe[id]||0]);
+      return s;
+    }})),
   ...BLESSINGS.map(b=>({id:'b_'+b.id,cat:'bless',name:b.n,icon:b.icon,color:RARCOL[b.rar],
     desc:b.d+'。'+(b.cls==='mage'?'法师专属。':'')+'黎明第二步三选一获得，永久被动生效，不占用牌库。',
     stats:()=>[['稀有度',RARNAME[b.rar]],['叠加上限',b.max?b.max+' 层':'无上限'],
@@ -184,7 +178,7 @@ const CODEX=[
       ['下级花费',save.bless[k]>=b.max?'已满级':b.costs[save.bless[k]]+' 火种'],['火种库存',save.embers]],
     rel:['ember','keeper']})),
   {id:'hand',cat:'term',name:'手牌与上限',icon:'cards',color:'#ffb454',
-   desc:'初始上限 5 张。打出扩容牌 +1，最高 10（法师 12）；到顶后扩容牌从牌库与奖励池永久退场。夜晚保留手牌。',
+   desc:'初始上限 5 张。打出扩容牌 +1，最高 '+HAND_CAP+'（法师 '+(HAND_CAP+MAGE_TUNE.handAdd)+'）；到顶后扩容牌从牌库与奖励池永久退场。夜晚保留手牌。',
    stats:()=>[['当前手牌',DECK.hand.length],['当前上限',DECK.max],['上限天花板',handCap()],
      ['扩容存世',cardTotal('expand')+' 张']],rel:['c_expand','dawn','deck']},
   {id:'deck',cat:'term',name:'牌库循环',icon:'cards',color:'#8fe3d0',
@@ -193,14 +187,14 @@ const CODEX=[
      ['总张数',DECK.draw.length+DECK.hand.length+DECK.discard.length],['本局出牌',S.stats?S.stats.played:0]],
    rel:['dawn','c_tactic','hand']},
   {id:'recycle',cat:'term',name:'回收率',icon:'salvage',color:'#6fe08a',
-   desc:'拆解牌分 5% / 10% / 20% 三档，累加至最高 80%。移除一张牌时按当前回收率返还其造价，向下取整。到顶后拆解牌退场。',
+   desc:'拆解牌分 '+['salvage5','salvage10','salvage20'].map(id=>CDEFS[id].tier).join('% / ')+'% 三档，累加至最高 '+REC_CAP+'%。移除一张牌时按当前回收率返还其造价，向下取整。到顶后拆解牌退场。',
    stats:()=>[['当前回收率',DECK.recycle+'%'],['上限',REC_CAP+'%'],
      ['拆解存世',cardTotal('salvage5')+cardTotal('salvage10')+cardTotal('salvage20')+' 张']],
    rel:['c_salvage5','c_salvage10','c_salvage20']},
   {id:'dawn',cat:'term',name:'黎明回合',icon:'sun',color:'#ffb454',
    desc:'每次天亮进入两步选择：先 3 选 1 拾获卡牌，再 3 选 1 获得祝福，都可跳过；随后抽满手牌。',
    stats:()=>[['白昼时长',DAY_LEN+' 秒'],['当前日数',S.day],['额外抽牌',P.bonusDraw+' 张'],
-     ['核心自愈','1 /秒']],rel:['hand','deck','b_blade']},
+     ['核心自愈',TUNE.core.regen+' /秒']],rel:['hand','deck','b_blade']},
   {id:'tide',cat:'term',name:'雾潮',icon:'fog',color:'#a06bff',
    desc:'夜间敌潮，自岛缘分批刷新。夜晚构筑牌封存，只能打瞬发牌——白天没铺好，晚上就得靠操作。',
    stats:()=>[['本夜波次',S.nightTotal||'—'],['已消灭',S.nightKilled],['同屏上限',FOE_CAP],['每夜成长',S.endless?'缓增封顶':'+13% 生命']],
@@ -211,21 +205,26 @@ const CODEX=[
      ['累计启航',save.best.wins+' 次']],rel:['boss','ember','tide']},
   {id:'ember',cat:'term',name:'文明火种',icon:'ember',color:'#ff8a3d',
    desc:'局外货币，失败也结算，用于购买永久传承。',
-   stats:()=>[['当前库存',save.embers],['公式','夜数×3 + 击杀÷8'],['胜利额外','+12（仅远航）'],['难度系数',DIFFS[save.diff].ember+'×']].concat(S.endless?[['无尽补发','只结算胜利基线之后的增量']]:[]),
+   stats:()=>[['当前库存',save.embers],
+     ['公式','夜数×'+TUNE.ember.perNight+' + 击杀÷'+TUNE.ember.killsDiv],
+     ['胜利额外','+'+TUNE.ember.winBonus+'（仅远航）'],['难度系数',DIFFS[save.diff].ember+'×']]
+     .concat(S.endless?[['无尽补发','只结算胜利基线之后的增量']]:[]),
    rel:['l_blade','l_iron','l_stock']},
   {id:'dash',cat:'term',name:'冲刺',icon:'bolt',color:'#57e6ff',
-   desc:'空格短距疾冲，3.4 倍速并附带无敌帧。',
-   stats:()=>[['冷却',P.dashCdMax.toFixed(2)+' 秒'],['持续','0.16 秒'],['无敌','0.28 秒'],['倍率','3.4×']],
+   desc:'空格短距疾冲，'+TUNE.dash.mult+' 倍速并附带无敌帧。',
+   stats:()=>[['冷却',P.dashCdMax.toFixed(2)+' 秒'],['持续',TUNE.dash.dur+' 秒'],
+     ['无敌',TUNE.dash.iframe+' 秒'],['倍率',TUNE.dash.mult+'×']],
    rel:['keeper','b_shadow']},
   {id:'nova',cat:'term',name:'雾爆',icon:'burst',color:'#57e6ff',
-   desc:'Q 释放的自身范围新星，消耗 60 雾能（法师为法力），与卡牌系统互不干扰。',
-   stats:()=>[[isMage()?'法力消耗':'雾能消耗','60'],['伤害',(30*P.novaMult).toFixed(1)],
-     ['半径',(3.1*(1+.12*(P.stacks.nova||0))).toFixed(2)+' 格'],['回复',manaRegenRate().toFixed(1)+' /秒']],
+   desc:'Q 释放的自身范围新星，消耗 '+TUNE.nova.cost+' 雾能（法师为法力），与卡牌系统互不干扰。',
+   stats:()=>[[isMage()?'法力消耗':'雾能消耗',String(TUNE.nova.cost)],['伤害',(TUNE.nova.dmg*P.novaMult).toFixed(1)],
+     ['半径',(TUNE.nova.radius*(1+TUNE.nova.radiusPer*(P.stacks.nova||0))).toFixed(2)+' 格'],
+     ['回复',manaRegenRate().toFixed(1)+' /秒']],
    rel:['keeper','b_nova','c_surge']},
   {id:'mana',cat:'term',name:'法力',icon:'crys',color:'#57e6ff',
    desc:'法师转职后的施法资源。非法师仍使用雾能；基础法术对两者都消耗当前资源。',
    stats:()=>[['当前上限',P.maxEn],['基础回复',P.enRegenFlat+' /秒'],['实际回复',manaRegenRate().toFixed(1)+' /秒'],
-     ['1 费',MANA_UNIT+' 法力'],['雾爆消耗','60']],
+     ['1 费',MANA_UNIT+' 法力'],['雾爆消耗',String(TUNE.nova.cost)]],
    rel:['mage','spell','c_surge']},
   {id:'spell',cat:'term',name:'法术与施法',icon:'rune',color:'#b48cff',
    desc:'法术牌消耗法力/雾能，受施法冷却限制；法师额外获得元素亲和、法术强度与职业天赋。',
@@ -234,16 +233,20 @@ const CODEX=[
    rel:['mana','mage','status']},
   {id:'status',cat:'term',name:'元素状态',icon:'flame',color:'#ff7a45',
    desc:'灼烧持续掉血，冰缓减速，冻结停止行动，奥术标记提高受到的法术伤害。',
-   stats:()=>[['灼烧','3 /秒/层 · 10 层'],['冰缓','12% 减速/层 · 3 层'],['冻结','1 秒（首领 0.35 秒）'],
-     ['奥术标记','法术伤害 +10%']],
+   stats:()=>[
+     ['灼烧',ST_DEF.burn.dps+' /秒/层 · '+ST_DEF.burn.max+' 层'],
+     ['冰缓',Math.round(ST_DEF.chill.slowPer*100)+'% 减速/层 · '+ST_DEF.chill.max+' 层'],
+     ['冻结',ST_DEF.freeze.dur+' 秒（首领 '+ST_DEF.freeze.bossMul+' 秒）'],
+     ['奥术标记','法术伤害 +'+Math.round(ST_DEF.mark.amp*100)+'%']],
    rel:['spell','reaction','mage']},
   {id:'reaction',cat:'term',name:'元素反应',icon:'steam',color:'#8fe3d0',
-   desc:'需要法师天赋「元素融合」。同一敌人 2 秒内被两种元素命中触发，每敌人 1.5 秒冷却。',
+   desc:'需要法师天赋「元素融合」。同一敌人 '+TUNE.reaction.window+' 秒内被两种元素命中触发，每敌人 '+TUNE.reaction.cooldown+' 秒冷却。',
    stats:()=>[['火+冰','蒸汽爆炸'],['奥术+火/冰','共鸣扩散'],['雷系','接口保留，未实装']],
    rel:['status','spell','b_t_fusion']},
   {id:'downed',cat:'term',name:'灯芯熄灭',icon:'skull',color:'#ff4d6d',
-   desc:'生命归零后 3 秒于核心重燃，恢复六成生命并损失两成雾晶。',
-   stats:()=>[['重燃时间','3 秒'],['重燃生命','60%'],['雾晶损失','20%'],['重燃无敌','2 秒']],
+   desc:'生命归零后 '+TUNE.down.time+' 秒于核心重燃，恢复六成生命并损失两成雾晶。',
+   stats:()=>[['重燃时间',TUNE.down.time+' 秒'],['重燃生命',Math.round(TUNE.down.hpRatio*100)+'%'],
+     ['雾晶损失',Math.round((1-TUNE.down.crysKeep)*100)+'%'],['重燃无敌',TUNE.down.iframe+' 秒']],
    rel:['keeper','core','crys']}
 ];
 const CX_BY_ID={};CODEX.forEach(e=>CX_BY_ID[e.id]=e);
@@ -365,7 +368,7 @@ function cxDrawPreview(dt){
     else if(k==='crys')drawCrys({type:'crys',x:0,y:0,alive:true,shake:0,sway:0,s:1.3});
     else if(BUILDS[k]){ctx.save();ctx.scale(1.25,1.25);
       drawBuild({type:k,x:0,y:0,hp:1,max:1,r:.4,flash:0,pulse:t,ang:Math.sin(t*.6)*.9});ctx.restore();}
-    else if(FOES[k]){const s=k==='boss'?.82:k==='brute'?1.25:1.5;
+    else if(FOES[k]){const s=FOES[k].spriteScale;
       ctx.save();ctx.scale(s,s);
       drawFoe({type:k,x:0,y:0,r:FOES[k].r,hp:1,max:1,flash:0,anim:t*4,elite:false,boss:k==='boss',dead:false});ctx.restore();}
     ctx.restore();

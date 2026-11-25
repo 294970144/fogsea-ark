@@ -77,7 +77,7 @@ function genWorld(forcedSeed){
       if(!t||!t.land||t.sand)continue;
       if(dist(x,y,CEN,CEN)<minD)continue;
       if(nodes.some(n=>dist(n.x,n.y,x,y)<1.8))continue;
-      const hp=type==='rock'?4:3;
+      const hp=TUNE.node.hits[type];
       nodes.push({type,x,y,hp,max:hp,alive:true,shake:0,sway:rand(TAU),s:rand(.85,1.2)});count--;
     }
   };

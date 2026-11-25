@@ -510,6 +510,61 @@ testCase('R13_save_slots_roundtrip', () => {
   assert.equal(clr.run('slots.active'), null);
 });
 
+testCase('R14_single_source_contract', () => {
+  const env = makeEnv();
+  // 1) 图鉴敌人条目完全由 FOES 派生：新增敌人只需在源码登记一次
+  const grown = j(env)(`(()=>{
+    const ids=Object.keys(FOES);
+    const entries=CODEX.filter(x=>x.cat==='foe');
+    const metaOk=ids.every(id=>{
+      const e=CODEX.find(x=>x.id===id),d=FOES[id];
+      return e&&e.name===d.name&&e.desc===d.desc&&e.icon===d.icon&&
+        JSON.stringify(e.rel)===JSON.stringify(d.rel);
+    });
+    const statsOk=ids.every(id=>{
+      const s=CODEX.find(x=>x.id===id).stats();
+      return s.some(x=>x[0]==='基础生命')&&s.some(x=>x[0]==='首次出现')&&
+        s.some(x=>x[1]===FOES[id].coreDmg);
+    });
+    save.seen.foe[ids[0]]=1;
+    for(const id of ids)save.seen.foe[id]=1;
+    for(const b of BLESSINGS)save.seen.card[b.id]=1;
+    for(const id of CIDS)save.seen.play[id]=1;
+    cxRenderList();
+    const track=ids.length+BLESSINGS.length+CIDS.length;
+    return JSON.stringify({ids,count:entries.length,metaOk,statsOk,track,
+      label:document.getElementById('cxCount').textContent});
+  })()`);
+  assert.equal(grown.count, grown.ids.length);
+  assert.equal(grown.metaOk, true);
+  assert.equal(grown.statsOk, true);
+  assert.ok(grown.label.includes(`${grown.track}/${grown.track}`));
+  // 2) 图鉴数值来自 TUNE：改总表后文案即时同步
+  const live = j(env)(`(()=>{
+    const before=CODEX.find(x=>x.id==='core').stats().find(x=>x[0]==='单次修复')[1];
+    TUNE.core.repair.heal=123;
+    const after=CODEX.find(x=>x.id==='core').stats().find(x=>x[0]==='单次修复')[1];
+    TUNE.core.repair.heal=70;
+    const novaBefore=CODEX.find(x=>x.id==='nova').stats().find(x=>x[0].includes('消耗'))[1];
+    TUNE.nova.cost=77;
+    const novaAfter=CODEX.find(x=>x.id==='nova').stats().find(x=>x[0].includes('消耗'))[1];
+    TUNE.nova.cost=60;
+    return JSON.stringify({before,after,novaBefore,novaAfter});
+  })()`);
+  assert.deepEqual(live, { before: '+70', after: '+123', novaBefore: '60', novaAfter: '77' });
+  // 3) 施法距离唯一来源：放置校验与法术索敌共用同一函数
+  const ranged = j(env)(`(()=>{
+    initRun();P.stacks={t_reach:1};
+    const out=spellCastRange();
+    const far=placeCheck(CDEFS.sp_fireball,P.x+out+.5,P.y).msg;
+    const near=placeCheck(CDEFS.sp_fireball,P.x+out-.5,P.y).ok;
+    return JSON.stringify({out,far,near});
+  })()`);
+  assert.ok(Math.abs(ranged.out - 9) < 1e-9);
+  assert.equal(ranged.far, '超出施法距离');
+  assert.equal(ranged.near, true);
+});
+
 function main() {
   if (process.env.CAPTURE) {
     console.log(JSON.stringify({ r0: captureBaseline(makeEnv()), saves: captureSaves() }, null, 2));

@@ -9,7 +9,7 @@ function cardInner(def,hot){
       <div class="hcArt" style="color:${def.color}">${svg(def.icon,22)}</div>
       <div class="hcName">${def.name}</div>
     </div>
-    <div class="hcDesc">${CARD_BRIEF[def.id]||def.desc}</div>`;
+    <div class="hcDesc">${def.brief||def.desc}</div>`;
 }
 function renderHand(){
   const row=$('handRow');row.innerHTML='';
@@ -151,7 +151,7 @@ function placeCheck(def,tx,ty){
     if(blocked)return{ok:false,msg:'雾裔占据此处'};
   }else if(def.target==='point'){
     if(!walk(tx,ty))return{ok:false,msg:'目标不在陆地'};
-    if(dist(tx,ty,P.x,P.y)>7.5*(1+.20*tLv('t_reach')))return{ok:false,msg:'超出施法距离'};
+    if(dist(tx,ty,P.x,P.y)>spellCastRange())return{ok:false,msg:'超出施法距离'};
   }
   return{ok:true,msg:''};
 }
@@ -215,10 +215,10 @@ function applyInstant(def,tx,ty,overflow){
   }else if(def.id==='spring'){
     healPlayer(45);puff(P.x,P.y,16,'#6fe08a',2,.7,3);ring(P.x,P.y,'rgba(111,224,138,.8)',.2,1.5,.4);sfx('heal');
   }else if(def.id==='mend'){
-    core.hp=Math.min(core.max,core.hp+90);
-    builds.forEach(b=>{b.hp=Math.min(b.max,b.hp+40);puff(b.x,b.y,4,'#ffb454',1.5,.4,2);});
+    core.hp=Math.min(core.max,core.hp+def.coreHeal);
+    builds.forEach(b=>{b.hp=Math.min(b.max,b.hp+def.buildHeal);puff(b.x,b.y,4,'#ffb454',1.5,.4,2);});
     rebuildTileCost();fieldDirty=true;
-    floater(core.x,core.y,'+90','#ffb454',true);
+    floater(core.x,core.y,'+'+def.coreHeal,'#ffb454',true);
     puff(core.x,core.y,16,'#ffb454',2,.7,3);sfx('repair');
   }else if(def.id==='ward'){
     P.ifr=Math.max(P.ifr,4);ring(P.x,P.y,'rgba(143,227,208,.9)',.2,1.8,.5);
