@@ -118,7 +118,7 @@ python -m http.server 8000
 - Canvas 2D 等距渲染，画家算法排序，地表离屏烘焙
 - 敌人以趋近向量 + 分离力避让 + 卡死绕行行进，圆体碰撞滑移，杜绝卡死
 - 空间网格加速碰撞与索敌，粒子对象池，像素比上限 2
-- 透明 WebGL 特效叠加层（three.js + `FX`），WebGL 不可用或慢帧时回退 Canvas 2D 粒子
+- 特效叠加层 `FX`：WebGPU（原生 WGSL）优先，WebGPU 不可用时回退 three.js WebGL；两者都不可用时保留主画布的 Canvas 2D 粒子
 - WebAudio 实时合成音效与生成式氛围和弦
 - 单 `requestAnimationFrame` 循环驱动全部状态，倍速时按步长拆分模拟
 
@@ -140,8 +140,8 @@ js/07-combat.js     战斗、敌人、弹体、波次
 js/07b-spells.js    法师、法力、元素状态与法术执行
 js/08-progress.js   黎明、胜负结算
 js/09-render.js     世界与实体绘制
-js/vendor/three.min.js  three.js r158（仅供 FX）
-js/09b-fx.js        WebGL 特效叠加层（FX）
+js/vendor/three.min.js  three.js r158（WebGL 回退与场景变换）
+js/09b-fx.js        WebGPU/WGSL 优先、WebGL 回退的特效叠加层（FX）
 js/10-ui.js         HUD、图鉴
 js/11-main.js       流程、主循环、菜单视图
 tests/regression.js 隔离回归脚本
