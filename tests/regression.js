@@ -239,6 +239,26 @@ testCase('R3_deck_and_card_text', () => {
   assert.ok(handTower.includes('自动射击附近雾裔。'));
   const handSpell = env.run(`P.cls='mage';cardInner(CDEFS.sp_emberburst,'')`);
   assert.ok(handSpell.includes('title="30法力"'));
+  // 图鉴费用称呼随职业切换：非法师应显示「雾能」，而非写死的「法力」
+  const codexMana = j(env)(`(()=>{
+    const c=CODEX.find(x=>x.id==='c_sp_emberburst');
+    const manaKey=s=>s.find(x=>x[0]==='法力'||x[0]==='雾能');
+    P.cls=null;const non=manaKey(c.stats())[0];
+    P.cls='mage';const mage=manaKey(c.stats())[0];
+    P.cls=null;return JSON.stringify({non,mage});
+  })()`);
+  assert.deepEqual(codexMana, { non: '雾能', mage: '法力' });
+  // 数值单一来源：改字段后 desc/brief 文案同步
+  const derived = j(env)(`(()=>{
+    CDEFS.spring.heal=61;CDEFS.ward.ifr=7;BUILDS.totem.heal=9;syncCardText();
+    const out={spring:CDEFS.spring.desc,ward:CDEFS.ward.brief,totem:CDEFS.totem.desc,totemBrief:CARD_BRIEF.totem};
+    CDEFS.spring.heal=45;CDEFS.ward.ifr=4;BUILDS.totem.heal=4;syncCardText();
+    return JSON.stringify(out);
+  })()`);
+  assert.ok(derived.spring.includes('61'));
+  assert.ok(derived.ward.includes('7 秒'));
+  assert.ok(derived.totem.includes('9 点'));
+  assert.ok(derived.totemBrief.includes('9 点'));
   env.run(`DECK.hand=[mkCard('wall'),mkCard('tower')];DECK.draw=[];DECK.discard=[];renderSwap()`);
   assert.ok(!/undefined|\[object Object\]|NaN/.test(env.ids.get('swapList').children.map(e => e.innerHTML).join('')));
   env.run(`const sc=mkCard('salvage5');DECK.hand=[sc,mkCard('wall')];DECK.draw=[];DECK.discard=[];beginSalvage(sc)`);
@@ -514,6 +534,59 @@ testCase('R13_save_slots_roundtrip', () => {
   clr.run('initRun();S.mode="play";doSaveSlot(1);S.day=7;S.stats.nights=7;settle(true)');
   assert.equal(clr.run('slots.slots[1]'), null);
   assert.equal(clr.run('slots.active'), null);
+
+  // 摘要字段必须与 snap 一同校验：残缺档不再通过 validateSlot（否则列表渲染抛错）
+  const sumBad = makeEnv();
+  const sumOK = j(sumBad)(`(()=>{
+    initRun();S.mode='play';const good=makeSlot();
+    const noSummary=JSON.parse(JSON.stringify(good));delete noSummary.summary;
+    const badCore=JSON.parse(JSON.stringify(good));badCore.summary.core='oops';
+    const badNights=JSON.parse(JSON.stringify(good));badNights.summary.nights='7';
+    return JSON.stringify({good:validateSlot(good),noSummary:validateSlot(noSummary),
+      badCore:validateSlot(badCore),badNights:validateSlot(badNights)});
+  })()`);
+  assert.deepEqual(sumOK, {good:true,noSummary:false,badCore:false,badNights:false});
+
+  // 损坏原串单列备份，写回干净数据不抹证据；玩家确认后才清除
+  const backup = makeEnv({ storage: [['arkmist_slots_v1', '{"v":1,"slots":[{"broken":true}]}']] });
+  assert.equal(backup.run('slots.corrupt'), true);
+  assert.equal(backup.run('localStorage.getItem(SLOT_BAD_KEY)'), '{"v":1,"slots":[{"broken":true}]}');
+  backup.run('initRun();S.mode="play";doSaveSlot(0)');
+  assert.equal(backup.run('slots.corrupt'), true, '写回干净数据不应清除损坏标志');
+  assert.ok(backup.run('localStorage.getItem(SLOT_BAD_KEY)'), '备份串不应被写回抹掉');
+  backup.run('ackCorrupt()');
+  assert.equal(backup.run('slots.corrupt'), false);
+  assert.equal(backup.run('localStorage.getItem(SLOT_BAD_KEY)'), null);
+
+  // 三槽全满且无活跃槽时，autoSave 拒绝覆盖旧档
+  const full = makeEnv();
+  // 沙箱 firstChild 缺陷会让第三条 toast 空转，存档前清容器（真实 DOM 无此问题）
+  full.run(`initRun();S.mode='play'`);
+  for (const slot of [0, 1, 2]) {
+    full.run('UI.toasts.innerHTML=""');
+    full.run(`doSaveSlot(${slot})`);
+  }
+  full.run(`slots.active=null;S.day=2;S.stats.nights=1`);
+  assert.equal(full.run('slots.slots.every(Boolean)'), true, '前置条件：三槽全满');
+  const before = full.run('localStorage.getItem(SLOT_KEY)');
+  // autoSave 会弹一条 toast，先清容器规避测试桩 firstChild 空转
+  full.run('UI.toasts.innerHTML=""');
+  assert.equal(full.run('autoSave()'), false);
+  assert.equal(full.run('localStorage.getItem(SLOT_KEY)'), before, '满槽自动存档不得改写任何旧档');
+
+  // 墓碑槽：奖励已落盘但清槽失败的极端路径，读档直接进入结算，不重复发奖
+  const tomb = makeEnv();
+  const tombOut = j(tomb)(`(()=>{
+    initRun();S.mode='play';doSaveSlot(0);S.day=7;S.stats.nights=7;S.stats.kills=40;
+    const emBefore=save.embers;
+    const settled={win:true,embers:12,nights0:7,kills0:40,incremental:false};
+    writeTombstone(settled);
+    doLoadSlot(0);
+    return JSON.stringify({mode:S.mode,settled:!!S.settled,embers:save.embers,emBefore});
+  })()`);
+  assert.equal(tombOut.mode, 'end');
+  assert.equal(tombOut.settled, true);
+  assert.equal(tombOut.embers, tombOut.emBefore, '读墓碑槽不得再次发放火种');
 });
 
 testCase('R14_single_source_contract', () => {
@@ -569,6 +642,24 @@ testCase('R14_single_source_contract', () => {
   assert.ok(Math.abs(ranged.out - 9) < 1e-9);
   assert.equal(ranged.far, '超出施法距离');
   assert.equal(ranged.near, true);
+  // 4) 伤害倍率：默认 1 不改平衡；改表后近战与法术伤害同源缩放
+  const mul = j(env)(`(()=>JSON.stringify({melee:TUNE.dmgMul.melee,spell:TUNE.dmgMul.spell}))()`);
+  assert.deepEqual(mul, { melee: 1, spell: 1 });
+  const scaled = j(env)(`(()=>{
+    initRun();P.cls='mage';P.crit=0;foes.length=0;
+    const f={type:'crawler',x:P.x+1,y:P.y,hp:10000,max:10000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
+      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+      burnStacks:0,burnT:0,burnTick:0,chillStacks:0,chillT:0,freezeT:0,markT:0,shockT:0,lastElem:null,lastElemT:-99,reactCd:0};
+    foes.push(f);rebuildFoeGrid();
+    TUNE.dmgMul.spell=2;castSpell(CDEFS.sp_emberburst,f.x,f.y);const spell=10000-f.hp;
+    const base=spell/2;TUNE.dmgMul.spell=1;
+    foes.length=0;P.cls=null;P.weapon='sword';P.dmg=12;
+    foes.push({...f,hp:10000,max:10000,dead:false});rebuildFoeGrid();
+    TUNE.dmgMul.melee=2;swing(0);const melee=10000-foes[0].hp;TUNE.dmgMul.melee=1;
+    return JSON.stringify({base,spell,melee});
+  })()`);
+  assert.ok(scaled.base > 0 && Math.abs(scaled.spell - scaled.base * 2) < 1e-6);
+  assert.ok(Math.abs(scaled.melee - 24) < 1e-6);
 });
 
 testCase('R15_weapon_data_pool_and_save', () => {

@@ -43,7 +43,7 @@ function autoCastWeapon(w,tgt){
   const targets=def.shape==='single'?[tgt]:spellTargets(def,tgt.x,tgt.y);
   for(const f of targets){
     if(!f||f.dead)continue;
-    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg);
+    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell;
     const crit=Math.random()<P.crit;if(crit)dmg*=2;
     if(dmg>0)damageFoe(f,dmg,ang,crit,{noKnock:true});
     if(def.status&&!f.dead)applyElement(f,def.elem,def.status.n,def.status.kind);
@@ -67,12 +67,12 @@ function swing(ang){
   let hit=false;
   forFoes(P.x,P.y,P.range+1.2,f=>{
     if(f.dead||!inArc(f,f.r))return;
-    let dmg=P.dmg;const crit=Math.random()<P.crit;if(crit)dmg*=2;
+    let dmg=P.dmg*TUNE.dmgMul.melee;const crit=Math.random()<P.crit;if(crit)dmg*=2;
     damageFoe(f,dmg,ang,crit);hit=true;
   });
   for(const n of nodes){if(!n.alive||!inArc(n,.4))continue;hitNode(n);hit=true;}
   if(P.wave>0)shots.push({x:P.x+Math.cos(ang)*.5,y:P.y+Math.sin(ang)*.5,vx:Math.cos(ang)*10,vy:Math.sin(ang)*10,
-    type:'wave',dmg:P.dmg*(.5+.2*P.wave),life:.34,pierce:2,z:12});
+    type:'wave',dmg:P.dmg*(.5+.2*P.wave)*TUNE.dmgMul.melee,life:.34,pierce:2,z:12});
   if(hit)S.hitstop=Math.max(S.hitstop,.02);
 }
 function damageFoe(f,dmg,ang,crit,opts){
@@ -445,7 +445,7 @@ function updateBuilds(dt){
     }else if(b.type==='totem'){
       b.cd-=dt;
       if(b.cd<=0){b.cd=1;
-        if(!P.downed&&dist(b.x,b.y,P.x,P.y)<def.range&&P.hp<P.maxHp){healPlayer(4);puff(P.x,P.y,3,'#6fe08a',1,.5,2);}
+        if(!P.downed&&dist(b.x,b.y,P.x,P.y)<def.range&&P.hp<P.maxHp){healPlayer(def.heal);puff(P.x,P.y,3,'#6fe08a',1,.5,2);}
         puff(b.x,b.y,2,'#6fe08a',.8,.7,2);}
     }else if(b.type==='manawell'){
       b.cd-=dt;

@@ -164,7 +164,7 @@ const CODEX=[
           s.push(['场上数量',builds.filter(x=>x.type===d.build).length]);
         }
         if(d.radius)s.push(['作用半径',d.radius+' 格'],['伤害',d.dmg]);
-        if(d.mana)s.push(['法力',effManaCost(d)],['元素',ELEMNAME[d.elem]||'—']);
+        if(d.mana)s.push([manaLabel(true),effManaCost(d)],['元素',ELEMNAME[d.elem]||'—']);
         if(d.shape)s.push(['施法形态',d.shape]);
         if(d.status){
           const sn={burn:'灼烧',chill:'冰缓',freeze:'冻结',mark:'奥术标记'}[d.status.kind]||d.status.kind;

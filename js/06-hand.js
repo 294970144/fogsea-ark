@@ -170,7 +170,7 @@ function playCard(uid,tx,ty){
   if(def.target==='pick'){beginSalvage(card);return false;}
   const chk=placeCheck(def,tx,ty);
   if(!chk.ok){toast(chk.msg,'warn');sfx('deny');return false;}
-  const overflow=!!def.elem&&isMage()&&P.en>P.maxEn*.8;
+  const overflow=!!def.elem&&manaOverflow();
   payCost(def);
   DECK.hand.splice(idx,1);
   S.aimUid=null;
@@ -219,7 +219,7 @@ function applyInstant(def,tx,ty,overflow){
     if(def.id==='mine')for(const n of nodes)if(n.alive&&dist(tx,ty,n.x,n.y)<R)hitNode(n);
     sfx(def.id==='rain'?'arrow':'boom');shake(def.id==='mine'?7:3);
   }else if(def.id==='spring'){
-    healPlayer(45);
+    healPlayer(def.heal);
     if(fxOn())FX.cast('spring',P.x,P.y);
     else{puff(P.x,P.y,16,'#6fe08a',2,.7,3);ring(P.x,P.y,'rgba(111,224,138,.8)',.2,1.5,.4);}
     sfx('heal');
@@ -232,10 +232,10 @@ function applyInstant(def,tx,ty,overflow){
     else puff(core.x,core.y,16,'#ffb454',2,.7,3);
     sfx('repair');
   }else if(def.id==='ward'){
-    P.ifr=Math.max(P.ifr,4);
+    P.ifr=Math.max(P.ifr,def.ifr);
     if(fxOn())FX.cast('ward',P.x,P.y);
     else{ring(P.x,P.y,'rgba(143,227,208,.9)',.2,1.8,.5);puff(P.x,P.y,18,'#8fe3d0',2,.7,3);}
-    floater(P.x,P.y,'无敌 4s','#8fe3d0',true);sfx('heal');
+    floater(P.x,P.y,'无敌 '+def.ifr+'s','#8fe3d0',true);sfx('heal');
   }else if(def.id==='tactic'){
     const n=drawN(2);floater(P.x,P.y,'抽 '+n+' 张','#c9a8ff',true);
     if(fxOn())FX.cast('tactic',P.x,P.y);

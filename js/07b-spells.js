@@ -51,6 +51,7 @@ function gainMana(v){
   }
   return gained;
 }
+function manaOverflow(){return isMage()&&P.en>P.maxEn*TALENT_TUNE.t_manadmg.threshold;}
 function effManaCost(def){
   let c=def.mana||0;
   if(def.elem==='arcane')c-=TALENT_TUNE.t_arcsave.flat*tLv('t_arcsave');
@@ -178,13 +179,13 @@ function spellFx(def,tx,ty,elem,targets){
   sfx(elem==='fire'?'fire':elem==='frost'?'frost':elem==='arcane'?'arcane':'cast');
 }
 
-function castSpell(def,tx,ty,overflow=isMage()&&P.en>P.maxEn*.8){
+function castSpell(def,tx,ty,overflow=manaOverflow()){
   const elem=def.elem;
   const speed=castSpeedMult();
   const targets=spellTargets(def,tx,ty);
   for(const f of targets){
     if(!f||f.dead)continue;
-    let dmg=def.dmg||0;
+    let dmg=(def.dmg||0)*TUNE.dmgMul.spell;
     if(def.shape==='consume')dmg=(f.burnStacks||0)*dmg;
     dmg*=spellMult(elem,f,overflow);
     const crit=Math.random()<P.crit;
@@ -202,7 +203,7 @@ function castSpell(def,tx,ty,overflow=isMage()&&P.en>P.maxEn*.8){
   if(isMage()&&elem==='arcane'&&tLv('t_arcecho')>0&&Math.random()<TALENT_TUNE.t_arcecho.chance){
     for(const f of targets){
       if(!f||f.dead)continue;
-      let dmg=def.dmg||0;
+      let dmg=(def.dmg||0)*TUNE.dmgMul.spell;
       if(def.shape==='consume')dmg=(f.burnStacks||0)*dmg;
       dmg*=.5*spellMult(elem,f,overflow);
       if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),false);
@@ -241,7 +242,7 @@ function triggerElementStorm(){
   const elem=elems[irand(0,elems.length-1)];
   for(const f of foes){
     if(f.dead)continue;
-    damageFoe(f,TALENT_TUNE.t_storm.dmg,0,false,{noKnock:true});
+    damageFoe(f,TALENT_TUNE.t_storm.dmg*TUNE.dmgMul.spell,0,false,{noKnock:true});
     if(!f.dead)applyElement(f,elem,1);
   }
   if(fxOn())FX.storm(P.x,P.y);
@@ -297,7 +298,7 @@ function applyElement(f,elem,n,kind){
 
 function triggerReaction(f,rx,prev,elem){
   const t=TALENT_TUNE.t_fusion;
-  const m=1+t.dmg*tLv('t_fusion');
+  const m=(1+t.dmg*tLv('t_fusion'))*TUNE.dmgMul.spell;
   const R=rx.radius*(1+t.radius*tLv('t_fusion'));
   if(rx.id==='steam'){
     const dmg=rx.dmg*m;
@@ -377,7 +378,7 @@ function updateFoeStatus(f,dt){
     while(f.burnTick<=0&&(f.burnT||0)>0&&!f.dead){
       f.burnTick+=ST_DEF.burn.tick;
       const dps=(f.burnStacks||0)*ST_DEF.burn.dps*(1+TALENT_TUNE.t_firemaster.burn*tLv('t_firemaster'));
-      damageFoe(f,dps*ST_DEF.burn.tick,0,false,{dot:true,noKnock:true});
+      damageFoe(f,dps*ST_DEF.burn.tick*TUNE.dmgMul.spell,0,false,{dot:true,noKnock:true});
     }
     if((f.burnT||0)<=0){f.burnT=0;f.burnStacks=0;f.burnTick=0;}
   }

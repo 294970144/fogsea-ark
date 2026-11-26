@@ -6,6 +6,8 @@ const TUNE={
   core:{max:600,repair:{wood:10,stone:6,heal:70},dawnHeal:40,regen:1},
   node:{hits:{crys:3,rock:4,tree:3},yield:{crys:[3,5],tree:[4,6],rock:[4,6]},dropCap:8},
   player:{atkInterval:.42,baseDmg:12,baseRange:1.75},
+  // 伤害倍率：默认 1 不改变现有平衡；近战=剑挥砍/剑气，法术=法术牌/法器/反应/风暴/灼烧
+  dmgMul:{melee:1,spell:1},
   dash:{dur:.16,iframe:.28,mult:3.4},
   nova:{cost:60,dmg:30,radius:3.1,radiusPer:.12},
   down:{time:3,hpRatio:.6,crysKeep:.8,iframe:2,en:50},
@@ -20,7 +22,7 @@ const TUNE={
 const BUILDS={
   wall:{name:'木墙',hp:130,r:.46},
   tower:{name:'箭塔',hp:95,r:.42,range:5.6,dmg:9,rate:.85},
-  totem:{name:'愈灵图腾',hp:75,r:.36,range:3.2},
+  totem:{name:'愈灵图腾',hp:75,r:.36,range:3.2,heal:4},
   cannon:{name:'雾晶炮',hp:115,r:.46,range:6.6,dmg:26,rate:2.4},
   manawell:{name:'法力之井',hp:80,r:.40,range:3.4,regen:3}
 };
@@ -79,12 +81,12 @@ const CDEFS={
   mine:{id:'mine',kind:'instant',target:'point',name:'雾晶雷',icon:'mine',color:'#57e6ff',cost:{crys:6},
     radius:2.6,dmg:70,desc:'指定区域引爆雾晶，70 点伤害并强力击退。夜晚可用。',w:13},
   spring:{id:'spring',kind:'instant',target:'self',name:'愈灵之泉',icon:'heal',color:'#6fe08a',cost:{wood:6,crys:2},
-    desc:'立刻恢复 45 点生命。夜晚可用。',w:15},
+    heal:45,desc:'立刻恢复 45 点生命。夜晚可用。',w:15},
   mend:{id:'mend',kind:'instant',target:'self',name:'修补术',icon:'mend',color:'#ffb454',cost:{wood:8,stone:5},
     coreHeal:90,buildHeal:40,
     desc:'方舟核心 +90，全部建筑 +40 耐久。夜晚可用。',w:13},
   ward:{id:'ward',kind:'instant',target:'self',name:'灯焰护盾',icon:'ward',color:'#8fe3d0',cost:{crys:5},
-    desc:'获得 4 秒无敌，穿过雾弹与包围。夜晚可用。',w:11},
+    ifr:4,desc:'获得 4 秒无敌，穿过雾弹与包围。夜晚可用。',w:11},
   tactic:{id:'tactic',kind:'instant',target:'self',name:'战术重整',icon:'tactic',color:'#c9a8ff',cost:{wood:4},
     desc:'立刻抽 2 张牌。循环牌库的关键。',w:14},
   surge:{id:'surge',kind:'instant',target:'self',name:'雾能充盈',icon:'surge',color:'#57e6ff',cost:{crys:3},
@@ -164,21 +166,32 @@ const CARD_BRIEF={
   manawell:'持续回复附近玩家法力。',class_mage:'转职法师，以法力施法。'
 };
 for(const id in CARD_BRIEF)if(CDEFS[id])CDEFS[id].brief=CARD_BRIEF[id];
+/* 文案派生：数值只在字段登记一次，desc/brief 从字段生成，避免多份字面量漂移 */
+function syncCardText(){
+  CDEFS.spring.desc=`立刻恢复 ${CDEFS.spring.heal} 点生命。夜晚可用。`;
+  CDEFS.ward.desc=`获得 ${CDEFS.ward.ifr} 秒无敌，穿过雾弹与包围。夜晚可用。`;
+  CDEFS.totem.desc=`每秒为 ${BUILDS.totem.range} 格内的守灯人恢复 ${BUILDS.totem.heal} 点生命。`;
+  CARD_BRIEF.spring=`恢复 ${CDEFS.spring.heal} 点生命。`;
+  CARD_BRIEF.ward=`获得 ${CDEFS.ward.ifr} 秒无敌。`;
+  CARD_BRIEF.totem=`每秒恢复附近玩家 ${BUILDS.totem.heal} 点生命。`;
+  for(const id of ['spring','ward','totem'])CDEFS[id].brief=CARD_BRIEF[id];
+}
+syncCardText();
 const RESNAME={wood:'木',stone:'石',crys:'晶'};
 const RESCOL={wood:'#e0b070',stone:'#b9c4c9',crys:'#57e6ff'};
+const manaLabel=(full=false)=>isMage()?(full?'法力':'法'):(full?'雾能':'雾');
 const costStr=def=>{
   const parts=[];
-  if(def.mana)parts.push(effManaCost(def)+(isMage()?'法':'雾'));
+  if(def.mana)parts.push(effManaCost(def)+manaLabel());
   for(const k of Object.keys(def.cost||{}))parts.push(def.cost[k]+RESNAME[k]);
   return parts.length?parts.join(' '):'免费';
 };
 const costHtml=(def,compact=false)=>{
   const parts=[];
   if(def.mana){
-    const manaName=isMage()?'法力':'雾能';
     parts.push(compact
-      ?`<b class="mana" data-mana="1" title="${effManaCost(def)}${manaName}" style="color:#8fb8ff">${svg(isMage()?'wick':'fog',12)}${effManaCost(def)}</b>`
-      :`<b class="mana" data-mana="1" style="color:#8fb8ff">${effManaCost(def)}${isMage()?'法':'雾'}</b>`);
+      ?`<b class="mana" data-mana="1" title="${effManaCost(def)}${manaLabel(true)}" style="color:#8fb8ff">${svg(isMage()?'wick':'fog',12)}${effManaCost(def)}</b>`
+      :`<b class="mana" data-mana="1" style="color:#8fb8ff">${effManaCost(def)}${manaLabel()}</b>`);
   }
   for(const k of Object.keys(def.cost||{})){
     if(compact){
@@ -196,7 +209,7 @@ const TALENT_TUNE={
   t_firemaster:{dmg:.15,burn:.20},
   t_frostmaster:{dmg:.15,chillDur:.4},
   t_arcanemaster:{dmg:.15},
-  t_manadmg:{overflow:.15},
+  t_manadmg:{overflow:.15,threshold:.8},
   t_resonance:{per:.05,max:5},
   t_shatter:{freeze:.30,chill:.15},
   t_charge:{per:.02,max:10}, // 原 t_hastecharge 的充能层数上限
