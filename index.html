@@ -90,6 +90,11 @@
         <h1 id="gameTitle">雾海方舟</h1>
         <div id="gameSub">孤灯不灭</div>
       </div>
+      <div id="saveWarn" class="saveWarn" hidden>
+        <b>存档异常</b>
+        <span id="saveWarnText"></span>
+        <button id="saveWarnAck" aria-label="知道了">知道了</button>
+      </div>
       <div class="menuFoot">
         <button id="startBtn">开始</button>
         <button id="btnContinue">继续</button>
@@ -180,14 +185,31 @@
 
 <div class="overlay" id="pauseOv" role="dialog" aria-modal="true">
   <div class="scrim"></div>
-  <div class="modalBox">
-    <h2>雾海静止</h2>
-    <div class="msub"></div>
-    <button class="mBtn primary" id="btnResume">继续</button>
-    <button class="mBtn book" id="btnSave">存档</button>
-    <button class="mBtn book" id="btnCodexPause">图鉴</button>
-    <button class="mBtn" id="btnRestart">重新开始</button>
-    <button class="mBtn" id="btnToTitle">返回标题</button>
+  <div class="modalBox pausePanel">
+    <div class="pausePages" id="pausePages">
+      <section class="pausePage" data-pg="main">
+        <h2>暂停</h2>
+        <button class="mBtn primary" id="btnResume">继续</button>
+        <button class="mBtn" id="btnSave">存档</button>
+        <button class="mBtn" id="btnCodexPause">图鉴</button>
+        <button class="mBtn" id="btnRestart">重新开始</button>
+        <button class="mBtn" id="btnToTitle">返回标题</button>
+      </section>
+      <section class="pausePage" data-pg="slots">
+        <h2>存档位</h2>
+        <div class="msub" id="pauseSlotSub">点卡片展开操作</div>
+        <div id="pauseSlotList"></div>
+        <button class="mBtn ghost" id="btnPauseSlotBack">返回</button>
+      </section>
+      <section class="pausePage" data-pg="confirm">
+        <div class="confirmPage">
+          <h2 id="pauseCfmTitle"></h2>
+          <div class="msub" id="pauseCfmSub"></div>
+          <button class="mBtn primary" id="pauseCfmYes">确认</button>
+          <button class="mBtn" id="pauseCfmNo">取消</button>
+        </div>
+      </section>
+    </div>
   </div>
 </div>
 
@@ -214,6 +236,16 @@
     <div id="slotList"></div>
     <button class="mBtn" id="slotDelete">删除存档</button>
     <button class="mBtn" id="slotBack">返回</button>
+  </div>
+</div>
+
+<div class="overlay" id="confirmOv" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+  <div class="scrim"></div>
+  <div class="modalBox confirmBox">
+    <h2 id="confirmTitle"></h2>
+    <div class="msub" id="confirmSub"></div>
+    <button class="mBtn primary" id="confirmYes">确认</button>
+    <button class="mBtn" id="confirmNo">取消</button>
   </div>
 </div>
 

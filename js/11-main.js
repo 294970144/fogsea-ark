@@ -1,7 +1,7 @@
 'use strict';
 /* ---------------- 流程 ---------------- */
 let weaponPicker=null;
-const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','removeOv','swapOv','slotOv'];
+const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','removeOv','swapOv','slotOv','confirmOv'];
 function showOv(id,on){$(id).classList.toggle('show',on);}
 function closeOverlays(except){
   OVERLAYS.forEach(id=>{if(id!==except)showOv(id,false);});
@@ -56,7 +56,7 @@ function renderLoadList(focus=true){
       const acts=document.createElement('div');acts.className='slotActions';
       const bLoad=document.createElement('button');
       bLoad.className='slotAct load';bLoad.textContent='载入';
-      bLoad.addEventListener('click',e=>{e.stopPropagation();doLoadSlot(i);resetLoadUi();});
+      bLoad.addEventListener('click',e=>{e.stopPropagation();requestLoadSlot(i);resetLoadUi();});
       const bDel=document.createElement('button');
       bDel.className='slotAct del'+(loadDeleteArm?' arm':'');
       bDel.textContent=loadDeleteArm?'确认删除':'删除';
@@ -85,9 +85,60 @@ function startRun(){
   banner('第 1 日','拖动卡牌到地面筑防','');sfx('dawn');
   requestAnimationFrame(layoutHand);
 }
+/* 暂停面板翻页：main / slots / confirm，尺寸固定 */
+let pausePage='main',pauseBack='main',pauseCfm=null,pauseSlotOpen=null;
+function pauseGo(pg){
+  pausePage=pg;
+  const i=['main','slots','confirm'].indexOf(pg);
+  $('pausePages').style.transform=`translateX(-${i*100/3}%)`;
+}
+function pauseConfirm(title,sub,onYes,danger){
+  pauseCfm=onYes;pauseBack=pausePage;
+  $('pauseCfmTitle').textContent=title;$('pauseCfmSub').textContent=sub;
+  const yes=$('pauseCfmYes');yes.className='mBtn primary'+(danger?' danger':'');
+  $('pauseCfmTitle').classList.toggle('danger',!!danger);
+  pauseGo('confirm');sfx('ui');
+}
+function closePauseConfirm(accept){
+  const f=pauseCfm;pauseCfm=null;pauseGo(pauseBack);
+  if(accept&&f)f();
+}
+function renderPauseSlots(){
+  const row=$('pauseSlotList');row.innerHTML='';
+  slots.slots.forEach((s,i)=>{
+    const el=document.createElement('div');
+    el.className='slotCard pauseSlot'+(s?'':' empty')+(pauseSlotOpen===i?' open':'')+(slots.active===i?' active':'');
+    const mage=s&&s.snap&&s.snap.P&&s.snap.P.cls==='mage'?' · 法师':'';
+    const main=s?`第 ${s.day} 日 · ${s.phase==='night'?'雾潮':'白昼'}${mage}`:'空';
+    const meta=s?`<span class="slotMeta">夜 ${s.summary.nights} · 击杀 ${s.summary.kills} · 核心 ${s.summary.core}<br>${new Date(s.ts).toLocaleString('zh-CN')}</span>`:'';
+    el.innerHTML=`<span class="si">${i+1}</span><span class="sb"><b>${main}</b>${meta}</span>`;
+    if(s){
+      const mask=document.createElement('div');mask.className='smask';
+      const b1=document.createElement('button');b1.textContent='覆盖';
+      b1.addEventListener('click',e=>{e.stopPropagation();pauseConfirm('覆盖存档 '+(i+1)+'？','当前槽位的存档将被覆盖。',()=>{
+        if(doSaveSlot(i)){refreshContinue();pauseSlotOpen=null;renderPauseSlots();}
+      },true);});
+      const b2=document.createElement('button');b2.className='del';b2.textContent='删除';
+      b2.addEventListener('click',e=>{e.stopPropagation();pauseConfirm('删除存档 '+(i+1)+'？','该槽位的存档将被永久删除。',()=>{
+        if(deleteSlot(i)){toast('已删除存档 '+(i+1),'good');refreshContinue();pauseSlotOpen=null;renderPauseSlots();}
+      },true);});
+      mask.appendChild(b1);mask.appendChild(b2);el.appendChild(mask);
+      el.addEventListener('click',()=>{pauseSlotOpen=pauseSlotOpen===i?null:i;renderPauseSlots();sfx('ui');});
+    }else{
+      el.addEventListener('click',()=>{if(doSaveSlot(i)){refreshContinue();renderPauseSlots();}});
+    }
+    row.appendChild(el);
+  });
+}
+function pauseQuickSave(){
+  let i=slots.active;
+  if(i===null||!slots.slots[i])i=slots.slots.findIndex(s=>!s);
+  if(i<0){toast('三个存档位已满 · 点卡片覆盖','warn');return;}
+  if(doSaveSlot(i)){refreshContinue();renderPauseSlots();}
+}
 function pauseGame(){
   if(S.mode!=='play'||codexOpen)return;
-  S.mode='pause';endDrag();persist();showOv('pauseOv',true);sfx('ui');
+  S.mode='pause';endDrag();persist();pauseSlotOpen=null;pauseGo('main');showOv('pauseOv',true);sfx('ui');
 }
 function resumeGame(){if(S.mode!=='pause')return;S.mode='play';showOv('pauseOv',false);sfx('ui');}
 function skipToNight(){
@@ -195,6 +246,34 @@ function trapWeaponFocus(e){
   else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
 }
 
+/* ---------------- 通用确认框 ---------------- */
+let confirmAction=null,confirmPrevFocus=null;
+function askConfirm(opt){
+  if(confirmAction)closeConfirm(false);
+  confirmPrevFocus=document.activeElement;
+  confirmAction={onYes:opt.onYes||null,onNo:opt.onNo||null};
+  $('confirmTitle').textContent=opt.title||'确认';
+  $('confirmSub').textContent=opt.sub||'';
+  const yes=$('confirmYes'),no=$('confirmNo');
+  yes.textContent=opt.yes||'确认';
+  no.textContent=opt.no||'取消';
+  const box=$('confirmOv').querySelector('.confirmBox');
+  box.classList.toggle('danger',!!opt.danger);
+  yes.classList.toggle('danger',!!opt.danger);
+  showOv('confirmOv',true);
+  (opt.danger?no:yes).focus({preventScroll:true});
+  sfx('ui');
+}
+function closeConfirm(accept){
+  if(!confirmAction)return;
+  const a=confirmAction;confirmAction=null;
+  showOv('confirmOv',false);
+  if(accept&&a.onYes)a.onYes();
+  else if(!accept&&a.onNo)a.onNo();
+  if(confirmPrevFocus&&confirmPrevFocus.focus)confirmPrevFocus.focus({preventScroll:true});
+  confirmPrevFocus=null;
+}
+
 /* ---------------- 存档位 ---------------- */
 let slotUi=null,slotPick=null,slotDeleteArm=false,slotPrevMode='play';
 let loadExpanded=null,loadDeleteArm=false;
@@ -202,6 +281,13 @@ function resetLoadUi(){loadExpanded=null;loadDeleteArm=false;}
 
 function refreshContinue(){
   $('btnContinue').classList.toggle('noSave',!slots.slots.some(Boolean));
+  const warn=$('saveWarn');
+  if(!warn)return;
+  warn.hidden=!slots.corrupt;
+  if(slots.corrupt){
+    const reason=slots.corruptReason==='format'?'存档格式无法识别，已忽略。':'部分存档位损坏，已忽略损坏项。';
+    $('saveWarnText').textContent=reason+' 原始数据已留存备份，未覆盖。你可以继续游戏，旧档无法恢复。';
+  }
 }
 
 function makeSlot(){
@@ -215,16 +301,14 @@ function putSlot(i,slot){
   const arr=slots.slots.slice();arr[i]=slot;
   return persistSlots({v:SLOT_VER,active:i,slots:arr});
 }
-// 日初检查点：只覆盖当前活跃槽；满槽时先提示再覆盖最旧的一份
+// 日初检查点：只写活跃槽或空槽，三槽全满时拒绝覆盖，交由玩家手动选槽
 function autoSave(){
   if(!S.stats||['menu','prep','end','launch','over'].includes(S.mode))return false;
   let i=slots.active;
-  if(i===null||!slots.slots[i]){
-    i=slots.slots.findIndex(s=>!s);
-    if(i<0){
-      i=slots.slots.reduce((best,s,k,arr)=>s.ts<arr[best].ts?k:best,0);
-      toast('槽位已满 · 覆盖了最旧的存档','warn');
-    }
+  if(i===null||!slots.slots[i])i=slots.slots.findIndex(s=>!s);
+  if(i<0){
+    toast('三个存档位已满 · 按 K 手动选择要覆盖的存档位','warn');
+    return false;
   }
   return putSlot(i,makeSlot());
 }
@@ -250,6 +334,20 @@ function beginRun(){
   if(weaponPicker)return;
   if(slots.slots.every(Boolean))openSlots('new');else startRun();
 }
+// 有进行中的局才二次确认，主菜单无活动局时直接载入
+function requestLoadSlot(i){
+  const rec=slots.slots[i];
+  if(!rec){toast('该存档位为空','warn');return false;}
+  const live=S.stats&&['play','pause','slots','dawn','remove','swap'].includes(S.mode);
+  if(!live){doLoadSlot(i);return true;}
+  askConfirm({
+    title:'载入存档 '+(i+1)+'？',
+    sub:'当前这一局的进度将被覆盖，且无法撤销。若还没存档，先存档再载入更安全。',
+    yes:'仍然载入',no:'取消',danger:true,
+    onYes:()=>{doLoadSlot(i);}
+  });
+  return true;
+}
 function doLoadSlot(i){
   const rec=slots.slots[i];
   if(!rec){toast('该存档位为空','warn');return false;}
@@ -262,6 +360,7 @@ function doLoadSlot(i){
   UI.hud.classList.remove('hidden');UI.toasts.innerHTML='';clearHudCache();
   refreshRes();refreshStacks();syncHUD();renderHand();requestAnimationFrame(layoutHand);
   auPhase(S.phase==='night');
+  if(S.settled){showEnd(S.settled.win);return true;}
   if(S.mode==='dawn'){renderDawn();showOv('dawnOv',true);}
   banner(`第 ${S.day} 日 · 已读档`,'','');sfx('dawn');
   if(slots.active!==i)setActiveSlot(i);
@@ -297,7 +396,7 @@ function renderSlots(){
 function onSlotClick(i,occupied){
   if(slotUi==='load'){
     if(!occupied){toast('该存档位为空','warn');return;}
-    doLoadSlot(i);return;
+    requestLoadSlot(i);return;
   }
   if(!occupied||slotPick===i){
     if(slotUi==='new'){slots.active=i;closeSlots();startRun();return;}
@@ -369,9 +468,20 @@ $('btnSpeed').addEventListener('click',()=>{
   auInit();S.speed=S.speed===1?2:1;
   $('btnSpeed').textContent=S.speed+'×';$('btnSpeed').classList.toggle('warnState',S.speed===2);sfx('ui');});
 $('btnResume').addEventListener('click',resumeGame);
-$('btnSave').addEventListener('click',()=>openSlots('save'));
-$('btnRestart').addEventListener('click',openPrep);
-$('btnToTitle').addEventListener('click',toTitle);
+$('btnSave').addEventListener('click',()=>{pauseSlotOpen=null;renderPauseSlots();pauseGo('slots');sfx('ui');});
+$('btnPauseSlotBack').addEventListener('click',()=>{pauseGo('main');sfx('ui');});
+$('pauseCfmYes').addEventListener('click',()=>closePauseConfirm(true));
+$('pauseCfmNo').addEventListener('click',()=>closePauseConfirm(false));
+// 存档失败（三槽满且无活跃槽）时中止，不让承诺的"先存档"落空
+function savedThen(fn){
+  if(!autoSave()){
+    pauseSlotOpen=null;renderPauseSlots();pauseGo('slots');
+    toast('三个存档位已满 · 请先覆盖一个存档位','warn');return;
+  }
+  fn();
+}
+$('btnRestart').addEventListener('click',()=>pauseConfirm('重新开始？','先自动存档到当前存档位，再回到出航准备。',()=>savedThen(openPrep),true));
+$('btnToTitle').addEventListener('click',()=>pauseConfirm('返回标题？','当前进度会先自动存档到当前存档位。',()=>savedThen(toTitle),false));
 $('btnAgain').addEventListener('click',openPrep);
 $('btnTitle2').addEventListener('click',toTitle);
 $('btnEndless').addEventListener('click',()=>{auInit();continueEndless();});
@@ -385,6 +495,10 @@ $('btnPrepBack').addEventListener('click',toTitle);
 $('btnLoadBack').addEventListener('click',()=>{resetLoadUi();setMenuView('title');sfx('ui');});
 $('slotDelete').addEventListener('click',confirmDelete);
 $('slotBack').addEventListener('click',closeSlots);
+$('confirmYes').addEventListener('click',()=>closeConfirm(true));
+$('confirmNo').addEventListener('click',()=>closeConfirm(false));
+$('confirmOv').addEventListener('pointerdown',e=>{if(e.target.classList.contains('scrim'))closeConfirm(false);});
+$('saveWarnAck').addEventListener('click',()=>{ackCorrupt();refreshContinue();sfx('ui');});
 $('repairBtn').addEventListener('click',tryRepair);
 initRun();S.nightAmt=.55;refreshPrep();refreshStacks();setMenuView('title',false);refreshContinue();
 const resizeMenu=()=>{setMenuView($('menuPanel').dataset.view||'title',false);positionWeaponDrop();};

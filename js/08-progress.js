@@ -117,6 +117,31 @@ function awardEmbers(win){
   let e=st.nights*em.perNight+Math.floor(st.kills/em.killsDiv)+(win?em.winBonus:0);
   return Math.round(e*DIFFS[save.diff].ember);
 }
+// 写失败时回滚奖励且闸门不闭合可重试；清槽失败写墓碑槽，读档直接进结算防重复发奖
+function writeTombstone(settled){
+  if(slots.active===null||!slots.slots[slots.active])return false;
+  const snap=captureSnapshot();
+  snap.S.settled=settled;
+  const arr=slots.slots.slice();
+  arr[slots.active]={v:SLOT_VER,ts:Date.now(),day:S.day,phase:S.phase,
+    summary:{nights:S.stats.nights,kills:S.stats.kills,core:Math.ceil(core.hp)+'/'+core.max},snap};
+  return persistSlots({v:SLOT_VER,active:slots.active,slots:arr});
+}
+function finishSettle(prev,settled){
+  S.settled=settled;
+  if(!persist()){
+    save.embers=prev.embers;save.best.nights=prev.nights;save.best.kills=prev.kills;
+    if('wins' in prev)save.best.wins=prev.wins;
+    S.settled=null;
+    toast('结算写入失败 · 进度已保留，稍后重试','warn');
+    return null;
+  }
+  if(!clearActiveSlot()){
+    if(writeTombstone(settled))toast('存档位清理失败 · 已标记本局结束','warn');
+    else toast('结算异常 · 请检查浏览器存储','warn');
+  }
+  return S.settled;
+}
 // 胜负一旦确定即结算并写档；S.settled 同时是幂等闸门与展示快照
 function settle(win){
   if(S.settled)return S.settled;
@@ -127,21 +152,19 @@ function settle(win){
     const em=TUNE.ember;
     const delta=em.perNight*(st.nights-b.nights0)+Math.floor(st.kills/em.killsDiv)-Math.floor(b.kills0/em.killsDiv);
     const e=Math.round(delta*DIFFS[save.diff].ember);
+    const prev={embers:save.embers,nights:save.best.nights,kills:save.best.kills};
     save.embers+=e;
     save.best.nights=Math.max(save.best.nights,st.nights);
     save.best.kills=Math.max(save.best.kills,st.kills);
-    persist();clearActiveSlot(); // 本局已结束，清掉对应存档位
-    S.settled={win,embers:e,nights0:b.nights0,kills0:b.kills0,incremental:true};
-    return S.settled;
+    return finishSettle(prev,{win,embers:e,nights0:b.nights0,kills0:b.kills0,incremental:true});
   }
   const e=awardEmbers(win);
+  const prev={embers:save.embers,nights:save.best.nights,kills:save.best.kills,wins:save.best.wins};
   save.embers+=e;
   save.best.nights=Math.max(save.best.nights,st.nights);
   save.best.kills=Math.max(save.best.kills,st.kills);
   if(win)save.best.wins++;
-  persist();clearActiveSlot();
-  S.settled={win,embers:e,nights0:st.nights,kills0:st.kills};
-  return S.settled;
+  return finishSettle(prev,{win,embers:e,nights0:st.nights,kills0:st.kills});
 }
 function freezeBattle(){
   shots.length=0;warns.length=0;
@@ -168,6 +191,15 @@ let emberTimer=null;
 function showEnd(win){
   S.mode='end';
   if(!S.settled)settle(win); // 兜底：正常路径在判胜/判负瞬间已结算
+  if(!S.settled){
+    $('endTitle').textContent='结算未完成';
+    $('endTitle').className='lose';
+    $('endSub').textContent='浏览器存储写入失败，本次火种未发放。请返回标题后重试。';
+    $('statsGrid').innerHTML='';
+    $('emberGain').textContent='+0';$('emberTotal').textContent=`（库存 ${save.embers}）`;
+    $('btnEndless').style.display='none';
+    showOv('endOv',true);return;
+  }
   const e=S.settled.embers,realWin=S.settled.win,st=S.stats;
   $('endTitle').textContent=realWin?'方舟启航':'灯熄雾海';
   $('endTitle').className=realWin?'win':'lose';

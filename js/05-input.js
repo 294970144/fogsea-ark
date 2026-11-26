@@ -35,6 +35,11 @@ addEventListener('keydown',e=>{
     }else if(k==='tab')trapWeaponFocus(e);
     return;
   }
+  if(confirmAction){
+    if(k==='enter'){e.preventDefault();closeConfirm(true);}
+    else if(k==='escape'){e.preventDefault();closeConfirm(false);}
+    return;
+  }
   if(codexOpen){
     if(k==='escape'){e.preventDefault();closeCodex();}
     else if(k==='arrowdown'||k==='arrowup'){e.preventDefault();cxMove(k==='arrowdown'?1:-1);}
@@ -73,11 +78,19 @@ addEventListener('keydown',e=>{
     if(k==='escape'){if(S.aimUid)clearAim();else pauseGame();}
     if(k==='p')pauseGame();
     if(k==='m')setMuted(!save.muted);
-    if(k==='k')openSlots('save');
+    if(k==='k')pauseQuickSave();
   }else if(S.mode==='pause'){
-    if(k==='escape'||k==='p')resumeGame();
-    else if(k==='s')openSlots('save');
-    else cheatKey(k);
+    if(pausePage==='confirm'){
+      if(k==='enter'){e.preventDefault();closePauseConfirm(true);}
+      else if(k==='escape'){e.preventDefault();closePauseConfirm(false);}
+    }else if(pausePage==='slots'){
+      if(k==='escape'||k==='p'){e.preventDefault();pauseGo('main');}
+      else if(k==='s'){e.preventDefault();pauseQuickSave();}
+    }else{
+      if(k==='escape'||k==='p')resumeGame();
+      else if(k==='s'){pauseSlotOpen=null;renderPauseSlots();pauseGo('slots');}
+      else cheatKey(k);
+    }
   }
   else if(S.mode==='menu'&&k==='enter'&&e.target===document.body){e.preventDefault();openPrep();}
   else if(S.mode==='prep'){

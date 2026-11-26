@@ -270,6 +270,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   color:var(--amber);background:rgba(255,180,84,.08);border:1px solid rgba(255,180,84,.5);transition:all .15s}
 #btnContinue:hover{transform:translateY(-1px);border-color:var(--amber);background:rgba(255,180,84,.16);box-shadow:0 0 18px rgba(255,180,84,.22)}
 #btnContinue.noSave{opacity:.5}
+.saveWarn{margin-top:14px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,77,109,.5);
+  background:rgba(255,77,109,.1);font-size:12px;line-height:1.65;color:#ffc9d2;display:flex;
+  flex-direction:column;gap:5px;align-items:flex-start}
+.saveWarn[hidden]{display:none}
+.saveWarn b{color:var(--danger);font-size:13px;letter-spacing:1px}
+.saveWarn button{align-self:flex-end;padding:4px 14px;border-radius:8px;border:1px solid rgba(255,77,109,.5);
+  color:var(--danger);font-size:11px;font-weight:900}
+.saveWarn button:hover{background:rgba(255,77,109,.18)}
 #startBtn::after,#launchBtn::after{content:'';position:absolute;top:0;left:-80%;width:50%;height:100%;transform:skewX(-25deg);
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:shine 2.8s infinite}
 @keyframes shine{0%,60%{left:-80%}100%{left:130%}}
@@ -361,6 +369,36 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .mBtn.book{border-color:rgba(255,180,84,.45);color:var(--amber);background:rgba(255,180,84,.08)}
 .mBtn.book:hover{border-color:var(--amber);color:var(--amber);box-shadow:0 0 18px rgba(255,180,84,.3)}
 
+/* 暂停面板：三页翻页，尺寸固定 */
+.pausePanel{width:min(400px,92vw);height:424px;padding:0;overflow:hidden;display:block}
+.pausePages{display:flex;width:300%;height:100%;transition:transform .32s cubic-bezier(.2,.8,.2,1)}
+.pausePage{flex:0 0 33.3333%;width:33.3333%;height:100%;padding:22px 26px;overflow-y:auto;display:flex;flex-direction:column;justify-content:center}
+.pausePage h2{font-size:30px;letter-spacing:1px;margin-bottom:2px}
+.pausePage .mBtn{letter-spacing:2px}
+.pausePage h2.danger{color:var(--danger);text-shadow:0 0 18px rgba(255,77,109,.4)}
+.pausePage .mBtn.primary.danger{background:linear-gradient(135deg,#ff4d6d,#c93b57);color:#fff}
+.pausePage .mBtn.primary.danger:hover{color:#fff;box-shadow:0 6px 22px rgba(255,77,109,.5)}
+.pausePage .msub{margin:2px 0 12px}
+.mBtn.ghost{color:var(--dim2);border-color:transparent;background:none;margin-top:10px}
+.mBtn.ghost:hover{color:var(--cyan);border-color:var(--line);box-shadow:none}
+/* 存档位页：给定高面板内均匀分布，不挤压不溢出 */
+.pausePage[data-pg="slots"]{padding:22px 26px;display:flex;flex-direction:column}
+.pausePage[data-pg="slots"] h2{font-size:28px}
+.pausePage[data-pg="slots"] .msub{margin:2px 0 14px}
+#pauseSlotList{display:flex;flex-direction:column;gap:11px;flex:1;justify-content:center}
+#pauseSlotList .slotCard{padding:13px 14px}
+#pauseSlotList .slotMeta{font-size:10.5px;margin-top:4px;line-height:1.5}
+.pausePage[data-pg="slots"] .mBtn.ghost{flex:none;margin-top:14px}
+.pauseSlot{position:relative}
+.pauseSlot .smask{position:absolute;inset:0;display:none;align-items:center;justify-content:center;gap:10px;
+  padding:10px;background:rgba(6,18,26,.94);border-radius:12px}
+.pauseSlot.open .smask{display:flex}
+.pauseSlot .smask button{padding:8px 18px;border-radius:8px;border:1px solid var(--line2);
+  color:var(--mist);background:rgba(143,227,208,.08);font-size:12px;font-weight:900;cursor:pointer}
+.pauseSlot .smask button:hover{border-color:var(--amber);color:var(--amber)}
+.pauseSlot .smask button.del{border-color:rgba(255,77,109,.5);color:#ff8fa3;background:rgba(255,77,109,.1)}
+.pauseSlot .smask button.del:hover{border-color:var(--danger);color:#fff;background:var(--danger)}
+
 /* 存档位选择 */
 #slotOv{z-index:30}
 #slotOv .scrim{background:rgba(4,9,15,.82)}
@@ -380,6 +418,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .slotMeta{display:block;font-size:10.5px;color:var(--dim2);margin-top:4px;line-height:1.5}
 #slotDelete{margin-top:14px}
 #slotDelete:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 16px rgba(255,77,109,.2)}
+#confirmOv{z-index:34}
+#confirmOv .scrim{background:rgba(4,9,15,.86)}
+.confirmBox{width:min(420px,92vw)}
+.confirmBox h2{color:var(--amber);font-size:28px}
+.confirmBox.danger h2{color:var(--danger);text-shadow:0 0 18px rgba(255,77,109,.4)}
+.confirmBox .msub{line-height:1.7;margin-bottom:18px}
+.confirmBox .mBtn.primary.danger{background:linear-gradient(135deg,#ff4d6d,#c93b57);color:#fff}
+.confirmBox .mBtn.primary.danger:hover{box-shadow:0 6px 22px rgba(255,77,109,.5);color:#fff}
 /* 断点切换时立即应用按钮尺寸，让面板测到最终高度。 */
 #menuPanel button{transition-property:background,border-color,color,box-shadow,transform,opacity}
 #endOv .modalBox{width:min(460px,94vw)}

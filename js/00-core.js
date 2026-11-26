@@ -87,14 +87,27 @@ loadSave();
 
 /* ---------------- 单局存档槽（与局外元数据 arkmist_v3 完全隔离） ----------------
    约束：本段不得调用 rand/irand/Math.random，否则会打乱启动期随机序列。 */
-const SLOT_KEY='arkmist_slots_v1',SLOT_VER=1,SLOT_N=3,SLOT_FOE_CAP=44;
+const SLOT_KEY='arkmist_slots_v1',SLOT_BAD_KEY='arkmist_slots_bad_v1',SLOT_VER=1,SLOT_N=3,SLOT_FOE_CAP=44;
 const slots={v:SLOT_VER,active:null,slots:[null,null,null],corrupt:false};
+// 损坏原串单列备份，写回不抹证据
+function stashBadSlots(raw){
+  if(typeof raw!=='string'||!raw)return;
+  try{if(localStorage.getItem(SLOT_BAD_KEY)===null)localStorage.setItem(SLOT_BAD_KEY,raw);}catch(e){}
+}
 
 function _slotCardOK(c){return !!c&&typeof c==='object'&&Number.isInteger(c.uid)&&typeof c.id==='string';}
+// 摘要供列表渲染直接读取，需与 snap 一并校验，否则残缺档渲染时抛错白屏
+function _slotSummaryOK(m){
+  return !!m&&typeof m==='object'&&!Array.isArray(m)&&
+    Number.isInteger(m.nights)&&m.nights>=0&&
+    Number.isInteger(m.kills)&&m.kills>=0&&
+    typeof m.core==='string'&&/^\d+\/\d+$/.test(m.core);
+}
 function validateSlot(s){
   if(!s||typeof s!=='object'||Array.isArray(s)||s.v!==SLOT_VER)return false;
   if(!Number.isFinite(s.ts)||!Number.isInteger(s.day)||s.day<1||s.day>1e7)return false;
   if(s.phase!=='day'&&s.phase!=='night')return false;
+  if(!_slotSummaryOK(s.summary))return false;
   const n=s.snap;
   if(!n||typeof n!=='object'||Array.isArray(n))return false;
   if(!Number.isInteger(n.seed))return false;
@@ -117,14 +130,15 @@ function loadSlots(){
   let p=null;
   try{p=JSON.parse(raw);}catch(e){p=null;}
   if(!p||typeof p!=='object'||Array.isArray(p)||p.v!==SLOT_VER||!Array.isArray(p.slots)){
-    slots.corrupt=true;return;
+    slots.corrupt=true;slots.corruptReason='format';stashBadSlots(raw);return;
   }
   const arr=[null,null,null];
   for(let i=0;i<SLOT_N;i++){
     const s=p.slots[i];
     if(s===null||s===undefined)continue;
-    if(validateSlot(s))arr[i]=s;else slots.corrupt=true;
+    if(validateSlot(s))arr[i]=s;else{slots.corrupt=true;slots.corruptReason='slot';}
   }
+  if(slots.corrupt)stashBadSlots(raw);
   slots.slots=arr;
   slots.active=Number.isInteger(p.active)&&p.active>=0&&p.active<SLOT_N&&arr[p.active]?p.active:null;
 }
@@ -143,8 +157,13 @@ function persistSlots(next){
     }
     return false;
   }
-  slots.v=SLOT_VER;slots.active=payload.active;slots.slots=payload.slots;slots.corrupt=false;
+  slots.v=SLOT_VER;slots.active=payload.active;slots.slots=payload.slots;
   return true;
+}
+// 玩家确认后清除损坏标志与备份
+function ackCorrupt(){
+  slots.corrupt=false;slots.corruptReason='';
+  try{localStorage.removeItem(SLOT_BAD_KEY);}catch(e){}
 }
 function setActiveSlot(i){return persistSlots({v:SLOT_VER,active:i,slots:slots.slots.slice()});}
 function clearActiveSlot(){
