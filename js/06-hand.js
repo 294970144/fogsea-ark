@@ -179,7 +179,8 @@ function playCard(uid,tx,ty){
     builds.push({type:def.build,x:tx,y:ty,hp:b.hp,max:b.hp,r:b.r,cd:rand(.2,.8),ang:0,flash:0,pulse:0});
     bumpSeen('build',def.build);
     rebuildSolids();rebuildTileCost();fieldDirty=true;
-    puff(tx,ty,12,'#e0b070',2,.55,3);ring(tx,ty,'rgba(255,255,255,.7)',.2,1.1,.35);
+    if(fxOn())FX.cast(def.build,tx,ty);
+    else{puff(tx,ty,12,'#e0b070',2,.55,3);ring(tx,ty,'rgba(255,255,255,.7)',.2,1.1,.35);}
     sfx('build');
     DECK.discard.push(card);
   }else{
@@ -189,6 +190,7 @@ function playCard(uid,tx,ty){
   if(def.id==='expand'){
     DECK.max=Math.min(handCap(),DECK.max+1);
     floater(P.x,P.y,'手牌上限 '+DECK.max,'#ffb454',true);
+    if(fxOn())FX.cast('expand',P.x,P.y);
     if(DECK.max>=handCap()){purgeCard('expand');toast('手牌已达上限 '+handCap()+' · 扩容牌退场','good');}
     drawN(1);
   }
@@ -200,8 +202,11 @@ function applyInstant(def,tx,ty,overflow){
   if(def.kind==='class')return;
   if(def.id==='rain'||def.id==='mine'){
     const R=def.radius,col=def.id==='rain'?'rgba(255,209,102,.9)':'rgba(87,230,255,.9)';
-    ring(tx,ty,col,.2,R,.45);
-    puff(tx,ty,20,def.id==='rain'?'#ffd166':'#57e6ff',4,.6,3.4);
+    if(fxOn())FX.cast(def.id,tx,ty,{radius:R});
+    if(!fxOn()){
+      ring(tx,ty,col,.2,R,.45);
+      puff(tx,ty,20,def.id==='rain'?'#ffd166':'#57e6ff',4,.6,3.4);
+    }
     for(const f of foes){
       if(f.dead)continue;
       if(dist(tx,ty,f.x,f.y)<R+f.r){
@@ -213,23 +218,33 @@ function applyInstant(def,tx,ty,overflow){
     if(def.id==='mine')for(const n of nodes)if(n.alive&&dist(tx,ty,n.x,n.y)<R)hitNode(n);
     sfx(def.id==='rain'?'arrow':'boom');shake(def.id==='mine'?7:3);
   }else if(def.id==='spring'){
-    healPlayer(45);puff(P.x,P.y,16,'#6fe08a',2,.7,3);ring(P.x,P.y,'rgba(111,224,138,.8)',.2,1.5,.4);sfx('heal');
+    healPlayer(45);
+    if(fxOn())FX.cast('spring',P.x,P.y);
+    else{puff(P.x,P.y,16,'#6fe08a',2,.7,3);ring(P.x,P.y,'rgba(111,224,138,.8)',.2,1.5,.4);}
+    sfx('heal');
   }else if(def.id==='mend'){
     core.hp=Math.min(core.max,core.hp+def.coreHeal);
-    builds.forEach(b=>{b.hp=Math.min(b.max,b.hp+def.buildHeal);puff(b.x,b.y,4,'#ffb454',1.5,.4,2);});
+    builds.forEach(b=>{b.hp=Math.min(b.max,b.hp+def.buildHeal);if(!fxOn())puff(b.x,b.y,4,'#ffb454',1.5,.4,2);});
     rebuildTileCost();fieldDirty=true;
     floater(core.x,core.y,'+'+def.coreHeal,'#ffb454',true);
-    puff(core.x,core.y,16,'#ffb454',2,.7,3);sfx('repair');
+    if(fxOn())FX.cast('mend',core.x,core.y);
+    else puff(core.x,core.y,16,'#ffb454',2,.7,3);
+    sfx('repair');
   }else if(def.id==='ward'){
-    P.ifr=Math.max(P.ifr,4);ring(P.x,P.y,'rgba(143,227,208,.9)',.2,1.8,.5);
-    puff(P.x,P.y,18,'#8fe3d0',2,.7,3);floater(P.x,P.y,'无敌 4s','#8fe3d0',true);sfx('heal');
+    P.ifr=Math.max(P.ifr,4);
+    if(fxOn())FX.cast('ward',P.x,P.y);
+    else{ring(P.x,P.y,'rgba(143,227,208,.9)',.2,1.8,.5);puff(P.x,P.y,18,'#8fe3d0',2,.7,3);}
+    floater(P.x,P.y,'无敌 4s','#8fe3d0',true);sfx('heal');
   }else if(def.id==='tactic'){
     const n=drawN(2);floater(P.x,P.y,'抽 '+n+' 张','#c9a8ff',true);
+    if(fxOn())FX.cast('tactic',P.x,P.y);
     if(n<2&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
       offerSwap(Math.min(2-n,DECK.hand.length),'战术重整 · 手牌已满');
   }else if(def.id==='surge'){
-    gainMana(P.maxEn-P.en);P.dashCd=0;ring(P.x,P.y,'rgba(87,230,255,.9)',.2,1.6,.4);
-    puff(P.x,P.y,16,'#57e6ff',2.5,.6,3);sfx('nova');
+    gainMana(P.maxEn-P.en);P.dashCd=0;
+    if(fxOn())FX.cast('surge',P.x,P.y);
+    else{ring(P.x,P.y,'rgba(87,230,255,.9)',.2,1.6,.4);puff(P.x,P.y,16,'#57e6ff',2.5,.6,3);}
+    sfx('nova');
   }
 }
 /* 拆解 */
@@ -285,7 +300,9 @@ function confirmSalvage(id,rate){
   S.stats.played++;bumpSeen('play',sc.id);
   S.pendingSalvage=null;S.mode='play';S.handDirty=true;S.aimUid=null;
   showOv('removeOv',false);
-  puff(P.x,P.y,14,'#6fe08a',2.5,.6,3);sfx('salvage');
+  if(fxOn())FX.cast('salvage',P.x,P.y,{tier:CDEFS[sc.id].tier||5});
+  else puff(P.x,P.y,14,'#6fe08a',2.5,.6,3);
+  sfx('salvage');
 }
 function cancelSalvage(){S.pendingSalvage=null;S.mode='play';showOv('removeOv',false);}
 $('rmCancel').addEventListener('click',cancelSalvage);

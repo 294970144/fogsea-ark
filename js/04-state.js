@@ -31,6 +31,7 @@ function resetPlayer(){
 function initRun(){
   genWorld();
   builds=[];foes=[];shots=[];picks=[];parts=[];floats=[];slashes=[];ghosts=[];warns=[];
+  if(typeof FX!=='undefined')FX.clear();
   core.hp=core.max=TUNE.core.max;core.flash=0;core.beam=0;
   resetPlayer();
   res.wood=24+20*save.bless.stock;res.stone=14+20*save.bless.stock;res.crys=4;

@@ -13,6 +13,7 @@ const unproj=(sx,sy)=>[(sx/(TW/2)+sy/(TH/2))/2,(sy/(TH/2)-sx/(TW/2))/2];
 const $=id=>document.getElementById(id);
 const isTouch=matchMedia('(pointer:coarse)').matches||('ontouchstart' in window);
 const reduceMotion=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function fxOn(){return typeof FX!=='undefined'&&FX.on===true;}
 if(isTouch)document.body.classList.add('touch');
 let codexOpen=false,codexReturn='menu';
 

@@ -504,6 +504,7 @@ function render(){
   if(S.mode==='launch'&&S.launchT>1.6){ctx.fillStyle=`rgba(255,240,214,${Math.min(1,(S.launchT-1.6)/1)})`;ctx.fillRect(0,0,W,H);}
   drawDragArrow();
   renderMinimap();
+  if(typeof FX!=='undefined')FX.frame();
 }
 function renderMinimap(){
   mctx.setTransform(DPR,0,0,DPR,0,0);mctx.clearRect(0,0,124,124);

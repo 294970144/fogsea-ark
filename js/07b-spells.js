@@ -76,6 +76,7 @@ function becomeMage(){
   refreshStacks();
   toast('转职 · 法师','good');sfx('level');
   banner('法师','以法力驾驭元素','');
+  if(fxOn())FX.becomeMage();
   return true;
 }
 
@@ -155,11 +156,14 @@ function spellFx(def,tx,ty,elem,targets){
   const col=ELEMCOL[elem]||'#eef7f2';
   const cx=def.shape==='self'?P.x:tx,cy=def.shape==='self'?P.y:ty;
   const fxShape=elem==='fire'?'spark':elem==='frost'?'shard':elem==='arcane'?'rune':null;
-  if(def.shape==='global')ring(P.x,P.y,col,.2,4.2,.55);
-  else if(def.shape==='multi')ring(P.x,P.y,col,.2,1.3,.32);
-  else ring(cx,cy,col,.2,def.radius||1.5,.45);
-  puff(cx,cy,12,col,3,.55,3,0,fxShape);
-  if(def.shape==='multi')for(const f of (targets||[]))puff(f.x,f.y,5,col,2.2,.4,2,0,fxShape);
+  if(fxOn())FX.spell(def,tx,ty,elem,targets);
+  if(!fxOn()){
+    if(def.shape==='global')ring(P.x,P.y,col,.2,4.2,.55);
+    else if(def.shape==='multi')ring(P.x,P.y,col,.2,1.3,.32);
+    else ring(cx,cy,col,.2,def.radius||1.5,.45);
+    puff(cx,cy,12,col,3,.55,3,0,fxShape);
+    if(def.shape==='multi')for(const f of (targets||[]))puff(f.x,f.y,5,col,2.2,.4,2,0,fxShape);
+  }
   if((def.mana||0)>=45)shake(4);
   sfx(elem==='fire'?'fire':elem==='frost'?'frost':elem==='arcane'?'arcane':'cast');
 }
@@ -178,6 +182,7 @@ function castSpell(def,tx,ty,overflow=isMage()&&P.en>P.maxEn*.8){
     if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),crit,{elem});
     if(def.status&&!f.dead)applyElement(f,elem,def.status.n,def.status.kind);
     else if(def.id==='sp_flamedetonate'){
+      if(fxOn())FX.detonate(f.x,f.y,f.burnStacks||0);
       triggerElementReaction(f,elem);
       f.lastElem=elem;f.lastElemT=S.combatT;
       f.burnStacks=0;f.burnT=0;f.burnTick=0;
@@ -228,8 +233,11 @@ function triggerElementStorm(){
     damageFoe(f,TALENT_TUNE.t_storm.dmg,0,false,{noKnock:true});
     if(!f.dead)applyElement(f,elem,1);
   }
-  ring(P.x,P.y,'rgba(180,140,255,.9)',.3,5.2,.65);
-  puff(P.x,P.y,28,'#b48cff',5,.75,4,0,'rune');
+  if(fxOn())FX.storm(P.x,P.y);
+  if(!fxOn()){
+    ring(P.x,P.y,'rgba(180,140,255,.9)',.3,5.2,.65);
+    puff(P.x,P.y,28,'#b48cff',5,.75,4,0,'rune');
+  }
   shake(8);sfx('boom');
 }
 
@@ -288,8 +296,11 @@ function triggerReaction(f,rx,prev,elem){
       if(o===f||o.dead||dist(f.x,f.y,o.x,o.y)>=R+o.r)return;
       damageFoe(o,dmg*.5,Math.atan2(o.y-f.y,o.x-f.x),false,{noKnock:true});
     });
-    ring(f.x,f.y,'rgba(235,250,255,.9)',.2,R,.5);
-    puff(f.x,f.y,22,'#dffaff',4,.6,3,0,'soft');
+    if(fxOn())FX.reaction(f.x,f.y,'steam');
+    if(!fxOn()){
+      ring(f.x,f.y,'rgba(235,250,255,.9)',.2,R,.5);
+      puff(f.x,f.y,22,'#dffaff',4,.6,3,0,'soft');
+    }
     floater(f.x,f.y,'蒸汽',  '#dffaff',true);
     sfx('boom');shake(4);
   }else if(rx.id==='reso'){
@@ -302,8 +313,11 @@ function triggerReaction(f,rx,prev,elem){
       applyStatus(o,st,1);
       damageFoe(o,dmg*.5,Math.atan2(o.y-f.y,o.x-f.x),false,{noKnock:true});
     });
-    ring(f.x,f.y,'rgba(180,140,255,.9)',.2,R,.45);
-    puff(f.x,f.y,16,'#b48cff',3,.5,3,0,'rune');
+    if(fxOn())FX.reaction(f.x,f.y,'reso');
+    if(!fxOn()){
+      ring(f.x,f.y,'rgba(180,140,255,.9)',.2,R,.45);
+      puff(f.x,f.y,16,'#b48cff',3,.5,3,0,'rune');
+    }
     floater(f.x,f.y,'共鸣','#b48cff',true);
     sfx('nova');
   }
