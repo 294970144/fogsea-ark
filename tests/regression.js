@@ -795,6 +795,52 @@ testCase('R18_spell_weapons_skip_mage_transform', () => {
   });
 });
 
+testCase('R19_fx_degradation_contract', () => {
+  const scenario = `(()=>{
+    save.weapon='sword';initRun();S.mode='play';S.phase='day';
+    P.cls=null;P.crit=0;P.stacks={t_fusion:1};P.en=200;P.maxEn=200;
+    res.wood=99;res.stone=99;res.crys=99;foes.length=0;shots.length=0;
+    let bx=P.x+1,by=P.y;
+    for(let i=0;i<16;i++){const a=i/16*6.283185;const x=P.x+Math.cos(a)*1.6,y=P.y+Math.sin(a)*1.6;
+      if(walk(x,y)&&dist(x,y,P.x,P.y)>1&&!nodes.some(n=>n.alive&&dist(n.x,n.y,x,y)<.9)){bx=x;by=y;break;}}
+    const play=id=>{DECK.hand=[mkCard(id)];DECK.draw=[];DECK.discard=[];return playCard(DECK.hand[0].uid,id==='wall'?bx:P.x+1,id==='wall'?by:P.y);};
+    play('wall');play('expand');play('rain');play('spring');play('mend');play('ward');play('tactic');play('surge');
+    const sv=mkCard('salvage5');DECK.hand=[sv];beginSalvage(sv);confirmSalvage('wall');
+    becomeMage();
+    const mkFoe=()=>({type:'crawler',x:P.x+1,y:P.y,r:.3,hp:10000,max:10000,spd:0,dmg:6,xp:5,coreDmg:6,
+      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+      fireCd:99,spawnCd:99,stompCd:99,px:P.x+1,py:P.y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1,
+      burnStacks:0,burnT:0,burnTick:0,chillStacks:0,chillT:0,freezeT:0,markT:0,shockT:0,lastElem:null,lastElemT:-99,reactCd:0});
+    foes.push(mkFoe());rebuildFoeGrid();
+    castSpell(CDEFS.sp_emberburst,P.x+1,P.y);
+    const f=foes[0];f.hp=f.max=26;f.burnStacks=5;f.burnT=4;f.lastElem='frost';f.lastElemT=S.combatT;f.reactCd=0;
+    castSpell(CDEFS.sp_flamedetonate,f.x,f.y);
+    foes.length=0;foes.push(mkFoe());rebuildFoeGrid();
+    triggerElementStorm();
+    const g=foes[0];g.lastElem='frost';g.lastElemT=S.combatT;g.reactCd=0;applyElement(g,'fire',2);
+    g.lastElem='fire';g.lastElemT=S.combatT;g.reactCd=0;applyElement(g,'arcane',1);
+    render();
+    return JSON.stringify({
+      calls:typeof FX==='undefined'?[]:FX.calls,
+      state:{en:P.en,hp:Math.round(P.hp*1000),wood:res.wood,stone:res.stone,crys:res.crys,
+        hand:DECK.hand.map(c=>c.id),draw:DECK.draw.length,discard:DECK.discard.map(c=>c.id),
+        played:S.stats.played,builds:builds.length,max:DECK.max,dmg:Math.round((10000-foes[0].hp)*1000)}
+    });
+  })()`;
+  const stub = on => `FX={on:${on},calls:[],clear(){this.calls.push('clear')},frame(){this.calls.push('frame')},` +
+    `cast(id){this.calls.push('cast:'+id)},spell(){this.calls.push('spell')},detonate(){this.calls.push('detonate')},` +
+    `reaction(x,y,k){this.calls.push('reaction:'+k)},storm(){this.calls.push('storm')},becomeMage(){this.calls.push('mage')}}`;
+  const run = on => { const env = makeEnv(); if (on !== undefined) env.run(stub(on)); return j(env)(scenario); };
+  const none = run(undefined), off = run(false), on = run(true);
+  assert.deepEqual(none.calls, []);
+  assert.deepEqual(off.calls, ['clear', 'frame']);
+  const need = ['clear','cast:wall','cast:expand','cast:rain','cast:spring','cast:mend','cast:ward','cast:tactic',
+    'cast:surge','cast:salvage','mage','spell','detonate','storm','reaction:steam','reaction:reso','frame'];
+  for (const k of need) assert.ok(on.calls.includes(k), k);
+  assert.deepEqual(none.state, off.state);
+  assert.deepEqual(none.state, on.state);
+});
+
 testCase('R20_fire_spread_and_tree_yield', () => {
   const env = makeEnv();
   env.run(`save.weapon='flame';initRun();S.mode='play';P.crit=0;nodes.length=0;`);
