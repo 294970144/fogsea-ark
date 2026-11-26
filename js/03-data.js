@@ -195,7 +195,7 @@ function syncCardText(){
 }
 syncCardText();
 /* ---------------- 图鉴标签 ----------------
-   「能做什么」的筛选维度：字典与派生都在这，图鉴只渲染。
+   「能做什么」的能力维度：字典与派生都在这，图鉴只渲染每条记录自己的标签。
    新增卡牌/武器/刻印无需改图鉴，标签自动出现。 */
 const CX_TAGS=[
   // 归属组放最前：仅用于在「角色」栏内部切分武器与刻印（其余分类本身已是单一实体）
@@ -219,6 +219,7 @@ const CX_TAGS=[
   {id:'extra',name:'追加攻击',g:'func',col:'#c9a8ff'}
 ];
 const CX_TAG_IDS=CX_TAGS.map(t=>t.id);
+const CX_TAG_BY_ID=Object.fromEntries(CX_TAGS.map(t=>[t.id,t]));
 const STATUS_TAG={burn:'dot',chill:'control',freeze:'control',mark:'amp'};
 // 形态先判单体：single/multi 的 radius 是索敌半径，不是作用范围
 function cardTags(d){

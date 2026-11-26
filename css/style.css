@@ -552,24 +552,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .cxRelBtn svg{width:14px;height:14px}
 .cxRelBtn:hover{border-color:var(--cyan);color:var(--cyan);transform:translateY(-2px)}
 .cxFoot{flex:none;padding:9px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--dim2)}
-/* 标签筛选栏：独立一行，永不换行，窄屏横向滚动 */
-.cxTagBar{display:flex;align-items:center;gap:8px;padding:7px 20px;border-bottom:1px solid var(--line);flex:none}
-.cxTagLab{font-size:10px;font-weight:900;letter-spacing:2px;color:var(--dim2);flex:none}
-#cxTagFilters{display:flex;align-items:center;gap:6px;overflow-x:auto;flex:1;padding-bottom:2px;scrollbar-width:none}
-#cxTagFilters::-webkit-scrollbar{height:5px}
-.cxFTag{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:14px;flex:none;white-space:nowrap;
-  border:1px solid var(--line);font-size:11.5px;font-weight:700;color:var(--dim);transition:.15s}
-.cxFTag::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--tc,var(--line2));flex:none}
-.cxFTag:hover{color:var(--text);border-color:var(--line2)}
-.cxFTag.on{color:var(--cyan);border-color:var(--cyan);background:rgba(87,230,255,.13)}
-.cxFTag.on::before{background:var(--cyan)}
-.cxFTag[disabled]{opacity:.3;cursor:not-allowed}
-.cxFTag i{font-style:normal;font-size:9.5px;color:var(--dim2)}
-.cxFTag.on i{color:var(--cyan)}
-.cxFTagDiv{width:1px;height:14px;background:var(--line);flex:none;margin:0 2px}
-.cxTagClear{flex:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--line);color:var(--dim)}
-.cxTagClear:not([disabled]):hover{color:var(--danger);border-color:var(--danger)}
-.cxEmptyClear{margin-top:8px;font-size:11.5px;font-weight:700;color:var(--cyan);border:1px solid var(--cyan);border-radius:12px;padding:3px 12px}
+/* 标签：详情页只读展示 */
+#cxEntryTags{display:flex;gap:6px;flex-wrap:wrap}
+.cxETag{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:12px;
+  background:rgba(7,15,22,.62);border:1px solid var(--line);font-size:11.5px;font-weight:700;color:var(--mist)}
+.cxETag::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--tc,var(--line2));flex:none}
 
 #touchUI{position:fixed;inset:0;z-index:12;pointer-events:none;display:none}
 body.touch #touchUI{display:block}
@@ -697,7 +684,6 @@ body.touch .kb-hint{display:none}
   #codexPanel{height:92vh;width:96vw}
   .cxHead{padding:11px 14px}.cxHead h2{font-size:23px}.cxProg{width:88px}
   .cxTools{padding:8px 14px}.cxSearchWrap{width:100%}
-  .cxTagBar{padding:6px 14px;gap:6px}.cxTagLab{display:none}.cxFTag{padding:7px 12px}
   .cxBody{grid-template-columns:1fr;grid-template-rows:minmax(92px,30%) minmax(0,1fr)}
   #cxList{border-right:none;border-bottom:1px solid var(--line)}
   #cxDetail{padding:13px}.cxVis{width:112px;height:112px}

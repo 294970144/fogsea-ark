@@ -327,29 +327,6 @@ const CODEX=[
 ];
 const CX_BY_ID={};CODEX.forEach(e=>CX_BY_ID[e.id]=e);
 let cxCat='all',cxQuery='',cxFiltered=[],cxSel=null,cxT=0;
-const cxTagSel=new Set();
-// 命中数按「当前分类 ∩ 其他已选标签」统计，0 命的未选标签置灰，堵住必然空组合
-function cxTagCount(id){
-  const others=[...cxTagSel].filter(x=>x!==id);
-  return CODEX.filter(e=>{
-    if(cxCat!=='all'&&e.cat!==cxCat)return false;
-    const et=e.tags||[];
-    return et.includes(id)&&others.every(t=>et.includes(t));
-  }).length;
-}
-function cxBuildTags(){
-  const wrap=$('cxTagFilters');let html='',prev='';
-  for(const t of CX_TAGS){
-    if(prev&&t.g!==prev)html+='<span class="cxFTagDiv"></span>';prev=t.g;
-    const on=cxTagSel.has(t.id),n=cxTagCount(t.id);
-    html+=`<button class="cxFTag${on?' on':''}" data-t="${t.id}" style="--tc:${t.col}"${!on&&!n?' disabled':''}>${t.name}<i>${n}</i></button>`;
-  }
-  wrap.innerHTML=html;
-  wrap.querySelectorAll('.cxFTag').forEach(el=>el.addEventListener('click',()=>cxToggleTag(el.dataset.t)));
-  $('cxTagClear').disabled=!cxTagSel.size;
-}
-function cxToggleTag(id){cxTagSel.has(id)?cxTagSel.delete(id):cxTagSel.add(id);sfx('page');cxBuildTags();cxRenderList();}
-function cxClearTags(){if(!cxTagSel.size)return;cxTagSel.clear();sfx('page');cxBuildTags();cxRenderList();}
 const cxCv=$('cxPreview'),cxCtx=cxCv.getContext('2d');
 let cxW=168,cxH=168;
 function sizeCodexCv(){
@@ -371,20 +348,16 @@ function cxBuildCats(){
   }).join('');
   wrap.querySelectorAll('.cxCat').forEach(el=>el.addEventListener('click',()=>{
     cxCat=el.dataset.c;sfx('page');cxBuildCats();cxRenderList();}));
-  cxBuildTags();
 }
 function cxRenderList(){
-  const q=cxQuery.trim().toLowerCase(),tags=[...cxTagSel];
+  const q=cxQuery.trim().toLowerCase();
   cxFiltered=CODEX.filter(e=>{
     if(cxCat!=='all'&&e.cat!==cxCat)return false;
-    if(tags.length){const et=e.tags||[];for(const t of tags)if(!et.includes(t))return false;}
     if(!q)return true;
     return (e.name+' '+e.desc).toLowerCase().includes(q);
   });
   const list=$('cxList');
-  if(!cxFiltered.length)list.innerHTML=tags.length
-    ?`<div class="cxEmpty">没有同时含这 ${tags.length} 个标签的条目<br><button class="cxEmptyClear">清除标签</button></div>`
-    :'<div class="cxEmpty">雾中没有这条记录<br>换个关键词试试</div>';
+  if(!cxFiltered.length)list.innerHTML='<div class="cxEmpty">雾中没有这条记录<br>换个关键词试试</div>';
   else{
     list.innerHTML=cxFiltered.map(e=>{
       const bdg=e.badge?e.badge():'';
@@ -395,12 +368,10 @@ function cxRenderList(){
     }).join('');
     list.querySelectorAll('.cxItem').forEach(el=>el.addEventListener('click',()=>cxSelect(el.dataset.id,true)));
   }
-  list.querySelectorAll('.cxEmptyClear').forEach(el=>el.addEventListener('click',cxClearTags));
   if(!cxFiltered.some(e=>e.id===cxSel))cxSelect(cxFiltered.length?cxFiltered[0].id:null,false);
   else cxSelect(cxSel,false);
   const track=Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length+SIGIL_IDS.length,got=cxSeenCount();
-  const tagTxt=cxTagSel.size?` · 已选 ${cxTagSel.size} 个标签`:'';
-  $('cxCount').textContent=`共 ${CODEX.length} 条 · 显示 ${cxFiltered.length} 条 · 已记录 ${got}/${track}${tagTxt}`;
+  $('cxCount').textContent=`共 ${CODEX.length} 条 · 显示 ${cxFiltered.length} 条 · 已记录 ${got}/${track}`;
   $('cxProgFill').style.width=clamp(got/track,0,1)*100+'%';
 }
 function cxSelect(id,scroll){
@@ -408,7 +379,8 @@ function cxSelect(id,scroll){
   document.querySelectorAll('.cxItem').forEach(el=>el.classList.toggle('on',el.dataset.id===id));
   const e=id?CX_BY_ID[id]:null;
   if(!e){$('cxName').textContent='—';$('cxTags').innerHTML='';$('cxDesc').textContent='';
-    $('cxStats').innerHTML='';$('cxRel').innerHTML='';cxCv.style.display='none';$('cxIcon').innerHTML='';return;}
+    $('cxStats').innerHTML='';$('cxRel').innerHTML='';$('cxEntryTags').innerHTML='';$('cxTagT').style.display='none';
+    cxCv.style.display='none';$('cxIcon').innerHTML='';return;}
   $('cxName').textContent=e.name;
   const cn=(CX_CATS.find(c=>c.id===e.cat)||{}).name||'';
   $('cxTags').innerHTML=`<span class="cxTag" style="color:${e.color};border-color:${e.color}66">${cn}</span>`+
@@ -421,11 +393,13 @@ function cxSelect(id,scroll){
     :'<span style="font-size:12px;color:var(--dim2)">无</span>';
   $('cxRel').querySelectorAll('.cxRelBtn').forEach(el=>el.addEventListener('click',()=>{
     const t=CX_BY_ID[el.dataset.id];
-    if(cxTagSel.size){cxTagSel.clear();cxBuildTags();}
     if(cxCat!=='all'&&t.cat!==cxCat){cxCat='all';cxBuildCats();}
     if(cxQuery){cxQuery='';$('cxSearch').value='';}
     cxRenderList();cxSelect(el.dataset.id,true);sfx('page');
   }));
+  const tags=(e.tags||[]).map(t=>CX_TAG_BY_ID[t]).filter(Boolean);
+  $('cxTagT').style.display=tags.length?'':'none';
+  $('cxEntryTags').innerHTML=tags.map(t=>`<span class="cxETag" style="--tc:${t.col}">${t.name}</span>`).join('');
   if(e.sprite){cxCv.style.display='block';$('cxIcon').innerHTML='';sizeCodexCv();}
   else{cxCv.style.display='none';
     $('cxIcon').innerHTML=`<div style="color:${e.color};filter:drop-shadow(0 0 18px ${e.color}88)">${svg(e.icon,72)}</div>`;}
@@ -496,7 +470,6 @@ function closeCodex(){
 $('cxClose').addEventListener('click',closeCodex);
 $('codexOv').addEventListener('pointerdown',e=>{if(e.target.classList.contains('scrim'))closeCodex();});
 $('cxSearch').addEventListener('input',e=>{cxQuery=e.target.value;cxRenderList();});
-$('cxTagClear').addEventListener('click',cxClearTags);
 $('btnCodexMenu').addEventListener('click',()=>openCodex('menu'));
 $('btnCodexPause').addEventListener('click',()=>openCodex('pause'));
 

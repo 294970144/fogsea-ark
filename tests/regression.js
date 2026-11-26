@@ -1159,31 +1159,35 @@ testCase('R23_codex_sigil_and_seen_source', () => {
   assert.equal(seen.defaults, true);
 });
 
-testCase('R24_codex_tag_filter_and_contract', () => {
+testCase('R24_codex_tag_derivation_and_display', () => {
   const env = makeEnv();
   const out = j(env)(`(()=>{
     const byId=id=>CODEX.find(e=>e.id===id);
     const cats=CX_CATS.map(c=>c.id),tagIds=CX_TAGS.map(t=>t.id);
     const cover=CARD_IDS.every(id=>Array.isArray(byId('c_'+id).tags));
     const untagged=CARD_IDS.filter(id=>!byId('c_'+id).tags.length);
-    const tag=(id,k)=>byId('c_'+id).tags.includes(k);
     const s={kindling:byId('c_sp_kindling').tags,arcneedle:byId('c_sp_arcaneneedle').tags,
       mine:byId('c_mine').tags,tactic:byId('c_tactic').tags,wall:byId('c_wall').tags,
       flame:byId('w_flame').tags,sword:byId('w_sword').tags,keen:byId('s_keen').tags};
     const deadTag=tagIds.filter(t=>!CODEX.some(e=>(e.tags||[]).includes(t)));
+    const unknown=[...new Set([].concat(...CODEX.map(e=>(e.tags||[]).filter(t=>!CX_TAG_BY_ID[t]))))];
+    const dup=CODEX.filter(e=>new Set(e.tags||[]).size!==(e.tags||[]).length).map(e=>e.id);
     const ownW=CODEX.filter(e=>(e.tags||[]).includes('weapon')).length;
     const ownS=CODEX.filter(e=>(e.tags||[]).includes('sigil')).length;
     const tplInCodex=!!byId('c_sp_fireball');
     cxCat='all';cxQuery='';cxRenderList();
-    const all=cxFiltered.length;
-    cxTagSel.clear();['fire','aoe'].forEach(t=>cxTagSel.add(t));cxRenderList();const n2=cxFiltered.length;
-    const label=document.getElementById('cxCount').textContent;
-    cxTagSel.add('single');cxRenderList();const n3=cxFiltered.length;
-    const emptyHtml=document.getElementById('cxList').innerHTML;
-    cxCat='term';cxTagSel.clear();cxTagSel.add('heal');cxRenderList();const termHeal=cxFiltered.length;
-    cxTagSel.clear();cxCat='all';cxRenderList();
+    const all=cxFiltered.length,labelAll=document.getElementById('cxCount').textContent;
+    cxCat='card';cxRenderList();const cards=cxFiltered.length;
+    cxCat='all';cxQuery='灼烧';cxRenderList();const hit=cxFiltered.length;cxQuery='';cxRenderList();
+    cxSelect('w_flame',false);
+    const etHtml=document.getElementById('cxEntryTags').innerHTML;
+    const titleOn=document.getElementById('cxTagT').style.display;
+    cxSelect('crawler',false);
+    const etNone=document.getElementById('cxEntryTags').innerHTML;
+    const titleOff=document.getElementById('cxTagT').style.display;
+    cxSelect('w_flame',false);
     return JSON.stringify({cats,tagIds,cover,untagged,s,deadTag,ownW,ownS,wLen:WEAPON_IDS.length,sLen:SIGIL_IDS.length,
-      tplInCodex,all,n2,n3,label,emptyHtml,termHeal,
+      tplInCodex,unknown,dup,all,cards,cardsLen:CARD_IDS.length,labelAll,hit,etHtml,titleOn,etNone,titleOff,
       badge:typeof byId('s_keen').badge,catOfSigil:byId('s_keen').cat});
   })()`);
   // 1) 分类恢复 8 项，刻印不再单独成类
@@ -1194,6 +1198,9 @@ testCase('R24_codex_tag_filter_and_contract', () => {
   assert.equal(out.tagIds.length, 18);
   assert.equal(new Set(out.tagIds).size, 18);
   assert.deepEqual(out.deadTag, []);
+  // 条目上的标签必须能在字典里查到，且同一标签不重复挂
+  assert.deepEqual(out.unknown, []);
+  assert.deepEqual(out.dup, []);
   // 归属标签只命中对应实体
   assert.equal(out.ownW, out.wLen);
   assert.equal(out.ownS, out.sLen);
@@ -1214,15 +1221,18 @@ testCase('R24_codex_tag_filter_and_contract', () => {
   assert.deepEqual(out.s.keen, ['amp', 'sigil']);
   // 6) 武器攻击模板不进图鉴
   assert.equal(out.tplInCodex, false);
-  // 7) AND 组合确实收窄（火+范围=5 条，再加单体归零）；术语不挂标签
+  // 7) 标签只做展示，不再参与筛选：分类与搜索仍是唯二过滤条件
   assert.equal(out.all, 101);
-  assert.equal(out.n2, 5);
-  assert.equal(out.n3, 0);
-  assert.ok(out.label.includes('已选 2 个标签'));
-  assert.ok(/已记录 \d+\/\d+/.test(out.label));
-  assert.ok(out.emptyHtml.includes('没有同时含这 3 个标签的条目'));
-  assert.ok(out.emptyHtml.includes('cxEmptyClear'));
-  assert.equal(out.termHeal, 0);
+  assert.equal(out.cards, out.cardsLen);
+  assert.ok(!out.labelAll.includes('已选'));
+  assert.ok(/已记录 \d+\/\d+/.test(out.labelAll));
+  assert.ok(out.hit > 0);
+  // 8) 详情页标签：有标签才显示小节标题，无标签整块隐藏
+  assert.equal((out.etHtml.match(/cxETag/g) || []).length, 5);
+  assert.ok(out.etHtml.includes('持续伤害') && out.etHtml.includes('武器'));
+  assert.equal(out.titleOn, '');
+  assert.equal(out.etNone, '');
+  assert.equal(out.titleOff, 'none');
 });
 
 function main() {
