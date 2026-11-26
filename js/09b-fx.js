@@ -1,13 +1,14 @@
 'use strict';
-/* ---------------- WebGL 特效叠加层 ----------------
-   透明 three.js 画布叠在 2D 战斗画布之上；世界锚定粒子通过 uM/uN
-   两个仿射 uniform 在 vertex shader 内投影，相机/震屏零 CPU 跟随。
-   由 render() 尾部 FX.frame() 驱动，无独立 rAF、无 setTimeout。 */
-const FX={on:false,q:1,time:0,_detN:0,_magePending:false};
+/* ---------------- WebGPU 优先 / WebGL 回退特效叠加层 ----------------
+   透明画布叠在 2D 战斗画布之上；世界锚定粒子通过仿射 uniform 在
+   vertex shader 内投影，相机/震屏零 CPU 跟随。WebGPU 不可用时回退
+   原 three.js WebGL 路径。由 render() 尾部 FX.frame() 驱动。 */
+const FX={on:false,q:1,time:0,_detN:0,_magePending:false,backend:'none'};
 
 (function(){
 const ADD=6144,ALPHA=2048,QUADS=16;
-let renderer=null,scene=null,camera=null,atlasTex=null,veil=null;
+let renderer=null,scene=null,camera=null,atlasTex=null,atlasCanvas=null,veil=null;
+let gpu=null;
 let pools=null,quads=[],projs=[],events=[];
 let lastNow=0,wasActive=false,emaMs=16,slowT=0,deadT=0,veilOff=false;
 let vw=0,vh=0,vdpr=1;
@@ -67,7 +68,340 @@ function makeAtlas(){
     g.beginPath();g.moveTo(64,118);g.lineTo(51,88);g.lineTo(77,88);g.closePath();g.fill();
     g.beginPath();g.moveTo(62,16);g.lineTo(49,8);g.lineTo(49,26);g.lineTo(62,34);g.closePath();g.fill();
     g.beginPath();g.moveTo(66,16);g.lineTo(79,8);g.lineTo(79,26);g.lineTo(66,34);g.closePath();g.fill();});
+  atlasCanvas=c;
   const t=new THREE.CanvasTexture(c);t.flipY=false;return t;
+}
+
+/* ---------------- WebGPU 后端（主路径） ----------------
+   数据布局与 WGSL 严格对齐：
+   Particle = 96 字节 / 24 float；Uniforms = 112 字节 / 28 float。 */
+const PART_STRIDE=96,QUAD_STRIDE=112;
+const COMMON_WGSL=`
+struct Globals {
+  viewport: vec4f,
+  camera: vec4f,
+  origin: vec4f,
+  time: f32,
+  pad0: f32,
+  pad1: f32,
+  pad2: f32,
+};
+@group(0) @binding(0) var<uniform> G: Globals;
+fn screen(p: vec2f) -> vec2f {
+  return vec2f(p.x / G.viewport.x * 2.0 - 1.0, 1.0 - p.y / G.viewport.y * 2.0);
+}
+fn hash21(p0: vec2f) -> f32 {
+  var p = fract(p0 * vec2f(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+fn vnoise(p0: vec2f) -> f32 {
+  let i = floor(p0);
+  let f = fract(p0);
+  let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2f(1.0, 0.0)), u.x),
+             mix(hash21(i + vec2f(0.0, 1.0)), hash21(i + vec2f(1.0, 1.0)), u.x), u.y);
+}
+fn fbm(p0: vec2f) -> f32 {
+  var p = p0;
+  var v = 0.0;
+  var a = 0.5;
+  for (var i = 0; i < 3; i++) {
+    v += a * vnoise(p);
+    p *= 2.1;
+    a *= 0.5;
+  }
+  return v;
+}
+const corners = array<vec2f, 6>(
+  vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0),
+  vec2f(0.0, 1.0), vec2f(1.0, 0.0), vec2f(1.0, 1.0));
+`;
+const SPRITE_VERT_WGSL=COMMON_WGSL+`
+struct Particle {
+  world: vec2f,
+  vel: vec2f,
+  phys: vec4f,
+  born: vec2f,
+  padA: vec2f,
+  look: vec4f,
+  col: vec3f,
+  flags: f32,
+  padB: vec3f,
+  padC: f32,
+};
+@group(0) @binding(1) var<storage, read> particles: array<Particle>;
+struct Out {
+  @builtin(position) pos: vec4f,
+  @location(0) uv: vec2f,
+  @location(1) col: vec3f,
+  @location(2) alpha: f32,
+  @location(3) shape: f32,
+};
+@vertex fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
+  let p = particles[ii];
+  let age = G.time - p.born.x;
+  let k = age / p.born.y;
+  var o: Out;
+  o.col = p.col;
+  o.shape = p.look.y;
+  o.alpha = 0.0;
+  if (age < 0.0 || k > 1.0 || k < 0.0) {
+    o.pos = vec4f(2.0, 2.0, 2.0, 1.0);
+    o.uv = vec2f(0.0);
+    return o;
+  }
+  let damp = select(age, (1.0 - exp(-p.phys.w * age)) / max(p.phys.w, 0.0001), p.phys.w > 0.0);
+  let w = p.world + p.vel * damp;
+  let h = p.phys.x + p.phys.y * age - 0.5 * p.phys.z * age * age;
+  let isScreen = p.flags % 2.0 > 0.5;
+  var scr: vec2f;
+  var sz: f32;
+  if (isScreen) {
+    scr = w;
+    sz = p.look.x;
+  } else {
+    scr = vec2f(dot(w, G.camera.xy) + G.origin.x, dot(w, G.camera.zw) + G.origin.y);
+    scr.y -= h * G.origin.z;
+    sz = p.look.x * G.origin.z;
+  }
+  let hold = step(1.5, p.flags);
+  let grow = mix(smoothstep(0.0, 0.07, k), smoothstep(0.0, 0.02, k), hold);
+  let fade = mix(1.0 - smoothstep(0.5, 1.0, k), 1.0 - smoothstep(0.86, 1.0, k), hold);
+  o.alpha = fade * grow;
+  let rot = p.look.z * 6.28318 + p.look.w * age;
+  let size = max(sz * mix(0.35 + 0.65 * fade, 1.0, hold) * grow, 0.0) * G.origin.w;
+  let q = corners[vi] - vec2f(0.5);
+  let c = cos(rot);
+  let s = sin(rot);
+  let r = vec2f(c * q.x - s * q.y, s * q.x + c * q.y);
+  o.pos = vec4f(screen(scr + r * size), 0.0, 1.0);
+  o.uv = corners[vi];
+  return o;
+}`;
+const SPRITE_FRAG_WGSL=COMMON_WGSL+`
+@group(0) @binding(2) var atlas: texture_2d<f32>;
+@group(0) @binding(3) var smp: sampler;
+struct Out {
+  @location(0) uv: vec2f,
+  @location(1) col: vec3f,
+  @location(2) alpha: f32,
+  @location(3) shape: f32,
+};
+@fragment fn fs(i: Out) -> @location(0) vec4f {
+  if (i.alpha < 0.003) { discard; }
+  let id = vec2f(floor(i.shape % 4.0), floor(i.shape / 4.0));
+  let uv = (id + i.uv) / vec2f(4.0, 3.0);
+  let tx = textureSample(atlas, smp, uv);
+  return vec4f(i.col * tx.rgb, tx.a * i.alpha);
+}`;
+const QUAD_VERT_WGSL=COMMON_WGSL+`
+struct Uniforms {
+  mode: f32, t: f32, time: f32, shape: f32,
+  kind: f32, pad0: f32, pad1: f32, pad2: f32,
+  col: vec4f,
+  col2: vec4f,
+  p1: vec4f,
+  rect: vec4f,
+  rot: f32,
+  pad3: f32,
+  pad4: f32,
+  pad5: f32,
+};
+@group(0) @binding(1) var<uniform> U: Uniforms;
+struct Out {
+  @builtin(position) pos: vec4f,
+  @location(0) uv: vec2f,
+};
+@vertex fn vs(@builtin(vertex_index) vi: u32) -> Out {
+  let uv = corners[vi];
+  let q = (uv - vec2f(0.5)) * U.rect.zw;
+  let c = cos(U.rot);
+  let s = sin(U.rot);
+  let r = vec2f(c * q.x - s * q.y, s * q.x + c * q.y);
+  var o: Out;
+  o.uv = uv;
+  o.pos = vec4f(screen(U.rect.xy + r), 0.0, 1.0);
+  return o;
+}`;
+const QUAD_FRAG_WGSL=COMMON_WGSL+`
+struct Uniforms {
+  mode: f32, t: f32, time: f32, shape: f32,
+  kind: f32, pad0: f32, pad1: f32, pad2: f32,
+  col: vec4f,
+  col2: vec4f,
+  p1: vec4f,
+  rect: vec4f,
+  rot: f32,
+  pad3: f32,
+  pad4: f32,
+  pad5: f32,
+};
+@group(0) @binding(1) var<uniform> U: Uniforms;
+@group(0) @binding(2) var atlas: texture_2d<f32>;
+@group(0) @binding(3) var smp: sampler;
+struct Out { @location(0) uv: vec2f };
+@fragment fn fs(i: Out) -> @location(0) vec4f {
+  let uv = i.uv;
+  let p = (uv - vec2f(0.5)) * 2.0;
+  let d = length(p);
+  let env = smoothstep(0.0, 0.08, U.t) * (1.0 - smoothstep(0.85, 1.0, U.t));
+  var col = U.col.rgb;
+  var a = 0.0;
+  let sh = floor(U.shape + 0.5);
+  var ruv = vec2f(uv.x, 1.0 - uv.y) - vec2f(0.5);
+  let gc = cos(U.p1.x);
+  let gs = sin(U.p1.x);
+  ruv = vec2f(gc * ruv.x - gs * ruv.y, gs * ruv.x + gc * ruv.y) + vec2f(0.5);
+  let auv = (vec2f(floor(sh % 4.0), floor(sh / 4.0)) + ruv) / vec2f(4.0, 3.0);
+  let tx = textureSample(atlas, smp, auv);
+  if (U.mode < 0.5) {
+    let band = 1.0 - smoothstep(0.0, U.p1.x, abs(d - 0.88));
+    a = band * pow(1.0 - U.t, 1.4) + 0.05 * (1.0 - smoothstep(0.0, 0.9, d)) * (1.0 - U.t);
+  } else if (U.mode < 1.5) {
+    let g = exp(-d * d * 4.2);
+    col = mix(U.col.rgb, vec3f(1.0), g * g * 0.8);
+    a = g * pow(1.0 - U.t, 1.8);
+  } else if (U.mode < 2.5) {
+    let edge = pow(sin(uv.y * 3.14159), 1.4);
+    let ends = smoothstep(0.0, 0.06, uv.x) * (1.0 - smoothstep(0.94, 1.0, uv.x));
+    let pulse = 0.72 + 0.28 * sin(uv.x * 34.0 - U.time * 26.0);
+    col = mix(U.col.rgb, vec3f(1.0), edge * 0.35);
+    a = edge * ends * pulse * (1.0 - U.t);
+  } else if (U.mode < 3.5) {
+    let rim = (1.0 - smoothstep(0.82, 0.97, d)) * smoothstep(0.6, 0.86, d);
+    let ang = atan2(p.y, p.x);
+    let hex = 0.5 + 0.5 * sin(ang * 6.0 + U.time * 1.6) * sin(d * 22.0 - U.time * 2.4);
+    a = (rim * 0.9 + 0.05 * (1.0 - d) + hex * 0.1 * (1.0 - smoothstep(0.0, 0.9, d))) * env;
+    col = mix(U.col.rgb, vec3f(1.0), rim * 0.4);
+  } else if (U.mode < 4.5) {
+    if (U.kind < 0.5) {
+      let q = uv * vec2f(3.0, 2.0) + vec2f(U.time * 0.5, U.time * 0.22);
+      let n = fbm(q * 3.0);
+      let body = smoothstep(0.35, 0.75, n) * 0.34;
+      let edge = pow(max(abs(p.x), abs(p.y)), 3.0) * 0.3;
+      a = (body + edge) * env;
+      col = mix(U.col.rgb, U.col2.rgb, n);
+    } else if (U.kind < 1.5) {
+      let edge = pow(max(abs(p.x), abs(p.y)), 2.6);
+      let crystal = fbm(uv * 14.0 + U.time * 0.1);
+      a = edge * (0.4 + 0.35 * crystal) * env;
+      col = mix(U.col.rgb, vec3f(1.0), crystal * 0.3);
+    } else {
+      a = (0.5 + 0.5 * (1.0 - d)) * env * U.p1.x;
+      col = mix(U.col.rgb, vec3f(1.0), 0.25);
+    }
+  } else if (U.mode < 5.5) {
+    let flick = 0.72 + 0.28 * vnoise(uv * 8.0 + U.time * 2.0);
+    a = exp(-d * d * 2.6) * (1.0 - smoothstep(0.7, 1.0, U.t)) * flick * U.p1.x;
+  } else if (U.mode < 6.5) {
+    a = tx.a * env;
+    col = mix(U.col.rgb, vec3f(1.0), tx.a * 0.2);
+  } else {
+    let hor = pow(1.0 - abs(p.x), 2.0);
+    let ver = pow(uv.y, 1.6);
+    let flick = 0.8 + 0.2 * sin(U.time * 30.0 + uv.y * 20.0);
+    a = hor * ver * flick * env;
+    col = mix(U.col.rgb, vec3f(1.0), ver * 0.4);
+  }
+  if (a < 0.004) { discard; }
+  return vec4f(col, a);
+}`;
+async function gpuShader(device,code,label){
+  const mod=device.createShaderModule({code});
+  if(mod.getCompilationInfo){
+    const info=await mod.getCompilationInfo();
+    const errs=(info.messages||[]).filter(m=>m.type==='error');
+    if(errs.length)throw Error(label+': '+errs.map(m=>m.message).join(' | '));
+  }
+  return mod;
+}
+function gpuDegrade(){
+  FX.on=false;FX.backend='none';
+  const c=$('fxcv');if(c)c.style.display='none';
+}
+async function initGPU(canvas){
+  if(!navigator.gpu)throw Error('WebGPU unavailable');
+  const adapter=await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+  if(!adapter)throw Error('No WebGPU adapter');
+  const device=await adapter.requestDevice();
+  const format=navigator.gpu.getPreferredCanvasFormat();
+  const context=canvas.getContext('webgpu');
+  if(!context)throw Error('No webgpu context');
+  context.configure({device,format,alphaMode:'premultiplied'});
+  const globals=device.createBuffer({size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const commonEntries=[
+    {binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}},
+    {binding:2,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'float'}},
+    {binding:3,visibility:GPUShaderStage.FRAGMENT,sampler:{type:'filtering'}}
+  ];
+  const spriteLayout=device.createBindGroupLayout({entries:[
+    commonEntries[0],
+    {binding:1,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}},
+    commonEntries[1],commonEntries[2]]});
+  const quadLayout=device.createBindGroupLayout({entries:[
+    commonEntries[0],
+    {binding:1,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}},
+    commonEntries[1],commonEntries[2]]});
+  const atlas=device.createTexture({size:[atlasCanvas.width,atlasCanvas.height],format:'rgba8unorm',
+    usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+  device.queue.writeTexture({texture:atlas},atlasCanvas.getContext('2d').getImageData(0,0,atlasCanvas.width,atlasCanvas.height).data,
+    {bytesPerRow:atlasCanvas.width*4,rowsPerImage:atlasCanvas.height},[atlasCanvas.width,atlasCanvas.height,1]);
+  const sampler=device.createSampler({magFilter:'linear',minFilter:'linear'});
+  const spriteVert=await gpuShader(device,SPRITE_VERT_WGSL,'sprite vertex');
+  const spriteFrag=await gpuShader(device,SPRITE_FRAG_WGSL,'sprite fragment');
+  const quadVert=await gpuShader(device,QUAD_VERT_WGSL,'quad vertex');
+  const quadFrag=await gpuShader(device,QUAD_FRAG_WGSL,'quad fragment');
+  const blendAlpha={color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},
+    alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}};
+  const blendAdd={color:{srcFactor:'src-alpha',dstFactor:'one',operation:'add'},
+    alpha:{srcFactor:'one',dstFactor:'one',operation:'add'}};
+  const spritePipeline=(blend)=>device.createRenderPipeline({
+    layout:device.createPipelineLayout({bindGroupLayouts:[spriteLayout]}),
+    vertex:{module:spriteVert,entryPoint:'vs'},
+    fragment:{module:spriteFrag,entryPoint:'fs',targets:[{format,blend}]},
+    primitive:{topology:'triangle-list'}});
+  const quadPipeline=(blend)=>device.createRenderPipeline({
+    layout:device.createPipelineLayout({bindGroupLayouts:[quadLayout]}),
+    vertex:{module:quadVert,entryPoint:'vs'},
+    fragment:{module:quadFrag,entryPoint:'fs',targets:[{format,blend}]},
+    primitive:{topology:'triangle-list'}});
+  device.lost.then(()=>{if(gpu&&gpu.device===device)gpuDegrade();});
+  return {device,context,format,canvas,globals,globalsData:new Float32Array(16),
+    spriteLayout,quadLayout,atlasTex:atlas,sampler,
+    spriteAdd:spritePipeline(blendAdd),spriteAlpha:spritePipeline(blendAlpha),
+    quadAdd:quadPipeline(blendAdd),quadAlpha:quadPipeline(blendAlpha),
+    quadBuffers:null,quadBgs:null};
+}
+function renderGPU(){
+  const z=cam.z,cpx=(cam.x-cam.y)*32,cpy=(cam.x+cam.y)*16,g=gpu.globalsData;
+  g[0]=vw;g[1]=vh;
+  g[4]=32*z;g[5]=-32*z;g[6]=16*z;g[7]=16*z;
+  g[8]=W/2+cam.sx-cpx*z;g[9]=H/2+cam.sy-cpy*z;g[10]=z;g[11]=vdpr;
+  g[12]=FX.time;
+  gpu.device.queue.writeBuffer(gpu.globals,0,g.buffer);
+  const encoder=gpu.device.createCommandEncoder();
+  const pass=encoder.beginRenderPass({colorAttachments:[{
+    view:gpu.context.getCurrentTexture().createView(),
+    clearValue:{r:0,g:0,b:0,a:0},loadOp:'clear',storeOp:'store'}]});
+  for(const [pool,pipeline] of [[pools.add,gpu.spriteAdd],[pools.alpha,gpu.spriteAlpha]]){
+    pass.setPipeline(pipeline);pass.setBindGroup(0,pool.bg);pass.draw(6,pool.n);
+  }
+  if(!gpu.quadBuffers){
+    gpu.quadBuffers=Array.from({length:QUADS+1},()=>gpu.device.createBuffer({size:QUAD_STRIDE,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}));
+    gpu.quadBgs=gpu.quadBuffers.map(buffer=>gpu.device.createBindGroup({layout:gpu.quadLayout,entries:[
+      {binding:0,resource:{buffer:gpu.globals}},{binding:1,resource:{buffer}},
+      {binding:2,resource:gpu.atlasTex.createView()},{binding:3,resource:gpu.sampler}]}));
+  }
+  let qi=0;
+  const drawQuad=(data,pipeline)=>{
+    if(qi>=gpu.quadBuffers.length)return;
+    gpu.device.queue.writeBuffer(gpu.quadBuffers[qi],0,data.buffer);
+    pass.setPipeline(pipeline);pass.setBindGroup(0,gpu.quadBgs[qi]);pass.draw(6,1);qi++;
+  };
+  for(const q of quads)if(q.active)drawQuad(q.gpuData,gpu.quadAdd);
+  if(veil&&veil.visible)drawQuad(veil.gpuData,gpu.quadAlpha);
+  pass.end();gpu.device.queue.submit([encoder.finish()]);
 }
 
 /* ---------------- 粒子池 ---------------- */
@@ -114,6 +448,16 @@ void main(){
 }`;
 const ATTRS=[['aWorld',2],['aVel',2],['aPhys',4],['aTime',2],['aLook',4],['aCol',3],['aFlags',1]];
 function makePool(n,blending,order){
+  if(gpu){
+    const data=new Float32Array(n*(PART_STRIDE/4));
+    const buffer=gpu.device.createBuffer({size:n*PART_STRIDE,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
+    const bg=gpu.device.createBindGroup({layout:gpu.spriteLayout,entries:[
+      {binding:0,resource:{buffer:gpu.globals}},
+      {binding:1,resource:{buffer}},
+      {binding:2,resource:gpu.atlasTex.createView()},
+      {binding:3,resource:gpu.sampler}]});
+    return {n,cursor:0,data,buffer,bg,lo:n,hi:-1,wrap:false,liveUntil:0};
+  }
   const geo=new THREE.BufferGeometry(),arr={};
   // three 以 position.count 决定 draw count；粒子位置在 shader 内积分，此处仅占位
   geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(n*3),3));
@@ -134,21 +478,40 @@ function makePool(n,blending,order){
 function spawn(pool,p){
   const i=pool.cursor;pool.cursor=(pool.cursor+1)%pool.n;
   if(pool.cursor<=i&&pool.hi>=pool.lo)pool.wrap=true;
-  const a=pool.arr;
-  a.aWorld[i*2]=p.x;a.aWorld[i*2+1]=p.y;
-  a.aVel[i*2]=p.vx||0;a.aVel[i*2+1]=p.vy||0;
-  a.aPhys[i*4]=p.z0||0;a.aPhys[i*4+1]=p.vz||0;a.aPhys[i*4+2]=p.grav||0;a.aPhys[i*4+3]=p.drag||0;
   const birth=p.birth===undefined?FX.time:p.birth;
-  a.aTime[i*2]=birth;a.aTime[i*2+1]=p.life||.5;
-  a.aLook[i*4]=(p.size||5)*(p.screen?1:1.3);a.aLook[i*4+1]=p.shape||0;a.aLook[i*4+2]=p.seed===undefined?R():p.seed;a.aLook[i*4+3]=p.spin||0;
-  const c=p.col||WHITE;
-  a.aCol[i*3]=c[0];a.aCol[i*3+1]=c[1];a.aCol[i*3+2]=c[2];
-  a.aFlags[i]=(p.screen?1:0)+(p.hold?2:0);
+  const c=p.col||WHITE,flags=(p.screen?1:0)+(p.hold?2:0),life=p.life||.5;
+  if(!gpu){
+    const a=pool.arr;
+    a.aWorld[i*2]=p.x;a.aWorld[i*2+1]=p.y;
+    a.aVel[i*2]=p.vx||0;a.aVel[i*2+1]=p.vy||0;
+    a.aPhys[i*4]=p.z0||0;a.aPhys[i*4+1]=p.vz||0;a.aPhys[i*4+2]=p.grav||0;a.aPhys[i*4+3]=p.drag||0;
+    a.aTime[i*2]=birth;a.aTime[i*2+1]=life;
+    a.aLook[i*4]=(p.size||5)*(p.screen?1:1.3);a.aLook[i*4+1]=p.shape||0;a.aLook[i*4+2]=p.seed===undefined?R():p.seed;a.aLook[i*4+3]=p.spin||0;
+  }
+  if(gpu){
+    const d=pool.data,o=i*(PART_STRIDE/4);
+    d[o]=p.x;d[o+1]=p.y;d[o+2]=p.vx||0;d[o+3]=p.vy||0;
+    d[o+4]=p.z0||0;d[o+5]=p.vz||0;d[o+6]=p.grav||0;d[o+7]=p.drag||0;
+    d[o+8]=birth;d[o+9]=life;d[o+10]=0;d[o+11]=0;
+    d[o+12]=(p.size||5)*(p.screen?1:1.3);d[o+13]=p.shape||0;
+    d[o+14]=p.seed===undefined?R():p.seed;d[o+15]=p.spin||0;
+    d[o+16]=c[0];d[o+17]=c[1];d[o+18]=c[2];d[o+19]=flags;
+  }else{
+    a.aCol[i*3]=c[0];a.aCol[i*3+1]=c[1];a.aCol[i*3+2]=c[2];
+    a.aFlags[i]=flags;
+  }
   if(i<pool.lo)pool.lo=i;if(i>pool.hi)pool.hi=i;
-  const end=birth+(p.life||.5);if(end>pool.liveUntil)pool.liveUntil=end;
+  const end=birth+life;if(end>pool.liveUntil)pool.liveUntil=end;
 }
 function upload(pool){
   if(pool.hi<pool.lo)return;
+  if(gpu){
+    const floats=PART_STRIDE/4,count=pool.hi-pool.lo+1;
+    if(pool.wrap)gpu.device.queue.writeBuffer(pool.buffer,0,pool.data);
+    else gpu.device.queue.writeBuffer(pool.buffer,pool.lo*PART_STRIDE,pool.data,pool.lo*floats,count*floats);
+    pool.lo=pool.n;pool.hi=-1;pool.wrap=false;
+    return;
+  }
   for(const[name,size]of ATTRS){
     const at=pool.geo.attributes[name];
     if(pool.wrap){at.updateRange.offset=0;at.updateRange.count=-1;}
@@ -316,6 +679,13 @@ function quad(mode,o){
   const c=rgb(o.col||'#ffffff');u.uCol.value.set(c[0],c[1],c[2]);
   const c2=rgb(o.col2||o.col||'#ffffff');u.uCol2.value.set(c2[0],c2[1],c2[2]);
   u.uP1.value.set(o.p1===undefined?.14:o.p1,o.p2||0,o.p3||0,o.p4||0);
+  if(gpu){
+    const d=q.gpuData;
+    d[0]=mode;d[2]=FX.time;d[3]=o.shape||0;d[4]=o.kind||0;
+    d[8]=c[0];d[9]=c[1];d[10]=c[2];d[11]=1;
+    d[12]=c2[0];d[13]=c2[1];d[14]=c2[2];d[15]=1;
+    d[16]=o.p1===undefined?.14:o.p1;d[17]=o.p2||0;d[18]=o.p3||0;d[19]=o.p4||0;
+  }
   q.mesh.visible=true;
   return q;
 }
@@ -331,6 +701,13 @@ function w2s(x,y){
   const z=cam.z,cpx=(cam.x-cam.y)*32,cpy=(cam.x+cam.y)*16;
   return [(x-y)*32*z-cpx*z+W/2+cam.sx,(x+y)*16*z-cpy*z+H/2+cam.sy];
 }
+function gpuQuadTransform(q){
+  const d=q.gpuData,m=q.mesh;
+  d[1]=(FX.time-q.birth)/q.dur;d[2]=FX.time;
+  d[20]=m.position.x;d[21]=m.position.y;
+  d[22]=m.scale.x;d[23]=m.scale.y;
+  d[24]=m.rotation.z;
+}
 function updateQuad(q){
   const t=(FX.time-q.birth)/q.dur;
   if(t>=1){q.active=false;q.mesh.visible=false;return;}
@@ -341,6 +718,7 @@ function updateQuad(q){
     const dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy)||1;
     m.position.set((a[0]+b[0])/2,(a[1]+b[1])/2-14*cam.z,1);
     m.scale.set(len,q.sh*cam.z,1);m.rotation.z=Math.atan2(dy,dx);
+    if(gpu)gpuQuadTransform(q);
     return;
   }
   let sx,sy;
@@ -361,6 +739,7 @@ function updateQuad(q){
     m.scale.set(q.sw*(q.mode===5||q.mode===6?cam.z:1),q.sh*(q.mode===5||q.mode===6?cam.z:1),1);
     if(q.mode===6)m.rotation.z=q.rot;
   }
+  if(gpu)gpuQuadTransform(q);
 }
 
 /* ---------------- 弹道 ---------------- */
@@ -413,6 +792,14 @@ function showVeil(kind,dur,col,col2,strength){
   const c=rgb(col||'#dffaff');u.uCol.value.set(c[0],c[1],c[2]);
   const c2=rgb(col2||col||'#ffffff');u.uCol2.value.set(c2[0],c2[1],c2[2]);
   u.uP1.value.set(strength===undefined?1:strength,0,0,0);
+  if(gpu){
+    const d=veil.gpuData,s=strength===undefined?1:strength;
+    d[0]=4;d[1]=0;d[2]=FX.time;d[3]=0;d[4]=kind;
+    d[8]=c[0];d[9]=c[1];d[10]=c[2];d[11]=1;
+    d[12]=c2[0];d[13]=c2[1];d[14]=c2[2];d[15]=1;
+    d[16]=s;d[17]=0;d[18]=0;d[19]=0;
+    d[20]=vw/2;d[21]=vh/2;d[22]=vw;d[23]=vh;d[24]=0;
+  }
 }
 function rectOf(sel){
   const el=typeof sel==='string'?document.querySelector(sel):sel;
@@ -703,17 +1090,33 @@ FX.cast=function(id,x,y,o){
 
 /* ---------------- 生命周期 ---------------- */
 FX.resize=function(){
-  if(!renderer)return;
   vw=innerWidth;vh=innerHeight;vdpr=Math.min(devicePixelRatio||1,2);
-  renderer.setPixelRatio(vdpr);renderer.setSize(vw,vh,false);
-  camera.right=vw;camera.bottom=vh;camera.updateProjectionMatrix();
-  if(veil){veil.mesh.scale.set(vw,vh,1);veil.mesh.position.set(vw/2,vh/2,0);}
-  for(const p of [pools.add,pools.alpha])p.mat.uniforms.uDPR.value=vdpr;
+  if(gpu){
+    gpu.canvas.width=Math.max(1,Math.floor(vw*vdpr));
+    gpu.canvas.height=Math.max(1,Math.floor(vh*vdpr));
+  }else{
+    if(!renderer)return;
+    renderer.setPixelRatio(vdpr);renderer.setSize(vw,vh,false);
+    camera.right=vw;camera.bottom=vh;camera.updateProjectionMatrix();
+    for(const p of [pools.add,pools.alpha])p.mat.uniforms.uDPR.value=vdpr;
+  }
+  if(veil){
+    veil.mesh.scale.set(vw,vh,1);veil.mesh.position.set(vw/2,vh/2,0);
+    if(gpu){veil.gpuData[20]=vw/2;veil.gpuData[21]=vh/2;veil.gpuData[22]=vw;veil.gpuData[23]=vh;}
+  }
 };
 FX.clear=function(){
   if(!FX.on)return;
   for(const pool of [pools.add,pools.alpha]){
-    pool.arr.aTime.fill(-1e9);pool.cursor=0;pool.lo=0;pool.hi=pool.n-1;pool.wrap=true;pool.liveUntil=0;
+    if(gpu){
+      pool.data.fill(0);
+      const f=PART_STRIDE/4;
+      for(let i=0;i<pool.n;i++)pool.data[i*f+9]=1;
+      gpu.device.queue.writeBuffer(pool.buffer,0,pool.data);
+    }else{
+      pool.arr.aTime.fill(-1e9);
+    }
+    pool.cursor=0;pool.lo=0;pool.hi=pool.n-1;pool.wrap=true;pool.liveUntil=0;
   }
   for(const q of quads){q.active=false;q.mesh.visible=false;}
   projs.length=0;events.length=0;FX._detN=0;FX._magePending=false;
@@ -754,47 +1157,65 @@ FX.frame=function(){
   if(veil&&veil.visible){
     const t=(FX.time-veil.birth)/veil.dur;
     if(t>=1)veil.visible=false;
-    else veil.mesh.material.uniforms.uT.value=t;
-    veil.mesh.material.uniforms.uTime.value=FX.time;
+    else{
+      if(gpu)veil.gpuData[1]=t;
+      else{veil.mesh.material.uniforms.uT.value=t;veil.mesh.material.uniforms.uTime.value=FX.time;}
+    }
   }
-  const z=cam.z,cpx=(cam.x-cam.y)*32,cpy=(cam.x+cam.y)*16;
-  for(const pool of [pools.add,pools.alpha]){
-    const u=pool.mat.uniforms;
-    u.uTime.value=FX.time;u.uZoom.value=z;
-    u.uM.value.set(32*z,-32*z,W/2+cam.sx-cpx*z);
-    u.uN.value.set(16*z,16*z,H/2+cam.sy-cpy*z);
-    upload(pool);
+  if(!gpu){
+    const z=cam.z,cpx=(cam.x-cam.y)*32,cpy=(cam.x+cam.y)*16;
+    for(const pool of [pools.add,pools.alpha]){
+      const u=pool.mat.uniforms;
+      u.uTime.value=FX.time;u.uZoom.value=z;
+      u.uM.value.set(32*z,-32*z,W/2+cam.sx-cpx*z);
+      u.uN.value.set(16*z,16*z,H/2+cam.sy-cpy*z);
+    }
   }
+  for(const pool of [pools.add,pools.alpha])upload(pool);
   const active=pools.add.liveUntil>FX.time||pools.alpha.liveUntil>FX.time||
     projs.length>0||events.length>0||quads.some(q=>q.active)||(veil&&veil.visible);
-  if(active){renderer.render(scene,camera);wasActive=true;}
-  else if(wasActive){renderer.render(scene,camera);wasActive=false;}
+  if(active||wasActive){
+    if(gpu)renderGPU();else renderer.render(scene,camera);
+    wasActive=active;
+  }
 };
-FX.init=function(){
+FX.init=async function(){
   if(typeof THREE==='undefined')return;
   const c=$('fxcv');if(!c)return;
-  try{
-    renderer=new THREE.WebGLRenderer({canvas:c,alpha:true,antialias:false,powerPreference:'high-performance'});
-  }catch(e){FX.on=false;return;}
-  renderer.setClearColor(0x000000,0);
   scene=new THREE.Scene();
   camera=new THREE.OrthographicCamera(0,innerWidth,0,innerHeight,.1,2000);
   camera.position.z=500;
   atlasTex=makeAtlas();
   quadGeo=new THREE.PlaneGeometry(1,1);
+  let ready=false;
+  if(navigator.gpu){
+    try{
+      gpu=await initGPU(c);ready=true;FX.backend='webgpu';
+    }catch(e){
+      gpu=null;console.warn('WebGPU 特效不可用，回退 WebGL:',e);
+    }
+  }
+  if(!ready){
+    try{
+      renderer=new THREE.WebGLRenderer({canvas:c,alpha:true,antialias:false,powerPreference:'high-performance'});
+    }catch(e){FX.on=false;return;}
+    renderer.setClearColor(0x000000,0);
+    FX.backend='webgl';
+    c.addEventListener('webglcontextlost',e=>{e.preventDefault();FX.on=false;c.style.display='none';});
+  }
   pools={add:makePool(ADD,THREE.AdditiveBlending,20),alpha:makePool(ALPHA,THREE.NormalBlending,8)};
-  for(let i=0;i<QUADS;i++)quads.push({mesh:makeQuadMesh(12),active:false,birth:0});
-  veil={mesh:makeQuadMesh(4,THREE.NormalBlending),visible:false,birth:0,dur:1};
+  for(let i=0;i<QUADS;i++)quads.push({mesh:makeQuadMesh(12),active:false,birth:0,gpuData:new Float32Array(QUAD_STRIDE/4)});
+  veil={mesh:makeQuadMesh(4,THREE.NormalBlending),visible:false,birth:0,dur:1,gpuData:new Float32Array(QUAD_STRIDE/4)};
   veil.mesh.visible=false;
   Object.defineProperty(veil,'visible',{get(){return veil.mesh.visible;},set(v){veil.mesh.visible=v;}});
   FX.q=reduceMotion?.4:1;
-  c.addEventListener('webglcontextlost',e=>{e.preventDefault();FX.on=false;c.style.display='none';});
   addEventListener('resize',()=>FX.resize());
   FX.resize();
   lastNow=performance.now();
   FX.on=true;
-  FX._dbg={get pools(){return pools;},get renderer(){return renderer;},get scene(){return scene;},
-    get projs(){return projs;},get quads(){return quads;},get events(){return events;}};
+  FX._dbg={get backend(){return FX.backend;},get pools(){return pools;},get renderer(){return renderer;},
+    get gpu(){return gpu;},get scene(){return scene;},get projs(){return projs;},
+    get quads(){return quads;},get events(){return events;}};
 };
-try{FX.init();}catch(e){FX.on=false;}
+try{FX.init();}catch(e){FX.on=false;console.warn('FX 初始化失败:',e);}
 })();
