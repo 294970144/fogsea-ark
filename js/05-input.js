@@ -123,7 +123,8 @@ cv.addEventListener('wheel',e=>{e.preventDefault();cam.tz=clamp(cam.tz-Math.sign
 addEventListener('pointerup',e=>{
   if(!S.dragUid||e.pointerId!==S.dragPointerId)return;
   const uid=S.dragUid,moved=S.dragMoved;
-  const overCanvas=document.elementFromPoint(e.clientX,e.clientY)===cv;
+  const hit=document.elementFromPoint(e.clientX,e.clientY);
+  const overCanvas=hit===cv||(hit&&hit.closest&&!!hit.closest('#weaponHud'));
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
   endDrag();
   if(S.mode!=='play')return;

@@ -29,6 +29,8 @@
       <span class="whSub">等级 <span id="weaponHudLv">Lv.1</span> · <span id="weaponHudRoute">近战武器</span></span>
       <span id="weaponHudXpWrap"><span id="weaponHudXp"></span></span>
     </div>
+    <span id="weaponHudChev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+    <div id="weaponSlots"><div id="weaponSlotsRow"></div></div>
   </div>
   <div id="topRight">
     <button class="iconBtn" id="btnNight" aria-label="提前入夜" title="提前入夜 (N)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14A8.5 8.5 0 019.5 3.5 8.5 8.5 0 1020 14z"/></svg></button>
@@ -267,6 +269,11 @@
         <input id="cxSearch" type="search" placeholder="搜索名称 / 效果…" autocomplete="off">
       </label>
       <div id="cxCats"></div>
+    </div>
+    <div class="cxTagBar">
+      <span class="cxTagLab">标签</span>
+      <div id="cxTagFilters"></div>
+      <button id="cxTagClear" class="cxTagClear" disabled>清除</button>
     </div>
     <div class="cxBody">
       <div id="cxList"></div>

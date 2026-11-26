@@ -193,7 +193,7 @@ function playCard(uid,tx,ty){
     floater(P.x,P.y,'手牌上限 '+DECK.max,'#ffb454',true);
     if(fxOn())FX.cast('expand',P.x,P.y);
     if(DECK.max>=handCap()){purgeCard('expand');toast('手牌已达上限 '+handCap()+' · 扩容牌退场','good');}
-    drawN(1);
+    drawN(def.draw);
   }
   S.handDirty=true;
   return true;
@@ -212,7 +212,7 @@ function applyInstant(def,tx,ty,overflow){
       if(f.dead)continue;
       if(dist(tx,ty,f.x,f.y)<R+f.r){
         const a=Math.atan2(f.y-ty,f.x-tx);
-        if(def.id==='mine'){f.kx+=Math.cos(a)*7;f.ky+=Math.sin(a)*7;}
+        if(def.knock){f.kx+=Math.cos(a)*7;f.ky+=Math.sin(a)*7;}
         damageFoe(f,def.dmg*(1+(P.towerMult-1)*.5),a,false);
       }
     }
@@ -237,10 +237,10 @@ function applyInstant(def,tx,ty,overflow){
     else{ring(P.x,P.y,'rgba(143,227,208,.9)',.2,1.8,.5);puff(P.x,P.y,18,'#8fe3d0',2,.7,3);}
     floater(P.x,P.y,'无敌 '+def.ifr+'s','#8fe3d0',true);sfx('heal');
   }else if(def.id==='tactic'){
-    const n=drawN(2);floater(P.x,P.y,'抽 '+n+' 张','#c9a8ff',true);
+    const n=drawN(def.draw);floater(P.x,P.y,'抽 '+n+' 张','#c9a8ff',true);
     if(fxOn())FX.cast('tactic',P.x,P.y);
-    if(n<2&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
-      offerSwap(Math.min(2-n,DECK.hand.length),'战术重整 · 手牌已满');
+    if(n<def.draw&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
+      offerSwap(Math.min(def.draw-n,DECK.hand.length),'战术重整 · 手牌已满');
   }else if(def.id==='surge'){
     gainMana(P.maxEn-P.en);P.dashCd=0;
     if(fxOn())FX.cast('surge',P.x,P.y);

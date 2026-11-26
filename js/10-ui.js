@@ -8,6 +8,7 @@ function cacheUI(){
   UI.weaponHud=$('weaponHud');UI.weaponIcon=$('weaponHudIcon');UI.weaponName=$('weaponHudName');
   UI.weaponLv=$('weaponHudLv');UI.weaponRoute=$('weaponHudRoute');
   UI.weaponXpWrap=$('weaponHudXpWrap');UI.weaponXp=$('weaponHudXp');
+  UI.weaponSlots=$('weaponSlots');UI.weaponSlotsRow=$('weaponSlotsRow');
   UI.hpBar=$('hpBar');UI.hpFill=UI.hpBar.firstElementChild;UI.hpTxt=$('hpTxt');
   UI.enBar=$('enBar');UI.enFill=UI.enBar.firstElementChild;UI.enTxt=$('enTxt');UI.enLabel=$('enLabel');
   UI.shieldBar=$('shieldBar');UI.shieldFill=UI.shieldBar?UI.shieldBar.firstElementChild:null;UI.shieldTxt=$('shieldTxt');
@@ -21,6 +22,34 @@ function cacheUI(){
 }
 function setTxt(el,v){if(el&&el._t!==v){el._t=v;el.textContent=v;}}
 function setBar(el,fill,r){const v=clamp(r,0,1).toFixed(3);if(el._v!==v){el._v=v;fill.style.transform=`scaleX(${v})`;}}
+/* ---------------- 武器槽位 ---------------- */
+let weaponSlotsOpen=false;
+function renderWeaponSlots(){
+  const box=UI.weaponSlotsRow;
+  if(!box)return;
+  const w=weaponDef(P.weapon),cap=w.slots||0;
+  const list=P.sigils||[];
+  let html='';
+  for(let i=0;i<cap;i++){
+    const id=list[i],s=id&&SIGILS[id];
+    html+=s?`<span class="wslot filled" style="color:${s.color}" title="${s.n} · ${sigilDesc(id)}">
+        <span class="wslotBox">${svg(s.icon,20)}</span><span class="wslotName">${s.short}</span></span>`
+           :'<span class="wslot empty"><span class="wslotBox"></span></span>';
+  }
+  box.innerHTML=html;
+  // 52px 槽 + 6px 沟槽；面板宽 = 行宽 + 左右内边距 32 + 边框 2 + 余量 10（防子像素舍入换行）
+  const rowW=cap*52+(cap>0?(cap-1)*6:0);
+  UI.weaponHud.style.setProperty('--slotW',Math.max(260,rowW+44)+'px');
+}
+function toggleWeaponSlots(){
+  weaponSlotsOpen=!weaponSlotsOpen;
+  UI.weaponHud.classList.toggle('slotsOpen',weaponSlotsOpen);
+  if(weaponSlotsOpen){
+    renderWeaponSlots();
+    UI.weaponSlots.classList.add('open');
+  }else UI.weaponSlots.classList.remove('open');
+  sfx('ui');
+}
 function syncHUD(){
   if(S.mode==='menu'||S.mode==='prep')return;
   const w=weaponDef(P.weapon);
@@ -32,6 +61,8 @@ function syncHUD(){
   }
   setTxt(UI.weaponLv,'Lv.'+P.lvl);
   setBar(UI.weaponXpWrap,UI.weaponXp,P.xp/P.next);
+  const sigKey=(P.weapon||'')+'|'+(P.sigils||[]).join(',');
+  if(UI.weaponSlots._k!==sigKey){UI.weaponSlots._k=sigKey;renderWeaponSlots();}
   const night=S.phase==='night';
   const showNight=S.mode==='play'&&!night;
   if(UI.nightBtn._s!==showNight){UI.nightBtn._s=showNight;UI.nightBtn.style.display=showNight?'':'none';}
@@ -106,24 +137,30 @@ function banner(title,sub,cls){
 const CX_CATS=[{id:'all',name:'全部'},{id:'role',name:'角色'},{id:'res',name:'资源'},{id:'card',name:'卡牌'},
   {id:'foe',name:'雾裔'},{id:'bless',name:'祝福'},{id:'legacy',name:'传承'},{id:'term',name:'术语'}];
 const foeNow=t=>Math.round(FOES[t].hp*DIFFS[save.diff].hp*dayScale(Math.max(1,S.day)));
+// 刻印摘要：图鉴多处引用同一份持有情况
+const sigilList=()=>{const l=(P.sigils||[]).map(id=>SIGILS[id]?SIGILS[id].short:id);return l.length?l.join(' / '):'无';};
+const sigilCap=()=>weaponDef(P.weapon).slots||0;
 const CODEX=[
   {id:'keeper',cat:'role',name:'守灯人',icon:'lantern',color:'#ffb454',sprite:'player',
    desc:'你操控的角色。武器优先自动攻击范围内最近的敌人；没有敌人时自动采集资源。',
    stats:()=>[['当前生命',`${Math.ceil(P.hp)} / ${P.maxHp}`],['当前武器',weaponDef(P.weapon).name],['通用伤害',P.dmg.toFixed(1)],
      ['攻击间隔',weaponAttackInterval().toFixed(2)+' 秒'],['攻击范围',weaponAttackRange().toFixed(2)+' 格'],
-     ['移动速度',P.spd.toFixed(2)+' 格/秒'],['暴击率',Math.round(P.crit*100)+'%'],['等级','Lv.'+P.lvl]],
+     ['移动速度',P.spd.toFixed(2)+' 格/秒'],['暴击率',Math.round(P.crit*100)+'%'],['等级','Lv.'+P.lvl],
+     ['刻印槽位',(P.sigils||[]).length+' / '+sigilCap()],['已刻刻印',sigilList()]],
    rel:['core','dash','nova','hand','w_sword']},
   ...WEAPON_IDS.map(id=>{
     const w=WEAPONS[id],a=w.spell?CDEFS[w.spell]:null;
     const col=w.color;
     const statusName=a&&a.status?TUNE.statusNames[a.status.kind]:'';
     return {id:'w_'+id,cat:'role',name:w.name,icon:w.icon,color:col,
-      desc:w.desc+' 武器在开局前选择，本局内固定。',
+      desc:w.desc+' 武器在开局前选择，本局内固定。',tags:weaponTags(w),
       stats:()=>{
         const s=[['路线',w.route],['当前装备',P.weapon===id?'是':'否'],
           ['攻击间隔',weaponAttackInterval(w).toFixed(2)+' 秒'],
           ['攻击范围',weaponAttackRange(w).toFixed(2)+' 格'],
+          ['刻印槽位',(w.slots||0)+' 格'],
           ['基础伤害',a?(a.dmg*P.dmg/TUNE.player.baseDmg).toFixed(1):P.dmg.toFixed(1)],['自动采集','无敌人时']];
+        if(P.weapon===id)s.push(['已刻刻印',sigilList()]);
         if(a)s.push(['命中范围',a.shape==='single'?'单体':a.radius+' 格半径'],['附加状态',statusName+' ×'+a.status.n]);
         if(a?.spreadFire)s.push(['火焰蔓延',TUNE.fireSpread.radius+' 格 · 一跳']);
         return s;
@@ -157,6 +194,7 @@ const CODEX=[
     return {id:'c_'+id,cat:'card',name:d.name,icon:d.icon,color:d.color,
       sprite:d.kind==='build'?d.build:null,
       desc:d.desc+(d.kind==='build'?' 建筑永久留场，卡牌回到弃牌堆，洗牌后可再次抽到。':''),
+      tags:cardTags(d),badge:()=>{const n=cardTotal(id);return n?'×'+n:'';},
       stats:()=>{
         const s=[['类型',KINDNAME[d.kind]],['费用',costStr(d)],
           ['牌库中',cardTotal(id)+' 张'],['累计打出',save.seen.play[id]||0]];
@@ -186,7 +224,7 @@ const CODEX=[
         d.tier?['recycle','hand','deck']:['hand','deck','keeper']};
   }),
   ...Object.entries(FOES).map(([id,d])=>({id,cat:'foe',name:d.name,icon:d.icon,color:d.color,
-    sprite:id,desc:d.desc,rel:d.rel,
+    sprite:id,desc:d.desc,rel:d.rel,badge:()=>save.seen.foe[id]?'×'+save.seen.foe[id]:'',
     stats:()=>{
       const s=[['基础生命',d.hp],['本局生命',foeNow(id)],['速度',d.spd]];
       if(d.fireInterval)s.push(['雾弹伤害',d.dmg],['射击间隔',d.fireInterval+' 秒'],['射程',d.fireRange+' 格']);
@@ -197,9 +235,18 @@ const CODEX=[
     }})),
   ...BLESSINGS.map(b=>({id:'b_'+b.id,cat:'bless',name:b.n,icon:b.icon,color:RARCOL[b.rar],
     desc:b.d+'。'+(b.cls==='mage'?'法师专属。':'')+(b.weapon?weaponDef(b.weapon).name+'专属。':'')+'黎明第二步三选一获得，永久被动生效，不占用牌库。',
+    badge:()=>save.seen.card[b.id]?'×'+save.seen.card[b.id]:'',
     stats:()=>[['稀有度',RARNAME[b.rar]],['叠加上限',b.max?b.max+' 层':'无上限'],
       ['本局叠加','×'+(P.stacks[b.id]||0)],['累计选用',save.seen.card[b.id]||0]],
     rel:['dawn','keeper','hand']})),
+  ...SIGIL_IDS.map(id=>{const s=SIGILS[id];
+    return {id:'s_'+id,cat:'role',name:s.n,icon:s.icon,color:s.color,
+      desc:sigilDesc(id)+'。黎明第三步「铭刻」三选一装入武器槽位，同种最多叠装 '+SIGIL_COPIES+' 份；只强化武器自动攻击，不影响法术牌。',
+      tags:sigilTags(s),badge:()=>{const n=(save.seen.sigil||{})[id]||0;return n?'×'+n:'';},
+      stats:()=>[['效果',sigilDesc(id)],['叠加上限',SIGIL_COPIES+' 份'],
+        ['本局持有',(P.sigils||[]).filter(x=>x===id).length+' 份'],
+        ['累计铭刻',((save.seen.sigil||{})[id]||0)+' 枚']],
+      rel:['keeper','dawn','w_sword']};}),
   ...Object.entries(BLESS).map(([k,b])=>({id:'l_'+k,cat:'legacy',name:b.name+'传承',icon:b.icon,color:b.color,
     desc:b.desc+'。用文明火种在标题界面永久解锁，跨局生效。',
     stats:()=>[['当前等级',save.bless[k]+' / '+b.max],
@@ -220,9 +267,10 @@ const CODEX=[
      ['拆解存世',cardTotal('salvage5')+cardTotal('salvage10')+cardTotal('salvage20')+' 张']],
    rel:['c_salvage5','c_salvage10','c_salvage20']},
   {id:'dawn',cat:'term',name:'黎明回合',icon:'sun',color:'#ffb454',
-   desc:'每次天亮进入两步选择：先 3 选 1 拾获卡牌，再 3 选 1 获得祝福，都可跳过；随后抽满手牌。',
+   desc:'每次天亮进入三步选择：拾获卡牌、灯芯祝福、武器刻印，各 3 选 1，均可跳过；随后抽满手牌。',
    stats:()=>[['白昼时长',DAY_LEN+' 秒'],['当前日数',S.day],['额外抽牌',P.bonusDraw+' 张'],
-     ['核心自愈',TUNE.core.regen+' /秒']],rel:['hand','deck','b_blade']},
+     ['核心自愈',TUNE.core.regen+' /秒'],['刻印池',SIGIL_IDS.length+' 种'],
+     ['刻印槽位',(P.sigils||[]).length+' / '+sigilCap()]],rel:['hand','deck','b_blade']},
   {id:'tide',cat:'term',name:'雾潮',icon:'fog',color:'#a06bff',
    desc:'夜间敌潮，自岛缘分批刷新。夜晚构筑牌封存，只能打瞬发牌——白天没铺好，晚上就得靠操作。',
    stats:()=>[['本夜波次',S.nightTotal||'—'],['已消灭',S.nightKilled],['同屏上限',FOE_CAP],['每夜成长',S.endless?'缓增封顶':'+13% 生命']],
@@ -279,6 +327,29 @@ const CODEX=[
 ];
 const CX_BY_ID={};CODEX.forEach(e=>CX_BY_ID[e.id]=e);
 let cxCat='all',cxQuery='',cxFiltered=[],cxSel=null,cxT=0;
+const cxTagSel=new Set();
+// 命中数按「当前分类 ∩ 其他已选标签」统计，0 命的未选标签置灰，堵住必然空组合
+function cxTagCount(id){
+  const others=[...cxTagSel].filter(x=>x!==id);
+  return CODEX.filter(e=>{
+    if(cxCat!=='all'&&e.cat!==cxCat)return false;
+    const et=e.tags||[];
+    return et.includes(id)&&others.every(t=>et.includes(t));
+  }).length;
+}
+function cxBuildTags(){
+  const wrap=$('cxTagFilters');let html='',prev='';
+  for(const t of CX_TAGS){
+    if(prev&&t.g!==prev)html+='<span class="cxFTagDiv"></span>';prev=t.g;
+    const on=cxTagSel.has(t.id),n=cxTagCount(t.id);
+    html+=`<button class="cxFTag${on?' on':''}" data-t="${t.id}" style="--tc:${t.col}"${!on&&!n?' disabled':''}>${t.name}<i>${n}</i></button>`;
+  }
+  wrap.innerHTML=html;
+  wrap.querySelectorAll('.cxFTag').forEach(el=>el.addEventListener('click',()=>cxToggleTag(el.dataset.t)));
+  $('cxTagClear').disabled=!cxTagSel.size;
+}
+function cxToggleTag(id){cxTagSel.has(id)?cxTagSel.delete(id):cxTagSel.add(id);sfx('page');cxBuildTags();cxRenderList();}
+function cxClearTags(){if(!cxTagSel.size)return;cxTagSel.clear();sfx('page');cxBuildTags();cxRenderList();}
 const cxCv=$('cxPreview'),cxCtx=cxCv.getContext('2d');
 let cxW=168,cxH=168;
 function sizeCodexCv(){
@@ -287,7 +358,7 @@ function sizeCodexCv(){
   cxCv.width=Math.floor(cxW*DPR);cxCv.height=Math.floor(cxH*DPR);
 }
 function cxSeenCount(){
-  const groups={foe:Object.keys(FOES),card:BLESSINGS.map(b=>b.id),play:CARD_IDS};
+  const groups={foe:Object.keys(FOES),card:BLESSINGS.map(b=>b.id),play:CARD_IDS,sigil:SIGIL_IDS};
   let n=0;
   for(const k in groups)for(const id of groups[k])if(save.seen[k][id]>0)n++;
   return n;
@@ -300,22 +371,23 @@ function cxBuildCats(){
   }).join('');
   wrap.querySelectorAll('.cxCat').forEach(el=>el.addEventListener('click',()=>{
     cxCat=el.dataset.c;sfx('page');cxBuildCats();cxRenderList();}));
+  cxBuildTags();
 }
 function cxRenderList(){
-  const q=cxQuery.trim().toLowerCase();
+  const q=cxQuery.trim().toLowerCase(),tags=[...cxTagSel];
   cxFiltered=CODEX.filter(e=>{
     if(cxCat!=='all'&&e.cat!==cxCat)return false;
+    if(tags.length){const et=e.tags||[];for(const t of tags)if(!et.includes(t))return false;}
     if(!q)return true;
     return (e.name+' '+e.desc).toLowerCase().includes(q);
   });
   const list=$('cxList');
-  if(!cxFiltered.length)list.innerHTML='<div class="cxEmpty">雾中没有这条记录<br>换个关键词试试</div>';
+  if(!cxFiltered.length)list.innerHTML=tags.length
+    ?`<div class="cxEmpty">没有同时含这 ${tags.length} 个标签的条目<br><button class="cxEmptyClear">清除标签</button></div>`
+    :'<div class="cxEmpty">雾中没有这条记录<br>换个关键词试试</div>';
   else{
     list.innerHTML=cxFiltered.map(e=>{
-      let bdg='';
-      if(e.cat==='foe'&&save.seen.foe[e.id])bdg='×'+save.seen.foe[e.id];
-      else if(e.cat==='card'){const id=e.id.slice(2);if(cardTotal(id))bdg='×'+cardTotal(id);}
-      else if(e.cat==='bless'&&save.seen.card[e.id.slice(2)])bdg='×'+save.seen.card[e.id.slice(2)];
+      const bdg=e.badge?e.badge():'';
       const cn=(CX_CATS.find(c=>c.id===e.cat)||{}).name||'';
       return `<button class="cxItem${cxSel===e.id?' on':''}" data-id="${e.id}">
         <span class="ci" style="color:${e.color};background:${e.color}1a">${svg(e.icon,16)}</span>
@@ -323,10 +395,12 @@ function cxRenderList(){
     }).join('');
     list.querySelectorAll('.cxItem').forEach(el=>el.addEventListener('click',()=>cxSelect(el.dataset.id,true)));
   }
+  list.querySelectorAll('.cxEmptyClear').forEach(el=>el.addEventListener('click',cxClearTags));
   if(!cxFiltered.some(e=>e.id===cxSel))cxSelect(cxFiltered.length?cxFiltered[0].id:null,false);
   else cxSelect(cxSel,false);
-  const track=Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length,got=cxSeenCount();
-  $('cxCount').textContent=`共 ${CODEX.length} 条 · 显示 ${cxFiltered.length} 条 · 已记录 ${got}/${track}`;
+  const track=Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length+SIGIL_IDS.length,got=cxSeenCount();
+  const tagTxt=cxTagSel.size?` · 已选 ${cxTagSel.size} 个标签`:'';
+  $('cxCount').textContent=`共 ${CODEX.length} 条 · 显示 ${cxFiltered.length} 条 · 已记录 ${got}/${track}${tagTxt}`;
   $('cxProgFill').style.width=clamp(got/track,0,1)*100+'%';
 }
 function cxSelect(id,scroll){
@@ -347,6 +421,7 @@ function cxSelect(id,scroll){
     :'<span style="font-size:12px;color:var(--dim2)">无</span>';
   $('cxRel').querySelectorAll('.cxRelBtn').forEach(el=>el.addEventListener('click',()=>{
     const t=CX_BY_ID[el.dataset.id];
+    if(cxTagSel.size){cxTagSel.clear();cxBuildTags();}
     if(cxCat!=='all'&&t.cat!==cxCat){cxCat='all';cxBuildCats();}
     if(cxQuery){cxQuery='';$('cxSearch').value='';}
     cxRenderList();cxSelect(el.dataset.id,true);sfx('page');
@@ -421,6 +496,7 @@ function closeCodex(){
 $('cxClose').addEventListener('click',closeCodex);
 $('codexOv').addEventListener('pointerdown',e=>{if(e.target.classList.contains('scrim'))closeCodex();});
 $('cxSearch').addEventListener('input',e=>{cxQuery=e.target.value;cxRenderList();});
+$('cxTagClear').addEventListener('click',cxClearTags);
 $('btnCodexMenu').addEventListener('click',()=>openCodex('menu'));
 $('btnCodexPause').addEventListener('click',()=>openCodex('pause'));
 

@@ -158,7 +158,7 @@ function captureSaves() {
   return j(env)(`JSON.stringify({embers:save.embers,diff:save.diff,muted:save.muted,bless:save.bless,best:save.best,seen:save.seen})`);
 }
 
-const SAVE_G = { "embers": 41, "diff": "wild", "muted": true, "bless": { "blade": 2, "iron": 1, "stock": 0 }, "best": { "nights": 5, "kills": 33, "wins": 1 }, "seen": { "foe": { "crawler": 7 }, "build": { "tower": 2 }, "card": { "blade": 1 }, "play": { "rain": 3 } } };
+const SAVE_G = { "embers": 41, "diff": "wild", "muted": true, "bless": { "blade": 2, "iron": 1, "stock": 0 }, "best": { "nights": 5, "kills": 33, "wins": 1 }, "seen": { "foe": { "crawler": 7 }, "build": { "tower": 2 }, "card": { "blade": 1 }, "play": { "rain": 3 }, "sigil": {} } };
 const GOLDEN = {
   r0: {"nightTotal":{"1":[10,10],"2":[14,14],"3":[19,19],"4":[23,23],"5":[27,27],"6":[31,31],"7":[26,25]},"bossNight":{"1":false,"2":false,"3":false,"4":false,"5":false,"6":false,"7":true},"hp":{"1":{"crawler":26,"crawlerElite":41.6,"spitter":22,"spitterElite":35.2,"brute":95,"bruteElite":152,"boss":900,"bossElite":1440},"2":{"crawler":29.379999999999995,"crawlerElite":47.007999999999996,"spitter":24.86,"spitterElite":39.775999999999996,"brute":107.35,"bruteElite":171.76,"boss":1016.9999999999999,"bossElite":1627.1999999999998},"3":{"crawler":32.76,"crawlerElite":52.416,"spitter":27.72,"spitterElite":44.352,"brute":119.7,"bruteElite":191.52,"boss":1134,"bossElite":1814.4},"4":{"crawler":36.14,"crawlerElite":57.824,"spitter":30.580000000000002,"spitterElite":48.928,"brute":132.05,"bruteElite":211.28,"boss":1251,"bossElite":2001.6},"5":{"crawler":39.52,"crawlerElite":63.232,"spitter":33.44,"spitterElite":53.504,"brute":144.4,"bruteElite":231.04,"boss":1368,"bossElite":2188.8},"6":{"crawler":42.9,"crawlerElite":68.64,"spitter":36.3,"spitterElite":58.08,"brute":156.75,"bruteElite":250.8,"boss":1485,"bossElite":2376},"7":{"crawler":46.28,"crawlerElite":74.048,"spitter":39.160000000000004,"spitterElite":62.656,"brute":169.1,"bruteElite":270.56,"boss":1602,"bossElite":2563.2}},"weights":{"1":[200,0,0],"2":[140,60,0],"3":[103,55,42],"4":[98,71,31],"5":[97,67,36],"6":[81,69,50],"7":[79,65,56]}},
   saves: SAVE_G
@@ -406,9 +406,10 @@ testCase('R9_codex_progress', () => {
     for(const id of Object.keys(FOES))save.seen.foe[id]=1;
     for(const b of BLESSINGS)save.seen.card[b.id]=1;
     for(const id of CARD_IDS)save.seen.play[id]=1;
+    for(const id of SIGIL_IDS)save.seen.sigil[id]=1;
     save.seen.play.unknown=1;const full=cxSeenCount();cxRenderList();const label=document.getElementById('cxCount').textContent;
     save.seen.play={};S.day=2;S.mode='dawn';S.dawnStep=0;S.dawnCards=['wall','class_mage','rain'];pickDawn(1);
-    return JSON.stringify({bad,full,label,classSeen:save.seen.play.class_mage,played:S.stats.played,track:Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length});
+    return JSON.stringify({bad,full,label,classSeen:save.seen.play.class_mage,played:S.stats.played,track:Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length+SIGIL_IDS.length});
   })()`);
   assert.deepEqual(out.bad, []);
   assert.equal(out.full, out.track);
@@ -609,8 +610,9 @@ testCase('R14_single_source_contract', () => {
     for(const id of ids)save.seen.foe[id]=1;
     for(const b of BLESSINGS)save.seen.card[b.id]=1;
     for(const id of CARD_IDS)save.seen.play[id]=1;
+    for(const id of SIGIL_IDS)save.seen.sigil[id]=1;
     cxRenderList();
-    const track=ids.length+BLESSINGS.length+CARD_IDS.length;
+    const track=ids.length+BLESSINGS.length+CARD_IDS.length+SIGIL_IDS.length;
     return JSON.stringify({ids,count:entries.length,metaOk,statsOk,track,
       label:document.getElementById('cxCount').textContent});
   })()`);
@@ -1010,6 +1012,217 @@ testCase('R21_basic_element_cards', () => {
       assert.deepEqual(result.mark,[4,0]);
     }
   }
+});
+
+testCase('R22_weapon_slots_and_sigils', () => {
+  const env = makeEnv();
+  // 1) 槽位数按武器登记：剑 3 槽，法杖 6 槽
+  const slots = j(env)(`JSON.stringify(Object.fromEntries(WEAPON_IDS.map(id=>[id,WEAPONS[id].slots])))`);
+  assert.deepEqual(slots, {sword:3,flame:6,frost:6,arcane:6});
+  // 2) 刻印表只有三件，且文案由数值派生
+  const defs = j(env)(`JSON.stringify(SIGIL_IDS.map(id=>({id,n:SIGILS[id].n,d:sigilDesc(id)})))`);
+  assert.equal(defs.length, 3);
+  assert.deepEqual(defs.map(x=>x.id), ['keen','swift','echo']);
+  const live = j(env)(`(()=>{
+    const before=sigilDesc('keen');
+    SIGILS.keen.dmg=.5;const after=sigilDesc('keen');
+    SIGILS.keen.dmg=.2;
+    return JSON.stringify({before,after});
+  })()`);
+  assert.notEqual(live.before, live.after);
+  assert.ok(live.after.includes('50%'));
+
+  // 3) 效果只作用于武器攻击，不影响法术牌
+  const combat = j(env)(`(()=>{
+    const setup=(w,sigils)=>{
+      save.weapon=w;initRun();S.mode='play';
+      P.dmg=TUNE.player.baseDmg;P.atkCd=0;P.crit=0;P.wave=0;P.cls='mage';P.maxEn=200;P.en=137;P.spellCd=.4;
+      P.stacks={};P.sigils=sigils;
+      foes.length=0;nodes.length=0;shots.length=0;slashes.length=0;
+    };
+    const foe=()=>{foes.push({type:'crawler',x:P.x+1.1,y:P.y,hp:10000,max:10000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
+      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+      fireCd:99,spawnCd:99,stompCd:99,px:P.x+1.1,py:P.y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
+      rebuildFoeGrid();};
+    const r0=Math.random;
+    setup('sword',[]);foe();Math.random=()=>0;autoAttack();const swordPlain=10000-foes[0].hp;
+    setup('sword',['keen','keen']);foe();Math.random=()=>0;autoAttack();const swordKeen=10000-foes[0].hp;
+    setup('flame',[]);foe();Math.random=()=>0;autoAttack();const flamePlain=10000-foes[0].hp;
+    setup('flame',['keen','keen']);foe();Math.random=()=>0;autoAttack();const flameKeen=10000-foes[0].hp;
+    setup('sword',['echo']);foe();Math.random=()=>0;autoAttack();const echoDmg=10000-foes[0].hp;const echoSlashes=slashes.length;
+    setup('sword',['swift','swift']);const cdSwift=weaponAttackInterval();
+    setup('sword',[]);const cdPlain=weaponAttackInterval();
+    Math.random=r0;
+    return JSON.stringify({swordPlain,swordKeen,flamePlain,flameKeen,echoDmg,echoSlashes,cdSwift,cdPlain});
+  })()`);
+  assert.equal(combat.swordPlain, 12);
+  assert.ok(Math.abs(combat.swordKeen - 12*1.44) < 1e-6);
+  assert.equal(combat.flamePlain, 20);
+  assert.ok(Math.abs(combat.flameKeen - 20*1.44) < 1e-6);
+  assert.equal(combat.echoDmg, 24);
+  assert.equal(combat.echoSlashes, 2);
+  assert.ok(Math.abs(combat.cdPlain - .42) < 1e-9);
+  assert.ok(combat.cdSwift < combat.cdPlain);
+
+  // 4) 黎明第三步发放刻印，槽满后不再提供
+  const dawn = j(env)(`(()=>{
+    save.weapon='sword';initRun();S.mode='dawn';
+    S.dawnStep=1;S.dawnBless=[BLESSINGS.find(b=>b.id==='blade')];
+    rollDawnSigils();
+    const cand=S.dawnSigils.map(s=>s.id);
+    pickDawn(0);
+    const step=S.dawnStep;
+    pickDawn(0);
+    const sigils=P.sigils.slice();
+    P.sigils=['keen','keen','keen'];
+    rollDawnSigils();
+    return JSON.stringify({cand,step,sigils,full:S.dawnSigils.length});
+  })()`);
+  assert.equal(dawn.cand.length, 3);
+  assert.equal(dawn.step, 2);
+  assert.equal(dawn.sigils.length, 1);
+  assert.ok(env.run(`SIGIL_IDS.includes('${dawn.sigils[0]}')`));
+  assert.equal(dawn.full, 0);
+
+  // 5) 存档往返保留刻印
+  const roundtrip = j(env)(`(()=>{
+    save.weapon='flame';initRun();S.mode='play';
+    P.sigils=['keen','swift'];
+    const snap=captureSnapshot();
+    P.sigils=[];
+    restoreSnapshot(JSON.parse(JSON.stringify(snap)));
+    return JSON.stringify({sigils:P.sigils,snapIds:snap.P.sigils});
+  })()`);
+  assert.deepEqual(roundtrip.sigils, ['keen','swift']);
+  assert.deepEqual(roundtrip.snapIds, ['keen','swift']);
+});
+
+testCase('R23_codex_sigil_and_seen_source', () => {
+  const env = makeEnv();
+  // 1) 图鉴刻印条目完全由 SIGILS 派生：新增刻印只需在 03-data.js 登记一次
+  const derived = j(env)(`(()=>{
+    const ids=SIGIL_IDS;
+    const entries=CODEX.filter(x=>x.id.startsWith('s_'));
+    const metaOk=ids.every(id=>{
+      const e=CODEX.find(x=>x.id==='s_'+id),d=SIGILS[id];
+      return e&&e.name===d.n&&e.icon===d.icon&&e.color===d.color;
+    });
+    const descOk=ids.every(id=>{
+      const e=CODEX.find(x=>x.id==='s_'+id);
+      return e.stats().some(x=>x[0]==='效果'&&x[1]===sigilDesc(id));
+    });
+    const before=CODEX.find(x=>x.id==='s_keen').stats().find(x=>x[0]==='效果')[1];
+    SIGILS.keen.dmg=.5;
+    const after=CODEX.find(x=>x.id==='s_keen').stats().find(x=>x[0]==='效果')[1];
+    SIGILS.keen.dmg=.2;
+    return JSON.stringify({ids,count:entries.length,metaOk,descOk,before,after,
+      catOk:!CX_CATS.some(c=>c.id==='sigil')&&CX_CATS.some(c=>c.id==='role'),
+      inRole:entries.every(e=>e.cat==='role')});
+  })()`);
+  assert.deepEqual(derived.ids, ['keen', 'swift', 'echo']);
+  assert.equal(derived.count, 3);
+  assert.equal(derived.metaOk, true);
+  assert.equal(derived.descOk, true);
+  assert.equal(derived.catOk, true);
+  assert.equal(derived.inRole, true);
+  assert.notEqual(derived.before, derived.after);
+  assert.ok(derived.after.includes('50%'));
+
+  // 2) 黎明条目文案与实际流程一致：三步
+  const dawn = j(env)(`(()=>{
+    const e=CODEX.find(x=>x.id==='dawn');
+    return JSON.stringify({desc:e.desc,steps:e.desc.includes('三步'),
+      pool:e.stats().find(x=>x[0]==='刻印池')[1]});
+  })()`);
+  assert.equal(dawn.steps, true);
+  assert.ok(dawn.desc.includes('刻印'));
+  assert.equal(dawn.pool, '3 种');
+
+  // 3) 武器条目带槽位
+  const wp = j(env)(`(()=>{
+    const e=CODEX.find(x=>x.id==='w_sword');
+    return JSON.stringify({slot:e.stats().find(x=>x[0]==='刻印槽位')[1]});
+  })()`);
+  assert.equal(wp.slot, '3 格');
+
+  // 4) seen 白名单单一来源：登记一次，初始化 / 校验 / 拷贝三处共用
+  const seen = j(env)(`(()=>{
+    const out={keys:SEEN_KEYS,init:Object.keys(save.seen)};
+    bumpSeen('sigil','keen');
+    out.after=JSON.parse(JSON.stringify(save.seen.sigil));
+    out.defaults=SEEN_KEYS.every(k=>save.seen[k]&&typeof save.seen[k]==='object');
+    return JSON.stringify(out);
+  })()`);
+  assert.deepEqual(seen.keys, ['foe', 'build', 'card', 'play', 'sigil']);
+  assert.deepEqual(seen.init, ['foe', 'build', 'card', 'play', 'sigil']);
+  assert.deepEqual(seen.after, { keen: 1 });
+  assert.equal(seen.defaults, true);
+});
+
+testCase('R24_codex_tag_filter_and_contract', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    const byId=id=>CODEX.find(e=>e.id===id);
+    const cats=CX_CATS.map(c=>c.id),tagIds=CX_TAGS.map(t=>t.id);
+    const cover=CARD_IDS.every(id=>Array.isArray(byId('c_'+id).tags));
+    const untagged=CARD_IDS.filter(id=>!byId('c_'+id).tags.length);
+    const tag=(id,k)=>byId('c_'+id).tags.includes(k);
+    const s={kindling:byId('c_sp_kindling').tags,arcneedle:byId('c_sp_arcaneneedle').tags,
+      mine:byId('c_mine').tags,tactic:byId('c_tactic').tags,wall:byId('c_wall').tags,
+      flame:byId('w_flame').tags,sword:byId('w_sword').tags,keen:byId('s_keen').tags};
+    const deadTag=tagIds.filter(t=>!CODEX.some(e=>(e.tags||[]).includes(t)));
+    const ownW=CODEX.filter(e=>(e.tags||[]).includes('weapon')).length;
+    const ownS=CODEX.filter(e=>(e.tags||[]).includes('sigil')).length;
+    const tplInCodex=!!byId('c_sp_fireball');
+    cxCat='all';cxQuery='';cxRenderList();
+    const all=cxFiltered.length;
+    cxTagSel.clear();['fire','aoe'].forEach(t=>cxTagSel.add(t));cxRenderList();const n2=cxFiltered.length;
+    const label=document.getElementById('cxCount').textContent;
+    cxTagSel.add('single');cxRenderList();const n3=cxFiltered.length;
+    const emptyHtml=document.getElementById('cxList').innerHTML;
+    cxCat='term';cxTagSel.clear();cxTagSel.add('heal');cxRenderList();const termHeal=cxFiltered.length;
+    cxTagSel.clear();cxCat='all';cxRenderList();
+    return JSON.stringify({cats,tagIds,cover,untagged,s,deadTag,ownW,ownS,wLen:WEAPON_IDS.length,sLen:SIGIL_IDS.length,
+      tplInCodex,all,n2,n3,label,emptyHtml,termHeal,
+      badge:typeof byId('s_keen').badge,catOfSigil:byId('s_keen').cat});
+  })()`);
+  // 1) 分类恢复 8 项，刻印不再单独成类
+  assert.deepEqual(out.cats, ['all', 'role', 'res', 'card', 'foe', 'bless', 'legacy', 'term']);
+  assert.equal(out.catOfSigil, 'role');
+  assert.equal(out.badge, 'function');
+  // 2) 18 个标签（16 能力 + 2 归属）、无重复、无死标签
+  assert.equal(out.tagIds.length, 18);
+  assert.equal(new Set(out.tagIds).size, 18);
+  assert.deepEqual(out.deadTag, []);
+  // 归属标签只命中对应实体
+  assert.equal(out.ownW, out.wLen);
+  assert.equal(out.ownS, out.sLen);
+  // 3) 每张卡牌都挂了 tags；无标签卡牌白名单固化
+  assert.equal(out.cover, true);
+  assert.deepEqual(out.untagged, ['surge', 'salvage5', 'salvage10', 'salvage20', 'class_mage']);
+  // 4) 派生规则：单体优先于范围；元素/法力/范围/状态四条链路
+  assert.ok(out.s.arcneedle.includes('single'));
+  assert.ok(!out.s.arcneedle.includes('aoe'));
+  assert.deepEqual(out.s.kindling, ['fire', 'spell', 'aoe', 'dot']);
+  assert.deepEqual(out.s.arcneedle, ['arcane', 'spell', 'single', 'amp']);
+  assert.deepEqual(out.s.mine, ['aoe', 'control']);
+  assert.deepEqual(out.s.tactic, ['draw']);
+  assert.deepEqual(out.s.wall, ['persist', 'guard']);
+  // 5) 武器从模板派生并带归属标签、刻印三选一映射 + 归属
+  assert.deepEqual(out.s.flame, ['spell', 'fire', 'aoe', 'dot', 'weapon']);
+  assert.deepEqual(out.s.sword, ['melee', 'weapon']);
+  assert.deepEqual(out.s.keen, ['amp', 'sigil']);
+  // 6) 武器攻击模板不进图鉴
+  assert.equal(out.tplInCodex, false);
+  // 7) AND 组合确实收窄（火+范围=5 条，再加单体归零）；术语不挂标签
+  assert.equal(out.all, 101);
+  assert.equal(out.n2, 5);
+  assert.equal(out.n3, 0);
+  assert.ok(out.label.includes('已选 2 个标签'));
+  assert.ok(/已记录 \d+\/\d+/.test(out.label));
+  assert.ok(out.emptyHtml.includes('没有同时含这 3 个标签的条目'));
+  assert.ok(out.emptyHtml.includes('cxEmptyClear'));
+  assert.equal(out.termHeal, 0);
 });
 
 function main() {

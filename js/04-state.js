@@ -5,7 +5,7 @@ const DECK={draw:[],hand:[],discard:[],max:5,recycle:0,uid:1};
 const S={mode:'menu',phase:'day',day:1,timeLeft:70,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,
   speed:1,hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,stats:null,hints:{},elapsed:0,combatT:0,
   aimUid:null,dragUid:null,dragMoved:false,dragStart:[0,0],dragPointerId:null,
-  endless:false,endlessBase:null,settled:null,handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],
+  endless:false,endlessBase:null,settled:null,handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],dawnSigils:[],
   pendingSalvage:null};
 const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=80,FOE_CAP=44;
 /* 个人测试作弊码（仅个人测试用，不在页面呈现任何入口或文案）
@@ -25,6 +25,7 @@ function resetPlayer(){
     dashT:0,dashCd:0,dashCdMax:1.6,dashDx:0,dashDy:0,ifr:0,downed:false,respT:0,
     crit:0,ls:0,thorns:0,wave:0,magnet:2.3,gather:1,towerMult:1,novaMult:1,regen:1,bonusDraw:0,
     cls:null,shield:0,regenAcc:0,enRegenFlat:14,spellCd:0,charge:0,chargeAcc:0,arcCharge:0,arcDiscount:false,
+    sigils:[],
     resoElem:null,resoN:0,stormCount:0,empowerN:0,empowerT:0,nirvanaUsed:false,
     aff:{fire:0,frost:0,arcane:0,lightning:0},
     stacks:{},anim:0,hurtT:0,swingT:0});
@@ -39,7 +40,7 @@ function initRun(){
   Object.assign(S,{phase:'day',day:1,timeLeft:DAY_LEN,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,
     hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,elapsed:0,combatT:0,hints:{},aimUid:null,dragUid:null,
     dragMoved:false,dragStart:[0,0],dragPointerId:null,endless:false,endlessBase:null,settled:null,
-    handDirty:true,dawnStep:0,pendingSalvage:null,
+    handDirty:true,dawnStep:0,dawnSigils:[],pendingSalvage:null,
     stats:{kills:0,gathered:0,dmg:0,nights:0,level:1,played:0}});
   DECK.draw=[];DECK.hand=[];DECK.discard=[];DECK.max=5;DECK.recycle=0;DECK.uid=1;
   const starter=['wall','wall','wall','tower','tower','totem','rain','spring','tactic'];
@@ -127,7 +128,7 @@ function rollRewards(n){
    const 对象只能原地恢复，禁止对 S/P/DECK/res 重新赋值。 */
 const S_SAVE_FIELDS=['mode','phase','day','timeLeft','toSpawn','nightTotal','nightKilled','spawnT','speed',
   'nightAmt','win','elapsed','combatT','stats','hints','endless','endlessBase','settled',
-  'dawnStep','dawnCards','dawnBless','pendingSalvage','swapLeft','swapReason'];
+  'dawnStep','dawnCards','dawnBless','dawnSigils','pendingSalvage','swapLeft','swapReason'];
 function _pickFields(src,keys){const out={};for(const k of keys)if(k in src)out[k]=src[k];return out;}
 function _clone(v){return JSON.parse(JSON.stringify(v));}
 
@@ -135,9 +136,11 @@ function captureSnapshot(){
   const sd=_pickFields(S,S_SAVE_FIELDS);
   // BLESSINGS 条目带函数 f，不能序列化：只存 id，恢复时回绑原对象
   sd.dawnBless=(S.dawnBless||[]).map(b=>b&&b.id).filter(Boolean);
+  sd.dawnSigils=(S.dawnSigils||[]).map(s=>s&&s.id).filter(Boolean);
   if(!Array.isArray(sd.dawnCards))sd.dawnCards=[];
   if(!sd.stats)sd.stats=S.stats?_clone(S.stats):{};
   const pd=_pickFields(P,Object.keys(P));
+  pd.sigils=Array.isArray(pd.sigils)?pd.sigils.filter(id=>SIGILS[id]):[];
   const cards=a=>a.map(c=>({uid:c.uid,id:c.id})).slice(0,240);
   const plain=(a,cap)=>a.map(o=>_clone(o)).slice(0,cap);
   return _clone({
@@ -161,6 +164,7 @@ function restoreSnapshot(s){
   rebuildSolids();rebuildTileCost();fieldDirty=true;
   const sd=d.S;
   sd.dawnBless=Array.isArray(sd.dawnBless)?sd.dawnBless.map(id=>BLESSINGS.find(b=>b.id===id)).filter(Boolean):[];
+  sd.dawnSigils=Array.isArray(sd.dawnSigils)?sd.dawnSigils.map(id=>SIGILS[id]).filter(Boolean):[];
   if(sd.mode!=='dawn')sd.mode='play';
   Object.assign(sd,{hitstop:0,launchT:0,overT:0,aimUid:null,dragUid:null,dragMoved:false,
     dragStart:[0,0],dragPointerId:null,handDirty:true,pendingSalvage:null,swapLeft:0,swapReason:''});

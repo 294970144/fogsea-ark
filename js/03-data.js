@@ -81,7 +81,7 @@ const CDEFS={
   rain:{id:'rain',kind:'instant',target:'point',name:'箭雨',icon:'rain',color:'#ffd166',cost:{wood:6,stone:4},
     radius:2.2,dmg:45,desc:'指定区域落下箭雨，2.2 格内 45 点伤害。夜晚可用。',w:15},
   mine:{id:'mine',kind:'instant',target:'point',name:'雾晶雷',icon:'mine',color:'#57e6ff',cost:{crys:6},
-    radius:2.6,dmg:70,desc:'指定区域引爆雾晶，70 点伤害并强力击退。夜晚可用。',w:13},
+    radius:2.6,dmg:70,knock:1,desc:'指定区域引爆雾晶，70 点伤害并强力击退。夜晚可用。',w:13},
   spring:{id:'spring',kind:'instant',target:'self',name:'愈灵之泉',icon:'heal',color:'#6fe08a',cost:{wood:6,crys:2},
     heal:45,desc:'立刻恢复 45 点生命。夜晚可用。',w:15},
   mend:{id:'mend',kind:'instant',target:'self',name:'修补术',icon:'mend',color:'#ffb454',cost:{wood:8,stone:5},
@@ -90,11 +90,11 @@ const CDEFS={
   ward:{id:'ward',kind:'instant',target:'self',name:'灯焰护盾',icon:'ward',color:'#8fe3d0',cost:{crys:5},
     ifr:4,desc:'获得 4 秒无敌，穿过雾弹与包围。夜晚可用。',w:11},
   tactic:{id:'tactic',kind:'instant',target:'self',name:'战术重整',icon:'tactic',color:'#c9a8ff',cost:{wood:4},
-    desc:'立刻抽 2 张牌。循环牌库的关键。',w:14},
+    draw:2,desc:'立刻抽 2 张牌。循环牌库的关键。',w:14},
   surge:{id:'surge',kind:'instant',target:'self',name:'雾能充盈',icon:'surge',color:'#57e6ff',cost:{crys:3},
     desc:'当前资源立即回满，冲刺冷却清零。',w:9},
   expand:{id:'expand',kind:'utility',target:'self',name:'扩容',icon:'expand',color:'#ffb454',cost:{wood:10,stone:6},
-    desc:'手牌上限 +1（最高 10，法师 12），并立即抽 1 张。满上限后不再出现。',w:11},
+    draw:1,desc:'手牌上限 +1（最高 10，法师 12），并立即抽 1 张。满上限后不再出现。',w:11},
   salvage5:{id:'salvage5',kind:'utility',target:'pick',name:'拆解·微光',icon:'salvage',color:'#6fe08a',cost:{},tier:5,
     desc:'回收率 +5%，移除一张牌并按回收率返还其造价（取整）。',w:11},
   salvage10:{id:'salvage10',kind:'utility',target:'pick',name:'拆解·熔解',icon:'salvage',color:'#8fe3d0',cost:{},tier:10,
@@ -144,18 +144,33 @@ const CIDS=Object.keys(CDEFS);
 const CARD_IDS=CIDS.filter(id=>!CDEFS[id].weaponAttack);
 /* 武器是局前选择、局内固定的基础攻击来源；法杖复用 CDEFS 中的攻击模板。 */
 const WEAPONS={
-  sword:{id:'sword',name:'剑',route:'近战路线',icon:'sword',color:'#ffb454',art:'assets/weapons/sword.svg',attack:'melee',
+  sword:{id:'sword',name:'剑',route:'近战路线',icon:'sword',color:'#ffb454',art:'assets/weapons/sword.svg',attack:'melee',slots:3,
     desc:'挥砍、剑气、迅击。'},
-  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',interval:.60,
+  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',interval:.60,slots:6,
     desc:'范围灼烧，火焰蔓延至相邻敌人和树木。'},
-  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',interval:.50,
+  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',interval:.50,slots:6,
     desc:'范围冰缓，叠加减速控制敌群。'},
-  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',interval:.26,
+  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',interval:.26,slots:6,
     desc:'高频打击单个目标，附加奥术标记。'}
 };
 const WEAPON_IDS=Object.keys(WEAPONS);
 const normalizeWeaponId=id=>Object.prototype.hasOwnProperty.call(WEAPONS,id)?id:'sword';
 const weaponDef=id=>WEAPONS[normalizeWeaponId(id)];
+// 武器刻印：装入武器槽位，同种可叠装至 SIGIL_COPIES 份
+const SIGILS={
+  keen:{id:'keen',n:'锋锐刻印',short:'锋锐',icon:'crit',color:'#ffb454',dmg:.20},
+  swift:{id:'swift',n:'迅捷刻印',short:'迅捷',icon:'bolt',color:'#8fe3d0',spd:.15},
+  echo:{id:'echo',n:'回响刻印',short:'回响',icon:'wave',color:'#c9a8ff',echo:.25}
+};
+const SIGIL_IDS=Object.keys(SIGILS);
+const SIGIL_COPIES=3;
+// 文案实时派生：改数值即改描述，避免与表漂移
+const sigilDesc=id=>{
+  const s=SIGILS[id];if(!s)return '';
+  return s.dmg!=null?`武器伤害 +${Math.round(s.dmg*100)}%`
+    :s.spd!=null?`武器攻速 +${Math.round(s.spd*100)}%`
+    :`武器攻击 ${Math.round(s.echo*100)}% 概率追加一次`;
+};
 // 手牌短文案：一次性注入到卡牌自身，显示层只读 def.brief，不再依赖独立表
 const CARD_BRIEF={
   wall:'阻挡雾裔，卡牌可循环。',tower:'自动射击附近雾裔。',totem:'持续恢复附近玩家生命。',cannon:'范围爆炸伤害。',
@@ -179,6 +194,59 @@ function syncCardText(){
   for(const id of ['spring','ward','totem'])CDEFS[id].brief=CARD_BRIEF[id];
 }
 syncCardText();
+/* ---------------- 图鉴标签 ----------------
+   「能做什么」的筛选维度：字典与派生都在这，图鉴只渲染。
+   新增卡牌/武器/刻印无需改图鉴，标签自动出现。 */
+const CX_TAGS=[
+  // 归属组放最前：仅用于在「角色」栏内部切分武器与刻印（其余分类本身已是单一实体）
+  {id:'weapon',name:'武器',g:'own',col:'#e0b070'},
+  {id:'sigil',name:'刻印',g:'own',col:'#c9a8ff'},
+  {id:'fire',name:'火',g:'out',col:ELEMCOL.fire},
+  {id:'frost',name:'冰',g:'out',col:ELEMCOL.frost},
+  {id:'arcane',name:'奥术',g:'out',col:ELEMCOL.arcane},
+  {id:'melee',name:'近战',g:'out',col:'#ffb454'},
+  {id:'spell',name:'法术',g:'out',col:'#8fe3d0'},
+  {id:'aoe',name:'范围',g:'form',col:'#57e6ff'},
+  {id:'single',name:'单体',g:'form',col:'#c9a8ff'},
+  {id:'persist',name:'留场',g:'form',col:'#e0b070'},
+  {id:'heal',name:'治疗',g:'func',col:'#6fe08a'},
+  {id:'draw',name:'抽牌',g:'func',col:'#ffd166'},
+  {id:'guard',name:'防御',g:'func',col:'#8fe3d0'},
+  {id:'control',name:'控制',g:'func',col:'#57e6ff'},
+  {id:'dot',name:'持续伤害',g:'func',col:'#ff7a45'},
+  {id:'amp',name:'增伤',g:'func',col:'#ffb454'},
+  {id:'atkspd',name:'攻速',g:'func',col:'#8fe3d0'},
+  {id:'extra',name:'追加攻击',g:'func',col:'#c9a8ff'}
+];
+const CX_TAG_IDS=CX_TAGS.map(t=>t.id);
+const STATUS_TAG={burn:'dot',chill:'control',freeze:'control',mark:'amp'};
+// 形态先判单体：single/multi 的 radius 是索敌半径，不是作用范围
+function cardTags(d){
+  const t=[];
+  if(d.elem)t.push(d.elem);
+  if(d.mana)t.push('spell');
+  if(d.kind==='build')t.push('persist');
+  if(d.shape==='single'||d.shape==='multi')t.push('single');
+  else if(d.shape==='global'||d.radius)t.push('aoe');
+  if(d.heal||(d.build&&BUILDS[d.build]&&BUILDS[d.build].heal))t.push('heal');
+  if(d.draw>0)t.push('draw');
+  if(d.ifr||d.coreHeal||d.buildHeal||d.build==='wall')t.push('guard');
+  if(d.knock)t.push('control');
+  const st=d.status&&STATUS_TAG[d.status.kind];if(st)t.push(st);
+  if(d.shape==='consume')t.push('dot');
+  return t;
+}
+function weaponTags(w){
+  const t=[w.attack==='melee'?'melee':'spell'],a=w.spell&&CDEFS[w.spell];
+  if(a){
+    if(a.elem)t.push(a.elem);
+    if(a.shape==='single')t.push('single');else if(a.radius)t.push('aoe');
+    const st=a.status&&STATUS_TAG[a.status.kind];if(st)t.push(st);
+  }
+  t.push('weapon');
+  return t;
+}
+const sigilTags=s=>[...(s.dmg!=null?['amp']:s.spd!=null?['atkspd']:['extra']),'sigil'];
 const RESNAME={wood:'木',stone:'石',crys:'晶'};
 const RESCOL={wood:'#e0b070',stone:'#b9c4c9',crys:'#57e6ff'};
 const manaLabel=(full=false)=>isMage()?(full?'法力':'法'):(full?'雾能':'雾');

@@ -19,8 +19,10 @@ let codexOpen=false,codexReturn='menu';
 
 /* ---------------- 存档 ---------------- */
 const SAVE_KEY='arkmist_v3';
+// seen 计数抽屉白名单：新增一类统计只在这里登记一次，初始化 / 校验 / 拷贝三处共用
+const SEEN_KEYS=['foe','build','card','play','sigil'];
 let save={embers:0,bless:{blade:0,iron:0,stock:0},best:{nights:0,kills:0,wins:0},
-  seen:{foe:{},build:{},card:{},play:{}},diff:'std',muted:false,weapon:'sword'};
+  seen:Object.fromEntries(SEEN_KEYS.map(k=>[k,{}])),diff:'std',muted:false,weapon:'sword'};
 function persist(){
   try{localStorage.setItem(SAVE_KEY,JSON.stringify(save));return true;}
   catch(e){
@@ -51,7 +53,7 @@ function loadSave(){
     if(raw){
       try{
         const next=JSON.parse(raw);
-        const seenValid=next.seen&&typeof next.seen==='object'&&['foe','build','card','play'].some(k=>
+        const seenValid=next.seen&&typeof next.seen==='object'&&SEEN_KEYS.some(k=>
           next.seen[k]&&typeof next.seen[k]==='object'&&Object.values(next.seen[k]).some(v=>Number.isFinite(v)&&v>=0));
         const valid=next&&typeof next==='object'&&!Array.isArray(next)&&(
           (Number.isFinite(next.embers)&&next.embers>=0)||typeof next.muted==='boolean'||
@@ -76,7 +78,7 @@ function loadSave(){
     const v=p.best[k];
     if(Number.isInteger(v)&&v>=0)save.best[k]=v;
   }
-  if(p.seen&&typeof p.seen==='object')for(const k of ['foe','build','card','play']){
+  if(p.seen&&typeof p.seen==='object')for(const k of SEEN_KEYS){
     const src=p.seen[k];if(!src||typeof src!=='object')continue;
     const dst={};
     for(const id in src){const v=src[id];if(Number.isFinite(v)&&v>=0)dst[id]=v;}

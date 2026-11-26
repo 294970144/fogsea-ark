@@ -50,19 +50,56 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   background:linear-gradient(90deg,var(--amber),var(--ember));transition:background .5s}
 #phaseBar.night{background:linear-gradient(90deg,var(--violet),var(--danger))}
 
-/* 武器卡：紧贴时间条下方，元素色描边图标盒 + 名称/等级路线/经验条三行 */
-#weaponHud{position:absolute;top:66px;left:14px;display:flex;align-items:center;gap:10px;padding:8px 12px;pointer-events:none;min-width:168px}
-#weaponHudIcon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;
+/* 武器卡：槽位规格按 48px 物品槽标准放大（52px 槽 / 6px 沟槽 / 图标 34px） */
+#weaponHud{position:absolute;top:66px;left:14px;display:flex;flex-wrap:wrap;align-items:flex-start;
+  column-gap:12px;row-gap:0;padding:11px 16px;width:260px;z-index:11;
+  pointer-events:auto;cursor:pointer;
+  transition:width .3s cubic-bezier(.22,1,.36,1),padding .3s cubic-bezier(.22,1,.36,1),
+    border-color .2s,box-shadow .3s}
+#weaponHud.slotsOpen{width:var(--slotW,386px);
+  border-color:color-mix(in srgb, var(--wc, currentColor) 40%, var(--line));
+  box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#weaponHudIcon{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;flex:none;
   background:color-mix(in srgb, var(--wc, currentColor) 14%, transparent);
-  border:1.5px solid var(--wc, currentColor);box-shadow:0 0 12px color-mix(in srgb, var(--wc, currentColor) 22%, transparent)}
-#weaponHudIcon svg{width:21px;height:21px}
+  border:1.5px solid var(--wc, currentColor);box-shadow:0 0 14px color-mix(in srgb, var(--wc, currentColor) 24%, transparent);
+  transition:transform .28s cubic-bezier(.22,1,.36,1)}
+#weaponHudIcon svg{width:27px;height:27px}
+#weaponHudChev{flex:none;width:20px;height:20px;color:var(--dim);opacity:.75;margin-top:4px;
+  transition:transform .3s cubic-bezier(.22,1,.36,1),color .2s}
+#weaponHudChev svg{width:100%;height:100%;display:block}
+#weaponHud:hover #weaponHudChev{color:var(--text)}
+#weaponHud.slotsOpen #weaponHudChev{transform:rotate(180deg);color:var(--wc, currentColor)}
 .whBody{flex:1;min-width:0}
-#weaponHud b{display:block;font-size:13px;line-height:1.3;letter-spacing:.2px;color:var(--text)}
-.whSub{display:block;font-size:11px;line-height:1.4;color:var(--dim);margin-top:1px}
-#weaponHudXpWrap{display:block;width:100%;height:4px;border-radius:3px;margin-top:4px;
+#weaponHud b{display:block;font-size:15px;line-height:1.3;letter-spacing:.2px;color:var(--text)}
+.whSub{display:block;font-size:12px;line-height:1.4;color:var(--dim);margin-top:2px}
+#weaponHudXpWrap{display:block;width:100%;height:5px;border-radius:3px;margin-top:6px;
   background:rgba(143,227,208,.15);overflow:hidden}
 #weaponHudXp{display:block;height:100%;width:100%;border-radius:3px;transform-origin:left;
   background:linear-gradient(90deg,var(--amber),var(--ember));transition:transform .2s}
+/* 槽位区：0fr→1fr 高度过渡 + 淡入上移，收起时同样有反向动画 */
+#weaponSlots{flex:0 0 100%;display:grid;grid-template-rows:0fr;opacity:0;margin-top:0;overflow:hidden;
+  transition:grid-template-rows .3s cubic-bezier(.22,1,.36,1),opacity .24s ease,margin-top .3s cubic-bezier(.22,1,.36,1)}
+#weaponSlots.open{grid-template-rows:1fr;opacity:1;margin-top:12px}
+#weaponSlotsRow{overflow:hidden;min-height:0;display:flex;gap:6px;flex-wrap:nowrap;align-items:flex-start;
+  max-width:calc(100vw - 44px)}
+.wslot{display:flex;flex-direction:column;align-items:center;gap:5px;width:52px;flex:none;
+  animation:slotIn .28s cubic-bezier(.22,1,.36,1) backwards}
+#weaponSlotsRow .wslot:nth-child(1){animation-delay:.02s}
+#weaponSlotsRow .wslot:nth-child(2){animation-delay:.05s}
+#weaponSlotsRow .wslot:nth-child(3){animation-delay:.08s}
+#weaponSlotsRow .wslot:nth-child(4){animation-delay:.11s}
+#weaponSlotsRow .wslot:nth-child(5){animation-delay:.14s}
+#weaponSlotsRow .wslot:nth-child(6){animation-delay:.17s}
+@keyframes slotIn{from{opacity:0;transform:translateY(-6px) scale(.82)}to{opacity:1;transform:none}}
+.wslotBox{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;transition:transform .16s ease}
+.wslot.empty .wslotBox{border:1.5px dashed rgba(143,227,208,.3);background:rgba(143,227,208,.05)}
+.wslot.filled .wslotBox{border:1.5px solid currentColor;background:color-mix(in srgb, currentColor 18%, transparent);
+  box-shadow:0 0 14px color-mix(in srgb, currentColor 28%, transparent)}
+.wslotBox svg{width:28px;height:28px}
+.wslotName{font-size:11px;line-height:1.2;color:var(--dim);letter-spacing:.2px;text-align:center;max-width:52px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wslot.filled .wslotName{color:currentColor;opacity:.9}
+.wslot:hover .wslotBox{transform:translateY(-2px) scale(1.05)}
 
 #topRight{position:absolute;top:14px;right:14px;display:flex;gap:8px;pointer-events:auto}
 .iconBtn{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;
@@ -515,6 +552,24 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .cxRelBtn svg{width:14px;height:14px}
 .cxRelBtn:hover{border-color:var(--cyan);color:var(--cyan);transform:translateY(-2px)}
 .cxFoot{flex:none;padding:9px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--dim2)}
+/* 标签筛选栏：独立一行，永不换行，窄屏横向滚动 */
+.cxTagBar{display:flex;align-items:center;gap:8px;padding:7px 20px;border-bottom:1px solid var(--line);flex:none}
+.cxTagLab{font-size:10px;font-weight:900;letter-spacing:2px;color:var(--dim2);flex:none}
+#cxTagFilters{display:flex;align-items:center;gap:6px;overflow-x:auto;flex:1;padding-bottom:2px;scrollbar-width:none}
+#cxTagFilters::-webkit-scrollbar{height:5px}
+.cxFTag{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:14px;flex:none;white-space:nowrap;
+  border:1px solid var(--line);font-size:11.5px;font-weight:700;color:var(--dim);transition:.15s}
+.cxFTag::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--tc,var(--line2));flex:none}
+.cxFTag:hover{color:var(--text);border-color:var(--line2)}
+.cxFTag.on{color:var(--cyan);border-color:var(--cyan);background:rgba(87,230,255,.13)}
+.cxFTag.on::before{background:var(--cyan)}
+.cxFTag[disabled]{opacity:.3;cursor:not-allowed}
+.cxFTag i{font-style:normal;font-size:9.5px;color:var(--dim2)}
+.cxFTag.on i{color:var(--cyan)}
+.cxFTagDiv{width:1px;height:14px;background:var(--line);flex:none;margin:0 2px}
+.cxTagClear{flex:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--line);color:var(--dim)}
+.cxTagClear:not([disabled]):hover{color:var(--danger);border-color:var(--danger)}
+.cxEmptyClear{margin-top:8px;font-size:11.5px;font-weight:700;color:var(--cyan);border:1px solid var(--cyan);border-radius:12px;padding:3px 12px}
 
 #touchUI{position:fixed;inset:0;z-index:12;pointer-events:none;display:none}
 body.touch #touchUI{display:block}
@@ -620,7 +675,11 @@ body.touch .kb-hint{display:none}
   #menu{justify-content:flex-start;align-items:flex-start}
   #menu .scrim{background:rgba(5,11,18,.84)}
   #playerPanel{width:172px;padding:8px 10px;top:108px;left:10px;bottom:auto}
-  #weaponHud{top:58px;left:10px;min-width:156px;padding:7px 9px;gap:8px}
+  #weaponHud{top:58px;left:10px;padding:7px 9px;column-gap:8px;max-width:calc(100vw - 20px)}
+  #weaponHud.slotsOpen{width:var(--slotW,386px);max-width:calc(100vw - 20px)}
+  #weaponHudIcon{width:32px;height:32px;border-radius:9px}
+  #weaponHudIcon svg{width:19px;height:19px}
+  #weaponHudChev{width:15px;height:15px}
   #ppStacks{max-width:110px}
   #rightBottom{top:64px;right:10px;bottom:auto}
   #coreWrap{width:142px}
@@ -638,6 +697,7 @@ body.touch .kb-hint{display:none}
   #codexPanel{height:92vh;width:96vw}
   .cxHead{padding:11px 14px}.cxHead h2{font-size:23px}.cxProg{width:88px}
   .cxTools{padding:8px 14px}.cxSearchWrap{width:100%}
+  .cxTagBar{padding:6px 14px;gap:6px}.cxTagLab{display:none}.cxFTag{padding:7px 12px}
   .cxBody{grid-template-columns:1fr;grid-template-rows:minmax(92px,30%) minmax(0,1fr)}
   #cxList{border-right:none;border-bottom:1px solid var(--line)}
   #cxDetail{padding:13px}.cxVis{width:112px;height:112px}

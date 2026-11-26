@@ -4,7 +4,36 @@ function weaponAttackRange(w=weaponDef(P.weapon)){
   return w.attack==='spell'?TUNE.spell.range*(P.range/TUNE.player.baseRange):P.range;
 }
 function weaponAttackInterval(w=weaponDef(P.weapon)){
-  return (w.interval??TUNE.player.atkInterval)/P.atkSpd;
+  return (w.interval??TUNE.player.atkInterval)/(P.atkSpd*sigilMods().spd);
+}
+function sigilMods(){
+  const m={dmg:1,spd:1,echo:0};
+  for(const id of P.sigils||[]){
+    const s=SIGILS[id];if(!s)continue;
+    if(s.dmg!=null)m.dmg*=1+s.dmg;
+    if(s.spd!=null)m.spd*=1+s.spd;
+    if(s.echo!=null)m.echo=Math.min(.75,m.echo+s.echo);
+  }
+  return m;
+}
+let sigilEchoing=false;
+function sigilEcho(w,tgt){
+  if(sigilEchoing)return;
+  const m=sigilMods();
+  if(m.echo<=0||Math.random()>=m.echo)return;
+  sigilEchoing=true;
+  try{
+    if(tgt&&!tgt.dead){if(w.attack==='spell')autoCastWeapon(w,tgt);else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));return;}
+    let near=null,bd=1e9;
+    forFoes(P.x,P.y,weaponAttackRange(w)+1.2,f=>{
+      if(f.dead)return;
+      const d=dist(P.x,P.y,f.x,f.y);
+      if(d<=weaponAttackRange(w)+f.r&&d<bd){bd=d;near=f;}
+    });
+    if(!near)return;
+    if(w.attack==='spell')autoCastWeapon(w,near);
+    else swing(Math.atan2(near.y-P.y,near.x-P.x));
+  }finally{sigilEchoing=false;}
 }
 function autoAttack(){
   if(P.downed||P.atkCd>0)return;
@@ -43,7 +72,7 @@ function autoCastWeapon(w,tgt){
   const targets=def.shape==='single'?[tgt]:spellTargets(def,tgt.x,tgt.y);
   for(const f of targets){
     if(!f||f.dead)continue;
-    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell;
+    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell*sigilMods().dmg;
     const crit=Math.random()<P.crit;if(crit)dmg*=2;
     if(dmg>0)damageFoe(f,dmg,ang,crit,{noKnock:true});
     if(def.status&&!f.dead)applyElement(f,def.elem,def.status.n,def.status.kind);
@@ -51,6 +80,7 @@ function autoCastWeapon(w,tgt){
   if(def.spreadFire)spreadFire(tgt.x,tgt.y,def.radius,targets);
   spellFx(def,tgt.x,tgt.y,def.elem,targets);
   if(targets.length)S.hitstop=Math.max(S.hitstop,.02);
+  sigilEcho(w,tgt);
 }
 function swing(ang){
   P.atkCd=weaponAttackInterval(WEAPONS.sword);P.swingT=.18;P.face=ang;
@@ -65,15 +95,17 @@ function swing(ang){
     return da<=1.15;
   };
   let hit=false;
+  const dm=sigilMods().dmg;
   forFoes(P.x,P.y,P.range+1.2,f=>{
     if(f.dead||!inArc(f,f.r))return;
-    let dmg=P.dmg*TUNE.dmgMul.melee;const crit=Math.random()<P.crit;if(crit)dmg*=2;
+    let dmg=P.dmg*TUNE.dmgMul.melee*dm;const crit=Math.random()<P.crit;if(crit)dmg*=2;
     damageFoe(f,dmg,ang,crit);hit=true;
   });
   for(const n of nodes){if(!n.alive||!inArc(n,.4))continue;hitNode(n);hit=true;}
   if(P.wave>0)shots.push({x:P.x+Math.cos(ang)*.5,y:P.y+Math.sin(ang)*.5,vx:Math.cos(ang)*10,vy:Math.sin(ang)*10,
-    type:'wave',dmg:P.dmg*(.5+.2*P.wave)*TUNE.dmgMul.melee,life:.34,pierce:2,z:12});
+    type:'wave',dmg:P.dmg*(.5+.2*P.wave)*TUNE.dmgMul.melee*dm,life:.34,pierce:2,z:12});
   if(hit)S.hitstop=Math.max(S.hitstop,.02);
+  if(hit)sigilEcho(WEAPONS.sword,{x:P.x+Math.cos(ang)*.6,y:P.y+Math.sin(ang)*.6});
 }
 function damageFoe(f,dmg,ang,crit,opts){
   if(f.dead)return;
