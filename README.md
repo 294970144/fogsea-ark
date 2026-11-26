@@ -155,7 +155,7 @@ tests/regression.js 隔离回归脚本
 node tests/regression.js
 ```
 
-仅用 Node 内置模块，在 `vm` 沙箱中加载 13 个玩法脚本（不含 FX / three），以桩替身模拟 DOM、Canvas 与存储，跑完 22 个聚焦用例（R0–R21）。
+仅用 Node 内置模块，在 `vm` 沙箱中加载 13 个玩法脚本（不含 FX / three），以桩替身模拟 DOM、Canvas 与存储，跑完 25 个聚焦用例（R0–R24）。
 
 ---
 
