@@ -6,6 +6,8 @@ function cacheUI(){
   UI.phaseChip=$('phaseChip');UI.phaseIcon=UI.phaseChip.querySelector('svg');UI.phaseName=$('phaseName');
   UI.dayLabel=$('dayLabel');UI.nightLabel=$('nightLabel');UI.phaseBar=$('phaseBar');
   UI.weaponHud=$('weaponHud');UI.weaponIcon=$('weaponHudIcon');UI.weaponName=$('weaponHudName');
+  UI.weaponLv=$('weaponHudLv');UI.weaponRoute=$('weaponHudRoute');
+  UI.weaponXpWrap=$('weaponHudXpWrap');UI.weaponXp=$('weaponHudXp');
   UI.hpBar=$('hpBar');UI.hpFill=UI.hpBar.firstElementChild;UI.hpTxt=$('hpTxt');
   UI.enBar=$('enBar');UI.enFill=UI.enBar.firstElementChild;UI.enTxt=$('enTxt');UI.enLabel=$('enLabel');
   UI.shieldBar=$('shieldBar');UI.shieldFill=UI.shieldBar?UI.shieldBar.firstElementChild:null;UI.shieldTxt=$('shieldTxt');
@@ -24,8 +26,12 @@ function syncHUD(){
   const w=weaponDef(P.weapon);
   if(UI.weaponHud._w!==P.weapon){
     UI.weaponHud._w=P.weapon;UI.weaponIcon.innerHTML=svg(w.icon,20,w.color);UI.weaponIcon.style.color=w.color;
+    UI.weaponHud.style.setProperty('--wc',w.color);
     setTxt(UI.weaponName,w.name);
+    setTxt(UI.weaponRoute,w.attack==='melee'?'近战武器':'法术武器');
   }
+  setTxt(UI.weaponLv,'Lv.'+P.lvl);
+  setBar(UI.weaponXpWrap,UI.weaponXp,P.xp/P.next);
   const night=S.phase==='night';
   const showNight=S.mode==='play'&&!night;
   if(UI.nightBtn._s!==showNight){UI.nightBtn._s=showNight;UI.nightBtn.style.display=showNight?'':'none';}
@@ -167,7 +173,7 @@ const CODEX=[
         if(d.mana)s.push([manaLabel(true),effManaCost(d)],['元素',ELEMNAME[d.elem]||'—']);
         if(d.shape)s.push(['施法形态',d.shape]);
         if(d.status){
-          const sn={burn:'灼烧',chill:'冰缓',freeze:'冻结',mark:'奥术标记'}[d.status.kind]||d.status.kind;
+          const sn=TUNE.statusNames[d.status.kind]||d.status.kind;
           s.push(['附加状态',sn+' ×'+d.status.n]);
         }
         if(d.id==='expand')s.push(['当前上限',DECK.max+' / '+handCap()]);
@@ -263,7 +269,7 @@ const CODEX=[
    rel:['spell','reaction','mage']},
   {id:'reaction',cat:'term',name:'元素反应',icon:'steam',color:'#8fe3d0',
    desc:'法术武器自动开启元素反应；剑路线需法师天赋「元素融合」。同一敌人 '+TUNE.reaction.window+' 秒内被两种元素命中触发，每敌人 '+TUNE.reaction.cooldown+' 秒冷却。',
-   stats:()=>[['火+冰','蒸汽爆炸'],['奥术+火/冰','共鸣扩散'],['雷系','接口保留，未实装']],
+   stats:()=>[['火+冰',rxName('fire|frost')],['奥术+火/冰',rxName('arcane|fire','arcane|frost')],['雷系','接口保留，未实装']],
    rel:['status','spell','b_t_fusion']},
   {id:'downed',cat:'term',name:'灯芯熄灭',icon:'skull',color:'#ff4d6d',
    desc:'生命归零后 '+TUNE.down.time+' 秒于核心重燃，恢复六成生命并损失两成雾晶。',

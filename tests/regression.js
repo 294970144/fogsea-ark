@@ -660,6 +660,22 @@ testCase('R14_single_source_contract', () => {
   })()`);
   assert.ok(scaled.base > 0 && Math.abs(scaled.spell - scaled.base * 2) < 1e-6);
   assert.ok(Math.abs(scaled.melee - 24) < 1e-6);
+  // 5) 图鉴文案单一数据源：状态名取 TUNE.statusNames，反应名取 RX_DEF
+  const codexNames = j(env)(`(()=>{
+    const card=CODEX.find(x=>x.id==='c_sp_kindling');
+    const st=()=>card.stats().find(x=>x[0]==='附加状态')[1];
+    const s1=st();
+    TUNE.statusNames.burn='燃烧测试';
+    const s2=st();
+    TUNE.statusNames.burn='灼烧';
+    const rxRow=()=>CODEX.find(x=>x.id==='reaction').stats().find(x=>x[0]==='火+冰')[1];
+    const r1=rxRow();
+    RX_DEF['fire|frost'].name='改名测试';
+    const r2=rxRow();
+    RX_DEF['fire|frost'].name='蒸汽爆炸';
+    return JSON.stringify({s1,s2,r1,r2});
+  })()`);
+  assert.deepEqual(codexNames, { s1: '灼烧 ×1', s2: '燃烧测试 ×1', r1: '蒸汽爆炸', r2: '改名测试' });
 });
 
 testCase('R15_weapon_data_pool_and_save', () => {
@@ -773,7 +789,7 @@ testCase('R17_weapon_snapshot_picker_and_hud', () => {
   env.run("openWeaponPicker();selectWeaponDraft('flame');confirmWeaponPicker();");
   assert.equal(env.run('save.weapon'), 'flame');
   assert.equal(JSON.parse(env.run('localStorage.getItem(SAVE_KEY)')).weapon, 'flame');
-  assert.equal(env.ids.get('prepWeaponName').textContent, '火焰法器');
+  assert.equal(env.ids.get('prepWeaponName').textContent, '火焰法杖');
 
   env.run('openWeaponPicker()');
   const press = (key, shiftKey = false) => {
@@ -823,7 +839,7 @@ testCase('R17_weapon_snapshot_picker_and_hud', () => {
     for(const id of WEAPON_IDS){P.weapon=id;syncHUD();names.push(UI.weaponName.textContent);}
     return JSON.stringify(names);
   })()`);
-  assert.deepEqual(hud, ['剑', '火焰法器', '冰霜法器', '奥术法器']);
+  assert.deepEqual(hud, ['剑', '火焰法杖', '冰法杖', '奥术法杖']);
 });
 
 testCase('R18_spell_weapons_skip_mage_transform', () => {

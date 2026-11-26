@@ -6,7 +6,7 @@ const TUNE={
   core:{max:600,repair:{wood:10,stone:6,heal:70},dawnHeal:40,regen:1},
   node:{hits:{crys:3,rock:4,tree:3},yield:{crys:[3,5],tree:[4,6],rock:[4,6]},dropCap:8},
   player:{atkInterval:.42,baseDmg:12,baseRange:1.75},
-  // 伤害倍率：默认 1 不改变现有平衡；近战=剑挥砍/剑气，法术=法术牌/法器/反应/风暴/灼烧
+  // 伤害倍率：默认 1 不改变现有平衡；近战=剑挥砍/剑气，法术=法术牌/法杖/反应/风暴/灼烧
   dmgMul:{melee:1,spell:1},
   dash:{dur:.16,iframe:.28,mult:3.4},
   nova:{cost:60,dmg:30,radius:3.1,radiusPer:.12},
@@ -67,6 +67,8 @@ const RX_DEF={
   'fire|lightning':{id:'overload',name:'过载',enabled:false,radius:2.5,dmg:45},
   'arcane|lightning':{id:'reso',name:'共鸣扩散',enabled:false,radius:2.5,dmg:15}
 };
+// 反应显示名统一取自 RX_DEF，避免图鉴与数据表分叉；多键命中时以「/」并列
+const rxName=(...keys)=>[...new Set(keys.map(k=>RX_DEF[k]&&RX_DEF[k].name).filter(Boolean))].join('/');
 const CDEFS={
   wall:{id:'wall',kind:'build',build:'wall',name:'木墙',icon:'wall',color:'#e0b070',cost:{wood:8},
     desc:'筑起木墙阻挡雾裔。打出后卡牌回到弃牌堆，可再次抽到。',w:26},
@@ -140,15 +142,15 @@ const CDEFS={
 };
 const CIDS=Object.keys(CDEFS);
 const CARD_IDS=CIDS.filter(id=>!CDEFS[id].weaponAttack);
-/* 武器是局前选择、局内固定的基础攻击来源；法器复用 CDEFS 中的攻击模板。 */
+/* 武器是局前选择、局内固定的基础攻击来源；法杖复用 CDEFS 中的攻击模板。 */
 const WEAPONS={
   sword:{id:'sword',name:'剑',route:'近战路线',icon:'sword',color:'#ffb454',art:'assets/weapons/sword.svg',attack:'melee',
     desc:'挥砍、剑气、迅击。'},
-  flame:{id:'flame',name:'火焰法器',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',interval:.60,
+  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',interval:.60,
     desc:'范围灼烧，火焰蔓延至相邻敌人和树木。'},
-  frost:{id:'frost',name:'冰霜法器',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',interval:.50,
+  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',interval:.50,
     desc:'范围冰缓，叠加减速控制敌群。'},
-  arcane:{id:'arcane',name:'奥术法器',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',interval:.26,
+  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',interval:.26,
     desc:'高频打击单个目标，附加奥术标记。'}
 };
 const WEAPON_IDS=Object.keys(WEAPONS);

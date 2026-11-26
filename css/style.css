@@ -50,10 +50,19 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   background:linear-gradient(90deg,var(--amber),var(--ember));transition:background .5s}
 #phaseBar.night{background:linear-gradient(90deg,var(--violet),var(--danger))}
 
-#weaponHud{position:absolute;top:66px;left:14px;display:flex;align-items:center;gap:9px;padding:7px 11px;pointer-events:none;min-width:154px}
-#weaponHudIcon{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;background:rgba(255,255,255,.05);border:1px solid currentColor}
-#weaponHudIcon svg{width:19px;height:19px}
-#weaponHud b{display:block;font-size:12.5px;line-height:1.25}
+/* 武器卡：紧贴时间条下方，元素色描边图标盒 + 名称/等级路线/经验条三行 */
+#weaponHud{position:absolute;top:66px;left:14px;display:flex;align-items:center;gap:10px;padding:8px 12px;pointer-events:none;min-width:168px}
+#weaponHudIcon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;
+  background:color-mix(in srgb, var(--wc, currentColor) 14%, transparent);
+  border:1.5px solid var(--wc, currentColor);box-shadow:0 0 12px color-mix(in srgb, var(--wc, currentColor) 22%, transparent)}
+#weaponHudIcon svg{width:21px;height:21px}
+.whBody{flex:1;min-width:0}
+#weaponHud b{display:block;font-size:13px;line-height:1.3;letter-spacing:.2px;color:var(--text)}
+.whSub{display:block;font-size:11px;line-height:1.4;color:var(--dim);margin-top:1px}
+#weaponHudXpWrap{display:block;width:100%;height:4px;border-radius:3px;margin-top:4px;
+  background:rgba(143,227,208,.15);overflow:hidden}
+#weaponHudXp{display:block;height:100%;width:100%;border-radius:3px;transform-origin:left;
+  background:linear-gradient(90deg,var(--amber),var(--ember));transition:transform .2s}
 
 #topRight{position:absolute;top:14px;right:14px;display:flex;gap:8px;pointer-events:auto}
 .iconBtn{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;
@@ -611,7 +620,7 @@ body.touch .kb-hint{display:none}
   #menu{justify-content:flex-start;align-items:flex-start}
   #menu .scrim{background:rgba(5,11,18,.84)}
   #playerPanel{width:172px;padding:8px 10px;top:108px;left:10px;bottom:auto}
-  #weaponHud{top:58px;left:10px;min-width:144px;padding:6px 9px}
+  #weaponHud{top:58px;left:10px;min-width:156px;padding:7px 9px;gap:8px}
   #ppStacks{max-width:110px}
   #rightBottom{top:64px;right:10px;bottom:auto}
   #coreWrap{width:142px}
