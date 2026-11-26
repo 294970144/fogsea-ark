@@ -1,7 +1,7 @@
 'use strict';
 /* ---------------- 法师 / 法术 ----------------
-   法师是单局职业：P.cls==='mage'。非法师也能拿到基础法术，
-   但使用原有雾能，且不获得法师天赋与核心牌。 */
+   法师是单局职业：P.cls==='mage'。基础攻击由局前选择的武器提供，
+   火球、冰锥、奥术冲击是武器攻击模板，不再作为卡牌发放。 */
 
 const CORE_CARDS={
   fire:['sp_flameimpact','sp_flamedetonate'],
@@ -10,6 +10,8 @@ const CORE_CARDS={
 };
 
 function isMage(){return P.cls==='mage';}
+const isSpellWeapon=()=>weaponDef(P.weapon).attack==='spell';
+const canCastCoreSpells=()=>isMage()||isSpellWeapon();
 function tLv(id){return P.stacks[id]||0;}
 // 施法距离唯一来源：放置校验与法术索敌都走这里，避免两处公式漂移
 const spellCastRange=()=>TUNE.spell.range*(1+TUNE.spell.reachPer*tLv('t_reach'));
@@ -58,7 +60,7 @@ function effManaCost(def){
 }
 
 function becomeMage(){
-  if(isMage())return false;
+  if(isMage()||isSpellWeapon())return false;
   const ratio=P.maxHp>0?P.hp/P.maxHp:1;
   P.cls='mage';
   P.maxHp=Math.max(1,Math.round(P.maxHp*MAGE_TUNE.hpMul));
@@ -67,8 +69,7 @@ function becomeMage(){
   P.en=P.maxEn;
   P.enRegenFlat+=MAGE_TUNE.regenAdd;
   DECK.max=Math.min(handCap(),DECK.max+MAGE_TUNE.handAdd);
-  ['sp_fireball','sp_frostbolt','sp_arcbolt','sp_emberburst','manawell']
-    .forEach(id=>DECK.discard.push(mkCard(id)));
+  ['sp_emberburst','manawell'].forEach(id=>DECK.discard.push(mkCard(id)));
   P.aff.fire+=2;P.aff.frost+=1;P.aff.arcane+=1;
   purgeCard('class_mage');
   P.spellCd=0;
@@ -81,7 +82,7 @@ function becomeMage(){
 }
 
 function injectClassCard(cards){
-  if(isMage()||!cards||!cards.length)return cards;
+  if(isMage()||isSpellWeapon()||!cards||!cards.length)return cards;
   if(S.day===2){
     cards[Math.min(1,cards.length-1)]='class_mage';
   }else if(S.day===3&&Math.random()<.40){
@@ -96,7 +97,7 @@ function coreElementChance(elem){
   return Math.min(.20,.01+.012*(P.aff[elem]||0));
 }
 function injectCoreCards(cards){
-  if(!isMage()||!cards||!cards.length)return cards;
+  if(!canCastCoreSpells()||!cards||!cards.length)return cards;
   const pf=coreElementChance('fire'),pfr=coreElementChance('frost'),pa=coreElementChance('arcane');
   const total=Math.min(.30,pf+pfr+pa);
   if(total<=0||Math.random()>=total)return cards;
@@ -129,6 +130,14 @@ function spellTargets(def,tx,ty){
     for(let i=0;i<n;i++)out.push(list[i]);
     return out;
   }
+  if(def.shape==='single'){
+    let nearest=null,best=Infinity;
+    forFoes(tx,ty,def.radius,f=>{
+      const d=dist(tx,ty,f.x,f.y);
+      if(!f.dead&&d<=def.radius&&d<best){nearest=f;best=d;}
+    });
+    return nearest?[nearest]:out;
+  }
   const cx=def.shape==='self'?P.x:tx,cy=def.shape==='self'?P.y:ty;
   const R=def.radius||1.5;
   forFoes(cx,cy,R,f=>{
@@ -153,6 +162,7 @@ function spellMult(elem,f,overflow){
 }
 
 function spellFx(def,tx,ty,elem,targets){
+  if(def.shape==='single'&&targets?.length){tx=targets[0].x;ty=targets[0].y;}
   const col=ELEMCOL[elem]||'#eef7f2';
   const cx=def.shape==='self'?P.x:tx,cy=def.shape==='self'?P.y:ty;
   const fxShape=elem==='fire'?'spark':elem==='frost'?'shard':elem==='arcane'?'rune':null;
@@ -160,7 +170,7 @@ function spellFx(def,tx,ty,elem,targets){
   if(!fxOn()){
     if(def.shape==='global')ring(P.x,P.y,col,.2,4.2,.55);
     else if(def.shape==='multi')ring(P.x,P.y,col,.2,1.3,.32);
-    else ring(cx,cy,col,.2,def.radius||1.5,.45);
+    else ring(cx,cy,col,.2,def.shape==='single'?.65:(def.radius||1.5),.45);
     puff(cx,cy,12,col,3,.55,3,0,fxShape);
     if(def.shape==='multi')for(const f of (targets||[]))puff(f.x,f.y,5,col,2.2,.4,2,0,fxShape);
   }
@@ -188,6 +198,7 @@ function castSpell(def,tx,ty,overflow=isMage()&&P.en>P.maxEn*.8){
       f.burnStacks=0;f.burnT=0;f.burnTick=0;
     }
   }
+  if(def.spreadFire)spreadFire(tx,ty,def.radius,targets);
   if(isMage()&&elem==='arcane'&&tLv('t_arcecho')>0&&Math.random()<TALENT_TUNE.t_arcecho.chance){
     for(const f of targets){
       if(!f||f.dead)continue;
@@ -264,7 +275,7 @@ function applyStatus(f,kind,n){
 }
 
 function triggerElementReaction(f,elem){
-  if(!f||!isMage()||tLv('t_fusion')<=0)return;
+  if(!f||!(isSpellWeapon()||(isMage()&&tLv('t_fusion')>0)))return;
   const prev=f.lastElem,tt=S.combatT,prevT=f.lastElemT===undefined?-99:f.lastElemT;
   if(prev&&prev!==elem&&tt-prevT<=TUNE.reaction.window&&(f.reactCd||0)<=0){
     const key=[prev,elem].sort().join('|');
@@ -320,6 +331,41 @@ function triggerReaction(f,rx,prev,elem){
     }
     floater(f.x,f.y,'共鸣','#b48cff',true);
     sfx('nova');
+  }
+}
+
+// Only direct hits seed the spread; newly ignited targets cannot extend it.
+function spreadFire(x,y,radius,targets){
+  const tune=TUNE.fireSpread;
+  const directTrees=nodes.filter(n=>n.alive&&n.type==='tree'&&dist(x,y,n.x,n.y)<=radius);
+  const sources=[...targets,...directTrees];
+  const reached=new Set(targets);
+  const trees=new Set(directTrees);
+  for(const source of sources){
+    forFoes(source.x,source.y,tune.radius+1.2,f=>{
+      if(!f.dead&&!f.burnT&&!reached.has(f)&&dist(source.x,source.y,f.x,f.y)<=tune.radius+f.r){
+        reached.add(f);
+        applyElement(f,'fire',1,'burn');
+      }
+    });
+    for(const n of nodes){
+      if(n.alive&&n.type==='tree'&&dist(source.x,source.y,n.x,n.y)<=tune.radius)trees.add(n);
+    }
+  }
+  for(const n of trees){
+    if(n.burnHits)continue;
+    n.burnHits=tune.treeHits;n.burnTick=tune.treeTick;
+  }
+}
+
+function updateBurningTrees(dt){
+  for(const n of nodes){
+    if(!n.alive||!n.burnHits)continue;
+    n.burnTick-=dt;
+    while(n.alive&&n.burnHits>0&&n.burnTick<=0){
+      n.burnTick+=TUNE.fireSpread.treeTick;n.burnHits--;
+      hitNode(n);
+    }
   }
 }
 

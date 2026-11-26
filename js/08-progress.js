@@ -3,6 +3,7 @@
 function rollDawnBless(){
   const pool=BLESSINGS.filter(b=>{
     if(b.cls==='mage'&&!isMage())return false;
+    if(b.weapon&&b.weapon!==P.weapon)return false;
     if(b.id==='t_nirvana'&&P.nirvanaUsed)return false;
     return (P.stacks[b.id]||0)<(b.max||(S.endless?8:Infinity));
   });

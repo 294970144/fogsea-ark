@@ -475,7 +475,7 @@ function explodeArcane(x,y){
 FX.spell=function(def,tx,ty,elem,targets){
   const w=def.weaponAttack?.6:1;
   const sc=n=>Math.max(1,Math.round(n*w));
-  const id=def.id;
+  const id=def.fx||def.id;
   if(id==='sp_fireball'){
     burstW(P.x,P.y,{n:sc(8),col:FIRE,col2:FIRE2,spd:1,life:.25,size:4,shape:0,z0:16,vz:10,grav:0});
     projectile({from:[P.x,P.y,18],to:[tx,ty,8],dur:.16,arc:26,trail:'fire',col:FIRE,

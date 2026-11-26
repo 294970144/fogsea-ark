@@ -60,7 +60,7 @@ function makeEl(tag = 'div') {
     querySelectorAll() { return []; },
     getBoundingClientRect() { return { left: 0, top: 0, right: 128, bottom: 128, width: 128, height: 128 }; },
     getContext() { return makeCtx(); },
-    focus: noop, blur: noop, setPointerCapture: noop, releasePointerCapture: noop,
+    focus: noop, blur: noop, setAttribute: noop, setPointerCapture: noop, releasePointerCapture: noop,
     scrollIntoView: noop, contains: () => false
   };
   Object.defineProperty(el, 'firstElementChild', { get() { return el.children[0] || (el.children[0] = makeEl('div')); } });
@@ -228,17 +228,17 @@ testCase('R3_deck_and_card_text', () => {
   })()`);
   assert.deepEqual(swap, { hand: 10, draw: 0, left: 0, mode: 'play' });
   env.run('initRun()');
-  const costs = env.run(`Object.fromEntries(CIDS.map(id=>[id,costStr(CDEFS[id])]))`);
+  const costs = env.run(`Object.fromEntries(CARD_IDS.map(id=>[id,costStr(CDEFS[id])]))`);
   for (const [id, text] of Object.entries(costs)) assert.ok(!/undefined|\[object Object\]|NaN/.test(text), id);
   assert.equal(costs.wall, '8木');
   assert.equal(costs.tower, '12木 6石');
-  assert.equal(costs.sp_fireball, '15雾');
+  assert.equal(costs.sp_emberburst, '30雾');
   const handTower = env.run(`cardInner(CDEFS.tower,1)`);
   assert.ok(handTower.includes('title="12木材"') && handTower.includes('title="6石料"'));
   assert.ok(!handTower.includes('>12木<') && !handTower.includes('hcKind'));
   assert.ok(handTower.includes('自动射击附近雾裔。'));
-  const handSpell = env.run(`P.cls='mage';cardInner(CDEFS.sp_fireball,'')`);
-  assert.ok(handSpell.includes('title="15法力"'));
+  const handSpell = env.run(`P.cls='mage';cardInner(CDEFS.sp_emberburst,'')`);
+  assert.ok(handSpell.includes('title="30法力"'));
   env.run(`DECK.hand=[mkCard('wall'),mkCard('tower')];DECK.draw=[];DECK.discard=[];renderSwap()`);
   assert.ok(!/undefined|\[object Object\]|NaN/.test(env.ids.get('swapList').children.map(e => e.innerHTML).join('')));
   env.run(`const sc=mkCard('salvage5');DECK.hand=[sc,mkCard('wall')];DECK.draw=[];DECK.discard=[];beginSalvage(sc)`);
@@ -255,17 +255,19 @@ testCase('R4_mage_transform_and_pool', () => {
   const env = makeEnv();
   const out = j(env)(`(()=>{
     initRun();const ids=poolIds();
-    const nonMage={maxEn:P.maxEn,regen:P.enRegenFlat,cap:handCap(),basics:['sp_fireball','sp_frostbolt','sp_arcbolt','sp_emberburst'].every(id=>ids.includes(id)),
+    const nonMage={maxEn:P.maxEn,regen:P.enRegenFlat,cap:handCap(),basics:['sp_emberburst'].every(id=>ids.includes(id)),
+      oldBasics:['sp_fireball','sp_frostbolt','sp_arcbolt'].some(id=>ids.includes(id)),
       mageOnly:ids.some(id=>CDEFS[id].cls==='mage'&&!CDEFS[id].basic),core:ids.some(id=>CDEFS[id].core),cls:ids.includes('class_mage')};
     S.day=2;S.dawnCards=['wall','rain','spring'];injectClassCard(S.dawnCards);const day2=S.dawnCards.slice();
     S.day=5;const before=S.dawnCards.slice();injectClassCard(S.dawnCards);const day5=S.dawnCards.slice();
     S.day=2;S.mode='dawn';S.dawnStep=0;S.dawnCards=['wall','class_mage','rain'];P.hp=P.maxHp;const old=P.maxHp;pickDawn(1);
     return JSON.stringify({nonMage,day2,day5,before,old,cls:P.cls,maxHp:P.maxHp,maxEn:P.maxEn,regen:P.enRegenFlat,
-      deckMax:DECK.max,cap:handCap(),classCards:cardTotal('class_mage'),well:cardTotal('manawell'),
+      deckMax:DECK.max,cap:handCap(),classCards:cardTotal('class_mage'),well:cardTotal('manawell'),burst:cardTotal('sp_emberburst'),
+      oldBasicsInDeck:['sp_fireball','sp_frostbolt','sp_arcbolt'].some(id=>cardTotal(id)>0),
       aff:[P.aff.fire,P.aff.frost,P.aff.arcane],seen:save.seen.play.class_mage,played:S.stats.played,
       mageBless:BLESSINGS.filter(b=>b.cls==='mage').length});
   })()`);
-  assert.deepEqual(out.nonMage, { maxEn: 100, regen: 14, cap: 10, basics: true, mageOnly: false, core: false, cls: false });
+  assert.deepEqual(out.nonMage, { maxEn: 100, regen: 14, cap: 10, basics: true, oldBasics: false, mageOnly: false, core: false, cls: false });
   assert.equal(out.day2[1], 'class_mage');
   assert.deepEqual(out.day5, out.before);
   assert.equal(out.cls, 'mage');
@@ -273,6 +275,8 @@ testCase('R4_mage_transform_and_pool', () => {
   assert.deepEqual([out.maxEn, out.regen, out.deckMax, out.cap], [200, 19, 7, 12]);
   assert.equal(out.classCards, 0);
   assert.equal(out.well, 1);
+  assert.equal(out.burst, 1);
+  assert.equal(out.oldBasicsInDeck, false);
   assert.deepEqual(out.aff, [2, 1, 1]);
   assert.equal(out.seen, 1);
   assert.equal(out.played, 1);
@@ -305,16 +309,17 @@ testCase('R6_talent_rules', () => {
   const env = makeEnv();
   const out = j(env)(`(()=>{
     initRun();P.cls='mage';P.maxEn=200;P.en=200;P.stacks={};
-    P.resoElem=null;P.resoN=0;spellCastSideEffects('fire',CDEFS.sp_fireball);spellCastSideEffects('fire',CDEFS.sp_fireball);
+    const fireCard=CDEFS.sp_kindling,arcaneCard=CDEFS.sp_arcaneneedle;
+    P.resoElem=null;P.resoN=0;spellCastSideEffects('fire',fireCard);spellCastSideEffects('fire',fireCard);
     const noTalent={n:P.resoN,elem:P.resoElem,mult:spellMult('fire',null,false)};
-    P.stacks={t_resonance:1};P.resoElem=null;P.resoN=0;spellCastSideEffects('fire',CDEFS.sp_fireball);spellCastSideEffects('fire',CDEFS.sp_fireball);
+    P.stacks={t_resonance:1};P.resoElem=null;P.resoN=0;spellCastSideEffects('fire',fireCard);spellCastSideEffects('fire',fireCard);
     const resonance={n:P.resoN,mult:spellMult('fire',null,false)};
     P.stacks={t_hastecharge:1};P.charge=6;spellCastSideEffects('fire',CDEFS.sp_flameimpact);const haste=P.charge;
     P.stacks={t_arccharge:1};P.arcCharge=0;P.arcDiscount=false;
-    spellCastSideEffects('arcane',CDEFS.sp_arcbolt);spellCastSideEffects('arcane',CDEFS.sp_arcbolt);spellCastSideEffects('arcane',CDEFS.sp_arcbolt);
+    spellCastSideEffects('arcane',arcaneCard);spellCastSideEffects('arcane',arcaneCard);spellCastSideEffects('arcane',arcaneCard);
     const arccharge={charge:P.arcCharge,discount:P.arcDiscount};
-    P.stacks={t_arcsave:1};const arcane=effManaCost(CDEFS.sp_arcbolt);P.arcDiscount=true;const discounted=effManaCost(CDEFS.sp_arcbolt);
-    P.arcDiscount=false;P.stacks={t_econ:2};const fire=effManaCost(CDEFS.sp_fireball);
+    P.stacks={t_arcsave:1};const arcane=effManaCost(arcaneCard);P.arcDiscount=true;const discounted=effManaCost(arcaneCard);
+    P.arcDiscount=false;P.stacks={t_econ:2};const fire=effManaCost(fireCard);
     return JSON.stringify({noTalent,resonance,haste,arccharge,arcane,discounted,fire});
   })()`);
   assert.deepEqual(out.noTalent, { n: 0, elem: null, mult: 1 });
@@ -380,10 +385,10 @@ testCase('R9_codex_progress', () => {
     for(const e of CODEX)try{const s=e.stats?e.stats():[];if(!Array.isArray(s))bad.push(e.id);}catch(err){bad.push(e.id)}
     for(const id of Object.keys(FOES))save.seen.foe[id]=1;
     for(const b of BLESSINGS)save.seen.card[b.id]=1;
-    for(const id of CIDS)save.seen.play[id]=1;
+    for(const id of CARD_IDS)save.seen.play[id]=1;
     save.seen.play.unknown=1;const full=cxSeenCount();cxRenderList();const label=document.getElementById('cxCount').textContent;
     save.seen.play={};S.day=2;S.mode='dawn';S.dawnStep=0;S.dawnCards=['wall','class_mage','rain'];pickDawn(1);
-    return JSON.stringify({bad,full,label,classSeen:save.seen.play.class_mage,played:S.stats.played,track:Object.keys(FOES).length+BLESSINGS.length+CIDS.length});
+    return JSON.stringify({bad,full,label,classSeen:save.seen.play.class_mage,played:S.stats.played,track:Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length});
   })()`);
   assert.deepEqual(out.bad, []);
   assert.equal(out.full, out.track);
@@ -414,15 +419,16 @@ testCase('R10_hand_keys_and_hud', () => {
   assert.equal(out.keys, '1234567890-=');
 });
 
-testCase('R11_non_mage_spell_and_manawell', () => {
+testCase('R11_non_mage_burst_and_manawell', () => {
   const env = makeEnv();
-  env.run(`initRun();S.mode='play';S.phase='day';P.en=100;P.crit=0;P.stacks={}`);
+  env.run(`initRun();S.mode='play';S.phase='day';P.en=100;P.crit=0;P.stacks={};`);
   seedFoe(env);
   const spell = j(env)(`(()=>{
-    DECK.hand=[mkCard('sp_fireball')];DECK.draw=[];DECK.discard=[];playCard(DECK.hand[0].uid,P.x+1,P.y);
+    DECK.hand=[mkCard('sp_emberburst')];DECK.draw=[];DECK.discard=[];
+    playCard(DECK.hand[0].uid,P.x+1,P.y);
     return JSON.stringify({en:P.en,dmg:10000-foes[0].hp,burn:foes[0].burnStacks,react:foes[0].reactCd||0});
   })()`);
-  assert.deepEqual(spell, { en: 85, dmg: 20, burn: 2, react: 0 });
+  assert.deepEqual(spell, { en: 70, dmg: 30, burn: 2, react: 0 });
   const well = j(env)(`(()=>{
     initRun();P.cls='mage';P.maxEn=200;P.en=0;P.regen=1;P.stacks={};builds.length=0;res.wood=99;res.stone=99;res.crys=99;
     for(let i=0;i<3;i++)builds.push({type:'manawell',x:P.x+i*.6,y:P.y,hp:80,max:80,r:.4,cd:0,pulse:0,flash:0});
@@ -457,7 +463,7 @@ testCase('R13_save_slots_roundtrip', () => {
   const env = makeEnv();
   const out = j(env)(`(()=>{
     const metaBefore=localStorage.getItem('arkmist_v3');
-    initRun();S.mode='play';S.day=4;S.phase='night';S.timeLeft=12;
+    save.weapon='frost';initRun();S.mode='play';S.day=4;S.phase='night';S.timeLeft=12;
     P.cls='mage';P.maxEn=200;P.en=137;P.aff.fire=3;P.aff.frost=1;
     P.stacks={t_fusion:1,t_resonance:2};P.resoElem='fire';P.resoN=1;
     res.wood=12;DECK.max=8;DECK.uid=99;
@@ -466,11 +472,11 @@ testCase('R13_save_slots_roundtrip', () => {
     if(!doSaveSlot(0))return JSON.stringify({error:'save failed'});
     const metaAfter=localStorage.getItem('arkmist_v3');
     const raw=localStorage.getItem(SLOT_KEY)||'';
-    initRun();
+    save.weapon='arcane';initRun();
     restoreSnapshot(JSON.parse(JSON.stringify(slots.slots[0].snap)));
     return JSON.stringify({
       metaSame:metaBefore===metaAfter,rawHasSnap:raw.indexOf('"snap"')>=0,rawHasBless:raw.indexOf('t_fusion')>=0,
-      active:slots.active,cls:P.cls,en:P.en,aff:P.aff,stacks:P.stacks,reso:P.resoElem,
+      active:slots.active,cls:P.cls,weapon:P.weapon,en:P.en,aff:P.aff,stacks:P.stacks,reso:P.resoElem,
       day:S.day,phase:S.phase,timeLeft:S.timeLeft,wood:res.wood,deckMax:DECK.max,deckUid:DECK.uid,
       blessOk:S.dawnBless.length===1&&S.dawnBless[0]===BLESSINGS.find(b=>b.id==='t_fusion')&&typeof S.dawnBless[0].f==='function',
       seedSame:seed===seed0,nodeSame:JSON.stringify(nodes[0])===node0,
@@ -482,8 +488,8 @@ testCase('R13_save_slots_roundtrip', () => {
   assert.equal(out.rawHasSnap, true);
   assert.equal(out.rawHasBless, true);
   assert.equal(out.active, 0);
-  assert.deepEqual([out.cls, out.en, out.day, out.phase, out.timeLeft, out.wood, out.deckMax, out.deckUid],
-    ['mage', 137, 4, 'night', 12, 12, 8, 99]);
+  assert.deepEqual([out.cls, out.weapon, out.en, out.day, out.phase, out.timeLeft, out.wood, out.deckMax, out.deckUid],
+    ['mage', 'frost', 137, 4, 'night', 12, 12, 8, 99]);
   assert.deepEqual(out.aff, { fire: 3, frost: 1, arcane: 0, lightning: 0 });
   assert.deepEqual(out.stacks, { t_fusion: 1, t_resonance: 2 });
   assert.equal(out.reso, 'fire');
@@ -529,9 +535,9 @@ testCase('R14_single_source_contract', () => {
     save.seen.foe[ids[0]]=1;
     for(const id of ids)save.seen.foe[id]=1;
     for(const b of BLESSINGS)save.seen.card[b.id]=1;
-    for(const id of CIDS)save.seen.play[id]=1;
+    for(const id of CARD_IDS)save.seen.play[id]=1;
     cxRenderList();
-    const track=ids.length+BLESSINGS.length+CIDS.length;
+    const track=ids.length+BLESSINGS.length+CARD_IDS.length;
     return JSON.stringify({ids,count:entries.length,metaOk,statsOk,track,
       label:document.getElementById('cxCount').textContent});
   })()`);
@@ -556,13 +562,301 @@ testCase('R14_single_source_contract', () => {
   const ranged = j(env)(`(()=>{
     initRun();P.stacks={t_reach:1};
     const out=spellCastRange();
-    const far=placeCheck(CDEFS.sp_fireball,P.x+out+.5,P.y).msg;
-    const near=placeCheck(CDEFS.sp_fireball,P.x+out-.5,P.y).ok;
+    const far=placeCheck(CDEFS.sp_emberburst,P.x+out+.5,P.y).msg;
+    const near=placeCheck(CDEFS.sp_emberburst,P.x+out-.5,P.y).ok;
     return JSON.stringify({out,far,near});
   })()`);
   assert.ok(Math.abs(ranged.out - 9) < 1e-9);
   assert.equal(ranged.far, '超出施法距离');
   assert.equal(ranged.near, true);
+});
+
+testCase('R15_weapon_data_pool_and_save', () => {
+  const env = makeEnv({ storage: [['arkmist_v3', JSON.stringify({ weapon: 'frost' })]] });
+  const out = j(env)(`(()=>{
+    initRun();
+    return JSON.stringify({
+      ids:WEAPON_IDS,arts:WEAPON_IDS.map(id=>WEAPONS[id].art),save:save.weapon,player:P.weapon,
+      mapped:WEAPON_IDS.every(id=>!WEAPONS[id].spell||CDEFS[WEAPONS[id].spell]),
+      oldInPool:poolIds().some(id=>CDEFS[id].weaponAttack),
+      burstInPool:poolIds().includes('sp_emberburst'),
+      oldCard:mkCard('sp_fireball'),unknownCard:mkCard('unknown'),
+      fallback:[normalizeWeaponId('constructor'),normalizeWeaponId(undefined),normalizeWeaponId('arcane')]
+    });
+  })()`);
+  assert.deepEqual(out.ids, ['sword', 'flame', 'frost', 'arcane']);
+  assert.equal(out.save, 'frost');
+  assert.equal(out.player, 'frost');
+  assert.equal(out.mapped, true);
+  assert.equal(out.oldInPool, false);
+  assert.equal(out.burstInPool, true);
+  assert.equal(out.oldCard, null);
+  assert.equal(out.unknownCard, null);
+  assert.deepEqual(out.fallback, ['sword', 'sword', 'arcane']);
+  for (const art of out.arts) assert.ok(fs.existsSync(path.join(ROOT, art)), art);
+
+  const bad = makeEnv({ storage: [['arkmist_v3', JSON.stringify({ weapon: 'constructor' })]] });
+  assert.equal(bad.run('save.weapon'), 'sword');
+  assert.equal(bad.run('P.weapon'), 'sword');
+});
+
+testCase('R16_weapon_auto_attacks', () => {
+  const env = makeEnv();
+  const expected = { sword: [12, 12, .42], flame: [20, 20, .60], frost: [11, 11, .50], arcane: [10, 0, .26] };
+  const weaponIds = env.run('WEAPON_IDS');
+  for (const id of weaponIds) {
+    env.run(`initRun();S.mode='play';P.weapon='${id}';P.dmg=TUNE.player.baseDmg;P.range=TUNE.player.baseRange;
+      P.crit=0;P.atkCd=0;P.wave=0;P.cls='mage';P.maxEn=200;P.en=137;P.spellCd=.4;
+      P.stacks={t_resonance:1,t_arccharge:1,t_storm:1};P.resoElem='fire';P.resoN=2;P.arcCharge=3;P.stormCount=4;P.charge=5;P.shield=6;
+      res.wood=31;res.stone=17;res.crys=9;DECK.hand=[mkCard('wall')];DECK.draw=[mkCard('tower')];DECK.discard=[mkCard('rain')];
+      S.stats.played=3;nodes.length=0;foes.length=0;shots.length=0;`);
+    const d = id === 'sword' ? 1.1 : 3;
+    seedFoe(env, d, 0);
+    env.run(`foes.push({...foes[0],x:P.x+${d + .3},y:P.y,hp:10000,max:10000,dead:false});rebuildFoeGrid();`);
+    const got = j(env)(`(()=>{
+      const before=JSON.stringify({en:P.en,res,hand:DECK.hand.length,draw:DECK.draw.length,discard:DECK.discard.length,
+        played:S.stats.played,spellCd:P.spellCd,reso:P.resoN,arc:P.arcCharge,storm:P.stormCount,charge:P.charge,shield:P.shield});
+      autoAttack();
+      const after=JSON.stringify({en:P.en,res,hand:DECK.hand.length,draw:DECK.draw.length,discard:DECK.discard.length,
+        played:S.stats.played,spellCd:P.spellCd,reso:P.resoN,arc:P.arcCharge,storm:P.stormCount,charge:P.charge,shield:P.shield});
+      const first=foes[0];
+      return JSON.stringify({dmg:[10000-first.hp,10000-foes[1].hp],cd:P.atkCd,economy:before===after,
+        status:{burn:first.burnStacks||0,chill:first.chillStacks||0,mark:first.markT||0}});
+    })()`);
+    const [first,second,interval] = expected[id];
+    assert.deepEqual(got.dmg, [first,second], id);
+    assert.equal(got.cd, interval, id);
+    assert.equal(got.economy, true, id);
+    if (id === 'flame') assert.equal(got.status.burn, 2);
+    if (id === 'frost') {
+      assert.equal(got.status.chill, 2);
+      assert.equal(env.run('foeSlowMult(foes[0])'), .76);
+    }
+    if (id === 'arcane') assert.equal(got.status.mark, 4);
+
+    const gathering = j(env)(`(()=>{
+      // The node is closer, in range and behind the player; an in-range foe wins.
+      const n={type:'rock',x:P.x-.8,y:P.y,hp:4,alive:true,shake:0};
+      nodes.push(n);P.atkCd=0;autoAttack();const withFoe=n.hp;
+      foes.forEach(f=>{f.x=P.x+20;});rebuildFoeGrid();P.atkCd=0;autoAttack();
+      const cd=P.atkCd;autoAttack();const after=n.hp;
+      n.x=P.x+20;P.atkCd=0;autoAttack();
+      return JSON.stringify({withFoe,after,cd,noTarget:P.atkCd});
+    })()`);
+    assert.deepEqual(gathering, {withFoe:4,after:3,cd:interval,noTarget:0}, id);
+  }
+
+  env.run(`initRun();P.weapon='sword';P.atkCd=0;P.wave=1;foes.length=0;nodes.length=0;shots.length=0;`);
+  seedFoe(env, .8, 0);
+  env.run('autoAttack()');
+  assert.ok(env.run(`shots.some(s=>s.type==='wave')`));
+
+  env.run(`initRun();P.weapon='flame';P.atkCd=0;P.range=TUNE.player.baseRange*1.18;foes.length=0;nodes.length=0;`);
+  seedFoe(env, 8, 0);
+  env.run('autoAttack()');
+  assert.ok(env.run('10000-foes[0].hp') > 0);
+});
+
+testCase('R17_weapon_snapshot_picker_and_hud', () => {
+  const env = makeEnv();
+  const roundtrip = j(env)(`(()=>{
+    const ids=WEAPON_IDS.map(id=>{save.weapon=id;initRun();S.mode='play';const snap=captureSnapshot();
+      save.weapon='sword';initRun();restoreSnapshot(snap);return P.weapon;});
+    save.weapon='arcane';initRun();const snap=captureSnapshot();delete snap.P.weapon;initRun();restoreSnapshot(snap);
+    return JSON.stringify({ids,missing:P.weapon});
+  })()`);
+  assert.deepEqual(roundtrip.ids, ['sword', 'flame', 'frost', 'arcane']);
+  assert.equal(roundtrip.missing, 'sword');
+
+  env.run(`save.weapon='sword';initRun();openPrep();`);
+  const before = env.run('localStorage.getItem(SAVE_KEY)');
+  env.run('openWeaponPicker()');
+  assert.equal(env.run('S.mode'), 'prep');
+  assert.equal(env.run("$('weaponDrop').classList.contains('show')"), true);
+  env.run("selectWeaponDraft('frost')");
+  assert.equal(env.run('localStorage.getItem(SAVE_KEY)'), before);
+  env.run('cancelWeaponPicker()');
+  assert.equal(env.run('save.weapon'), 'sword');
+  assert.equal(env.run('weaponPicker'), null);
+
+  env.run("openWeaponPicker();selectWeaponDraft('flame');confirmWeaponPicker();");
+  assert.equal(env.run('save.weapon'), 'flame');
+  assert.equal(JSON.parse(env.run('localStorage.getItem(SAVE_KEY)')).weapon, 'flame');
+  assert.equal(env.ids.get('prepWeaponName').textContent, '火焰法器');
+
+  env.run('openWeaponPicker()');
+  const press = (key, shiftKey = false) => {
+    let prevented = false;
+    env.winL.keydown[0]({ key, shiftKey, preventDefault() { prevented = true; } });
+    return prevented;
+  };
+  assert.equal(press('1'), true);
+  assert.equal(env.run('weaponPicker.draft'), 'sword');
+  assert.equal(press('ArrowRight'), true);
+  assert.equal(env.run('weaponPicker.draft'), 'flame');
+
+  const document = env.ctx.document;
+  const cards = env.ids.get('weaponGrid').children;
+  const cancel = env.ids.get('weaponCancel');
+  const confirm = env.ids.get('weaponConfirm');
+  env.ids.get('weaponDrop').querySelectorAll = () => [...cards, cancel, confirm];
+  cards[0].focus = () => { document.activeElement = cards[0]; };
+  confirm.focus = () => { document.activeElement = confirm; };
+  document.activeElement = cards[1];
+  assert.equal(press('Tab'), false);
+  assert.equal(press('Tab', true), false);
+  assert.equal(press('Enter'), false);
+  document.activeElement = cards[0];
+  assert.equal(press('Tab', true), true);
+  assert.equal(document.activeElement, confirm);
+  assert.equal(press('Tab'), true);
+  assert.equal(document.activeElement, cards[0]);
+
+  assert.equal(press('3'), true);
+  document.activeElement = confirm;
+  assert.equal(press('Enter'), false);
+  assert.equal(press(' '), false);
+  confirm._listeners.click[0](); // The test DOM cannot generate the native keyboard click.
+  assert.equal(env.run('save.weapon'), 'frost');
+  assert.equal(env.run('weaponPicker'), null);
+  env.run('openWeaponPicker()');
+  assert.equal(press('Escape'), true);
+  assert.equal(env.run('weaponPicker'), null);
+  assert.equal(env.run('S.mode'), 'prep');
+  env.run('openWeaponPicker();beginRun();');
+  assert.equal(env.run('S.mode'), 'prep');
+  env.run('cancelWeaponPicker()');
+
+  const hud = j(env)(`(()=>{
+    S.mode='play';const names=[];
+    for(const id of WEAPON_IDS){P.weapon=id;syncHUD();names.push(UI.weaponName.textContent);}
+    return JSON.stringify(names);
+  })()`);
+  assert.deepEqual(hud, ['剑', '火焰法器', '冰霜法器', '奥术法器']);
+});
+
+testCase('R18_spell_weapons_skip_mage_transform', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    const rows=[];
+    for(const id of ['flame','frost','arcane']){
+      save.weapon=id;initRun();S.day=2;
+      const cards=['wall','rain','spring'];injectClassCard(cards);
+      const before={cls:P.cls,mage:isMage(),maxHp:P.maxHp,hp:P.hp,maxEn:P.maxEn,en:P.en,regen:P.enRegenFlat,deckMax:DECK.max,cap:handCap()};
+      const transformed=becomeMage();
+      const rnd=Math.random;Math.random=()=>0;P.aff.fire=20;
+      const coreCards=['wall','rain','spring'];injectCoreCards(coreCards);Math.random=rnd;
+      rollDawnBless();const pool=poolIds();
+      rows.push({id,cards,transformed,before,after:{cls:P.cls,mage:isMage(),maxHp:P.maxHp,hp:P.hp,maxEn:P.maxEn,en:P.en,
+        regen:P.enRegenFlat,deckMax:DECK.max,cap:handCap()},core:coreCards.some(x=>CDEFS[x]&&CDEFS[x].core),
+        classInPool:pool.includes('class_mage'),wellInPool:pool.includes('manawell'),mageBless:S.dawnBless.some(b=>b.cls==='mage')});
+    }
+    save.weapon='sword';initRun();refreshPrep();const swordNote=$('prepMageNote').style.display;
+    save.weapon='flame';refreshPrep();const spellNote=$('prepMageNote').style.display;
+    const reaction=id=>{
+      save.weapon=id;initRun();foes.length=0;
+      const f={x:P.x,y:P.y,r:.3,hp:10000,max:10000,dead:false,flash:0,kx:0,ky:0,burnStacks:0,burnT:0,burnTick:0,
+        chillStacks:0,chillT:0,freezeT:0,markT:0,shockT:0,lastElem:'frost',lastElemT:S.combatT,reactCd:0};
+      foes.push(f);rebuildFoeGrid();applyElement(f,'fire',2);return f.reactCd||0;
+    };
+    return JSON.stringify({rows,swordNote,spellNote,staffReaction:reaction('flame'),swordReaction:reaction('sword')});
+  })()`);
+  for (const row of out.rows) {
+    assert.deepEqual(row.cards, ['wall', 'rain', 'spring'], row.id);
+    assert.equal(row.transformed, false, row.id);
+    assert.deepEqual(row.after, row.before, row.id);
+    assert.equal(row.before.mage, false, row.id);
+    assert.deepEqual([row.before.maxEn, row.before.regen, row.before.deckMax, row.before.cap], [100, 14, 5, 10], row.id);
+    assert.equal(row.core, true, row.id);
+    assert.equal(row.classInPool, false, row.id);
+    assert.equal(row.wellInPool, false, row.id);
+    assert.equal(row.mageBless, false, row.id);
+  }
+  assert.equal(out.swordNote, '');
+  assert.equal(out.spellNote, 'none');
+  assert.equal(out.staffReaction, 1.5);
+  assert.equal(out.swordReaction, 0);
+
+  const waveOffers = j(env)(`(()=>{
+    const offered=()=>{rollDawnBless();return S.dawnBless.some(b=>b.id==='wave');};
+    const fillOtherBlessings=()=>{
+      S.endless=true;
+      P.stacks=Object.fromEntries(BLESSINGS.filter(b=>b.id!=='wave').map(b=>[b.id,b.max||8]));
+    };
+    const byWeapon=Object.fromEntries(WEAPON_IDS.map(id=>{
+      save.weapon=id;initRun();fillOtherBlessings();return [id,offered()];
+    }));
+    save.weapon='sword';initRun();becomeMage();fillOtherBlessings();
+    const asMage=offered();P.stacks.wave=2;
+    return JSON.stringify({byWeapon,asMage,atCap:offered()});
+  })()`);
+  assert.deepEqual(waveOffers, {
+    byWeapon: { sword: true, flame: false, frost: false, arcane: false }, asMage: true, atCap: false
+  });
+});
+
+testCase('R20_fire_spread_and_tree_yield', () => {
+  const env = makeEnv();
+  env.run(`save.weapon='flame';initRun();S.mode='play';P.crit=0;nodes.length=0;`);
+  seedFoe(env, 3, 0);
+  const out = j(env)(`(()=>{
+    for(const dx of [4.4,5.65,6.9])foes.push({...foes[0],x:P.x+dx});
+    rebuildFoeGrid();
+    const tree=(dy,type='tree')=>({type,x:P.x+4.4,y:P.y+dy,hp:3,max:3,alive:true,shake:0});
+    const near=tree(1.2),next=tree(2.4),rock=tree(1.2,'rock');
+    nodes.push(near,next,rock);
+    autoAttack();
+    const burn=foes.map(f=>f.burnStacks||0),damage=foes.map(f=>10000-f.hp);
+    const burning=nodes.map(n=>n.burnHits||0);
+    updateBurningTrees(.3);
+    P.atkCd=0;autoAttack(); // Renewed attacks cannot reset the existing tree timer.
+    updateBurningTrees(.3);const firstTick=near.hp;
+    updateBurningTrees(.6);updateBurningTrees(.6);
+    const drops=()=>picks.filter(p=>p.type==='wood').reduce((sum,p)=>sum+p.amt,0);
+    const wood=drops();updateBurningTrees(2);
+    return JSON.stringify({burn,damage,burning,firstTick,alive:near.alive,nextHp:next.hp,rockHp:rock.hp,wood,woodLater:drops()});
+  })()`);
+  assert.deepEqual(out.burn, [2,2,1,0]);
+  assert.deepEqual(out.damage, [20,20,0,0]);
+  assert.deepEqual(out.burning, [3,0,0]);
+  assert.deepEqual([out.firstTick,out.alive,out.nextHp,out.rockHp], [2,false,3,3]);
+  assert.ok(out.wood >= 4 && out.wood <= 6);
+  assert.equal(out.woodLater, out.wood);
+  env.run(`foes.length=0;rebuildFoeGrid();nodes.length=0;P.atkCd=0;
+    nodes.push({type:'tree',x:P.x+2,y:P.y,hp:3,alive:true},{type:'tree',x:P.x+3,y:P.y,hp:3,alive:true});autoAttack();`);
+  assert.deepEqual(j(env)('JSON.stringify(nodes.map(n=>[n.hp,n.burnHits]))'), [[2,3],[3,3]]);
+});
+
+testCase('R21_basic_element_cards', () => {
+  const env = makeEnv();
+  const cards = ['sp_kindling','sp_frostpatch','sp_arcaneneedle'];
+  const available = j(env)(`JSON.stringify(poolIds().filter(id=>CDEFS[id].basic))`);
+  assert.ok(cards.every(id=>available.includes(id)));
+  for (const id of cards) {
+    env.run(`initRun();S.mode='play';P.crit=0;nodes.length=0;tileAt(P.x+1,P.y).land=true;
+      DECK.hand=[mkCard('${id}')];DECK.draw=[];DECK.discard=[];`);
+    seedFoe(env, .8, 0);
+    const result = j(env)(`(()=>{
+      foes.push({...foes[0],x:P.x+1.3});rebuildFoeGrid();
+      const tree={type:'tree',x:P.x+1,y:P.y+.9,hp:3,alive:true};nodes.push(tree);
+      const played=playCard(DECK.hand[0].uid,P.x+1,P.y);
+      return JSON.stringify({played,en:P.en,cd:P.spellCd,discard:DECK.discard[0].id,
+        damage:foes.map(f=>10000-f.hp),burn:foes.map(f=>f.burnStacks||0),
+        slow:foeSlowMult(foes[0]),mark:foes.map(f=>f.markT||0),tree:tree.burnHits||0});
+    })()`);
+    assert.deepEqual([result.played,result.en,result.cd,result.discard], [true,85,.55,id]);
+    if(id==='sp_kindling'){
+      assert.deepEqual(result.damage,[8,8]);
+      assert.deepEqual(result.burn,[1,1]);
+      assert.equal(result.tree,3);
+    }else if(id==='sp_frostpatch'){
+      assert.deepEqual(result.damage,[8,8]);
+      assert.equal(result.slow,.76);
+    }else{
+      assert.deepEqual(result.damage,[24,0]);
+      assert.deepEqual(result.mark,[4,0]);
+    }
+  }
 });
 
 function main() {

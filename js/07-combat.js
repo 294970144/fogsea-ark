@@ -1,25 +1,59 @@
 'use strict';
 /* ---------------- 战斗 ---------------- */
+function weaponAttackRange(w=weaponDef(P.weapon)){
+  return w.attack==='spell'?TUNE.spell.range*(P.range/TUNE.player.baseRange):P.range;
+}
+function weaponAttackInterval(w=weaponDef(P.weapon)){
+  return (w.interval??TUNE.player.atkInterval)/P.atkSpd;
+}
 function autoAttack(){
   if(P.downed||P.atkCd>0)return;
+  const w=weaponDef(P.weapon),range=weaponAttackRange(w);
   let tgt=null,bd=1e9;
-  forFoes(P.x,P.y,P.range+1.2,f=>{
+  forFoes(P.x,P.y,range+1.2,f=>{
     if(f.dead)return;
     const d=dist(P.x,P.y,f.x,f.y);
-    if(d<=P.range+f.r&&d<bd){bd=d;tgt=f;}
+    if(d<=range+f.r&&d<bd){bd=d;tgt=f;}
   });
-  if(!tgt){
-    for(const n of nodes){
-      if(!n.alive)continue;
-      const d=dist(P.x,P.y,n.x,n.y);
-      if(d<=P.range+.4&&d<bd){bd=d;tgt=n;}
-    }
+  if(tgt){
+    if(w.attack==='spell')autoCastWeapon(w,tgt);
+    else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));
+    return;
+  }
+  for(const n of nodes){
+    if(!n.alive)continue;
+    const d=dist(P.x,P.y,n.x,n.y);
+    if(d<=range+.4&&d<bd){bd=d;tgt=n;}
   }
   if(!tgt)return;
-  swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));
+  const ang=Math.atan2(tgt.y-P.y,tgt.x-P.x);
+  if(w.attack==='melee')swing(ang);
+  else {
+    const def=CDEFS[w.spell];
+    P.atkCd=weaponAttackInterval(w);P.face=ang;
+    if(def.spreadFire&&tgt.type==='tree')spreadFire(tgt.x,tgt.y,def.radius,[]);
+    hitNode(tgt);
+    spellFx(def,tgt.x,tgt.y,def.elem,[]);
+  }
+}
+function autoCastWeapon(w,tgt){
+  const def=CDEFS[w.spell];
+  const ang=Math.atan2(tgt.y-P.y,tgt.x-P.x);
+  P.atkCd=weaponAttackInterval(w);P.face=ang;
+  const targets=def.shape==='single'?[tgt]:spellTargets(def,tgt.x,tgt.y);
+  for(const f of targets){
+    if(!f||f.dead)continue;
+    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg);
+    const crit=Math.random()<P.crit;if(crit)dmg*=2;
+    if(dmg>0)damageFoe(f,dmg,ang,crit,{noKnock:true});
+    if(def.status&&!f.dead)applyElement(f,def.elem,def.status.n,def.status.kind);
+  }
+  if(def.spreadFire)spreadFire(tgt.x,tgt.y,def.radius,targets);
+  spellFx(def,tgt.x,tgt.y,def.elem,targets);
+  if(targets.length)S.hitstop=Math.max(S.hitstop,.02);
 }
 function swing(ang){
-  P.atkCd=TUNE.player.atkInterval/P.atkSpd;P.swingT=.18;P.face=ang;
+  P.atkCd=weaponAttackInterval(WEAPONS.sword);P.swingT=.18;P.face=ang;
   slashes.push({x:P.x,y:P.y,ang,t:0,R:P.range});
   sfx('swing');
   const inArc=(t,extra)=>{
@@ -78,7 +112,8 @@ function hitNode(n){
   puff(n.x,n.y,5,cols[n.type],2,.45,2.5);
   sfx(n.type==='tree'?'chop':n.type==='rock'?'stone':'crystal');
   if(n.hp<=0){
-    n.alive=false;rebuildSolids();rebuildTileCost();fieldDirty=true;
+    n.alive=false;n.burnHits=0;n.burnTick=0;
+    rebuildSolids();rebuildTileCost();fieldDirty=true;
     const yld=TUNE.node.yield[n.type],amt=Math.round(irand(yld[0],yld[1])*P.gather);
     const type=TUNE.resourceDrop[n.type];
     const drops=Math.min(amt,TUNE.node.dropCap),q=Math.floor(amt/drops),r=amt%drops;
@@ -555,6 +590,7 @@ function update(dt){
     autoAttack();
   }
   updateSpellState(dt);
+  updateBurningTrees(dt);
   updateFoes(dt);updateBuilds(dt);updateShots(dt);updatePicks(dt);updateParts(dt);
   core.flash=Math.max(0,core.flash-dt);
   core.beam=lerp(core.beam,S.phase==='night'?1:.25,dt*2);

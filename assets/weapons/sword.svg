@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" fill="none">
+  <defs>
+    <linearGradient id="blade" x1="150" y1="255" x2="343" y2="55" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6f8291"/><stop offset=".28" stop-color="#e9f4f7"/><stop offset=".52" stop-color="#9fb2bf"/><stop offset=".76" stop-color="#ffffff"/><stop offset="1" stop-color="#b8cbd4"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="173" y1="244" x2="353" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d7e5eb"/><stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="157" y1="222" x2="230" y2="158" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8f5b24"/><stop offset=".42" stop-color="#ffd27a"/><stop offset=".72" stop-color="#c78b35"/><stop offset="1" stop-color="#fff0b0"/>
+    </linearGradient>
+    <radialGradient id="aura"><stop stop-color="#ffb454" stop-opacity=".24"/><stop offset="1" stop-color="#ffb454" stop-opacity="0"/></radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7"/></filter>
+  </defs>
+  <ellipse cx="252" cy="166" rx="174" ry="132" fill="url(#aura)"/>
+  <g opacity=".28" stroke="#ffb454" stroke-width="1">
+    <path d="M82 239l254-178M67 226l250-176M98 253l250-178"/>
+    <path d="M104 88l26 8M337 226l25 9M121 64l18 14M354 247l17 14"/>
+  </g>
+  <g transform="rotate(-42 240 160)">
+    <path d="M227 278h26v-66h-26z" fill="#38251f" stroke="#c58a3e" stroke-width="2"/>
+    <path d="M231 281h18M231 267h18M231 253h18M231 239h18M231 225h18" stroke="#e4b866" stroke-width="3" opacity=".8"/>
+    <path d="M199 218l82-7 8 13-82 9z" fill="url(#gold)" stroke="#fff0b0" stroke-width="1.5"/>
+    <path d="M197 218l-20-11-7 12 24 14zM282 211l20-12 7 12-23 15z" fill="url(#gold)" stroke="#ffe6a0" stroke-width="1.5"/>
+    <path d="M229 207h22l7 14h-36z" fill="url(#gold)" stroke="#fff0b0" stroke-width="1.5"/>
+    <path d="M231 207L240 185l9 22z" fill="#ff8a3d" stroke="#ffe8a3" stroke-width="1.5"/>
+    <path d="M231 201L240 30l9 171-9 9z" fill="url(#blade)" stroke="#eaf7fa" stroke-width="2"/>
+    <path d="M240 30v180l-9-9 9-171z" fill="#ffffff" opacity=".18"/>
+    <path d="M240 38l5 151-5 10z" fill="url(#edge)" opacity=".9"/>
+    <path d="M226 77h28M225 106h30M225 135h30M227 164h26" stroke="#647c8a" stroke-width="1" opacity=".42"/>
+  </g>
+  <path d="M343 58l13 4" stroke="#fff7d6" stroke-width="5" filter="url(#glow)"/>
+  <path d="M343 58l13 4" stroke="#ffffff" stroke-width="2"/>
+  <g fill="#ffd27a"><circle cx="105" cy="102" r="2"/><circle cx="365" cy="211" r="2.5"/><circle cx="332" cy="91" r="1.5"/><circle cx="142" cy="237" r="1.5"/></g>
+</svg>

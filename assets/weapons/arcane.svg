@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" fill="none">
+  <defs>
+    <linearGradient id="shaft" x1="143" y1="275" x2="322" y2="126" gradientUnits="userSpaceOnUse"><stop stop-color="#2b213f"/><stop offset=".42" stop-color="#70528f"/><stop offset=".72" stop-color="#bd9bd8"/><stop offset="1" stop-color="#f0d9ff"/></linearGradient>
+    <linearGradient id="crystal" x1="310" y1="35" x2="351" y2="157" gradientUnits="userSpaceOnUse"><stop stop-color="#fff0ff"/><stop offset=".32" stop-color="#d7a8ff"/><stop offset=".7" stop-color="#9b63e8"/><stop offset="1" stop-color="#512b91"/></linearGradient>
+    <radialGradient id="arcaneAura"><stop stop-color="#b48cff" stop-opacity=".4"/><stop offset=".58" stop-color="#a06bff" stop-opacity=".12"/><stop offset="1" stop-color="#a06bff" stop-opacity="0"/></radialGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="8"/></filter>
+  </defs>
+  <circle cx="332" cy="110" r="136" fill="url(#arcaneAura)"/>
+  <g transform="rotate(-43 240 190)">
+    <path d="M230 302h20l-3-185h-14z" fill="url(#shaft)" stroke="#d9b8f5" stroke-width="2"/>
+    <path d="M234 304l8-8M232 281l12-9M231 258l11-9M230 235l11-9M229 212l11-9M228 189l11-9" stroke="#f0d9ff" stroke-width="3" opacity=".62"/>
+    <path d="M219 146h42l7 14h-56z" fill="#4b326c" stroke="#c9a8ff" stroke-width="2"/>
+    <path d="M218 145l-20-14-12 12 24 18zM261 145l19-16 13 11-23 21z" fill="url(#shaft)" stroke="#ead4ff" stroke-width="2"/>
+    <path d="M230 139h20l8 13h-36z" fill="#a06bff" stroke="#f0d9ff" stroke-width="2"/>
+  </g>
+  <g filter="url(#blur)" opacity=".72"><path d="M332 32l38 60-15 67-40 14-32-43 16-68z" fill="#a06bff"/></g>
+  <path d="M332 31l39 61-16 67-40 14-32-44 17-68z" fill="url(#crystal)" stroke="#ead4ff" stroke-width="2"/>
+  <path d="M332 31l-5 78 28 50-16 67-7-89-32-33 17-68z" fill="#ffffff" opacity=".22"/>
+  <path d="M327 46l-29 52 24 22 28-30-23-44z" fill="#f5e6ff" opacity=".5"/>
+  <path d="M298 98l24 22-32 44-17-68 25 2zM371 92l-28 30 16 67 40-14-28-83z" stroke="#c9a8ff" stroke-width="2" opacity=".85"/>
+  <g stroke="#d9b8f5" stroke-width="2" opacity=".8"><path d="M332 31V14M307 52l-13-14M359 52l13-15M289 117l-18 6M373 117l18 7M306 151l-12 16M358 152l11 15"/></g>
+  <g fill="none" stroke="#b48cff" opacity=".52"><circle cx="332" cy="109" r="86" stroke-dasharray="3 12"/><path d="M270 64l13 9-4 16 15 6 12-10 14 9 3 16 15 7 3 16-11 12 4 16-14 9-6 15-16-2-11 12-15-6-10 13-14-7-5 15-16-3-8-14-15 1-6-15-14-7 3-16-10-11 8-14-5-15 13-9 1-16 15-5 6-15 16 3 10-13 14 8 7-15 16 2"/></g>
+  <g fill="#e5c8ff"><circle cx="277" cy="72" r="2.5"/><circle cx="391" cy="153" r="2"/><circle cx="366" cy="48" r="2"/><circle cx="263" cy="163" r="1.5"/><circle cx="402" cy="98" r="1.5"/></g>
+</svg>

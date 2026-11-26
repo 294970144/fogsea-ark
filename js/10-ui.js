@@ -5,6 +5,7 @@ function cacheUI(){
   UI.hud=$('hud');UI.mute=$('btnMute');UI.hurt=$('hurtFx');UI.coreFx=$('coreFx');UI.nightBtn=$('btnNight');
   UI.phaseChip=$('phaseChip');UI.phaseIcon=UI.phaseChip.querySelector('svg');UI.phaseName=$('phaseName');
   UI.dayLabel=$('dayLabel');UI.nightLabel=$('nightLabel');UI.phaseBar=$('phaseBar');
+  UI.weaponHud=$('weaponHud');UI.weaponIcon=$('weaponHudIcon');UI.weaponName=$('weaponHudName');
   UI.hpBar=$('hpBar');UI.hpFill=UI.hpBar.firstElementChild;UI.hpTxt=$('hpTxt');
   UI.enBar=$('enBar');UI.enFill=UI.enBar.firstElementChild;UI.enTxt=$('enTxt');UI.enLabel=$('enLabel');
   UI.shieldBar=$('shieldBar');UI.shieldFill=UI.shieldBar?UI.shieldBar.firstElementChild:null;UI.shieldTxt=$('shieldTxt');
@@ -20,6 +21,11 @@ function setTxt(el,v){if(el&&el._t!==v){el._t=v;el.textContent=v;}}
 function setBar(el,fill,r){const v=clamp(r,0,1).toFixed(3);if(el._v!==v){el._v=v;fill.style.transform=`scaleX(${v})`;}}
 function syncHUD(){
   if(S.mode==='menu'||S.mode==='prep')return;
+  const w=weaponDef(P.weapon);
+  if(UI.weaponHud._w!==P.weapon){
+    UI.weaponHud._w=P.weapon;UI.weaponIcon.innerHTML=svg(w.icon,20,w.color);UI.weaponIcon.style.color=w.color;
+    setTxt(UI.weaponName,w.name);
+  }
   const night=S.phase==='night';
   const showNight=S.mode==='play'&&!night;
   if(UI.nightBtn._s!==showNight){UI.nightBtn._s=showNight;UI.nightBtn.style.display=showNight?'':'none';}
@@ -96,11 +102,27 @@ const CX_CATS=[{id:'all',name:'全部'},{id:'role',name:'角色'},{id:'res',name
 const foeNow=t=>Math.round(FOES[t].hp*DIFFS[save.diff].hp*dayScale(Math.max(1,S.day)));
 const CODEX=[
   {id:'keeper',cat:'role',name:'守灯人',icon:'lantern',color:'#ffb454',sprite:'player',
-   desc:'你操控的角色。挥刃自动：范围内只要有雾裔或资源，就会持续朝目标方向攻击。',
-   stats:()=>[['当前生命',`${Math.ceil(P.hp)} / ${P.maxHp}`],['挥刃伤害',P.dmg.toFixed(1)],
-     ['攻击间隔',(TUNE.player.atkInterval/P.atkSpd).toFixed(2)+' 秒'],['攻击范围',P.range.toFixed(2)+' 格'],
+   desc:'你操控的角色。武器优先自动攻击范围内最近的敌人；没有敌人时自动采集资源。',
+   stats:()=>[['当前生命',`${Math.ceil(P.hp)} / ${P.maxHp}`],['当前武器',weaponDef(P.weapon).name],['通用伤害',P.dmg.toFixed(1)],
+     ['攻击间隔',weaponAttackInterval().toFixed(2)+' 秒'],['攻击范围',weaponAttackRange().toFixed(2)+' 格'],
      ['移动速度',P.spd.toFixed(2)+' 格/秒'],['暴击率',Math.round(P.crit*100)+'%'],['等级','Lv.'+P.lvl]],
-   rel:['core','dash','nova','hand']},
+   rel:['core','dash','nova','hand','w_sword']},
+  ...WEAPON_IDS.map(id=>{
+    const w=WEAPONS[id],a=w.spell?CDEFS[w.spell]:null;
+    const col=w.color;
+    const statusName=a&&a.status?TUNE.statusNames[a.status.kind]:'';
+    return {id:'w_'+id,cat:'role',name:w.name,icon:w.icon,color:col,
+      desc:w.desc+' 武器在开局前选择，本局内固定。',
+      stats:()=>{
+        const s=[['路线',w.route],['当前装备',P.weapon===id?'是':'否'],
+          ['攻击间隔',weaponAttackInterval(w).toFixed(2)+' 秒'],
+          ['攻击范围',weaponAttackRange(w).toFixed(2)+' 格'],
+          ['基础伤害',a?(a.dmg*P.dmg/TUNE.player.baseDmg).toFixed(1):P.dmg.toFixed(1)],['自动采集','无敌人时']];
+        if(a)s.push(['命中范围',a.shape==='single'?'单体':a.radius+' 格半径'],['附加状态',statusName+' ×'+a.status.n]);
+        if(a?.spreadFire)s.push(['火焰蔓延',TUNE.fireSpread.radius+' 格 · 一跳']);
+        return s;
+      },rel:['keeper','hand']};
+  }),
   {id:'mage',cat:'role',name:'法师',icon:'mage',color:'#b48cff',
    desc:'转职后的守灯人。以法力施放元素法术，生命上限降低但手牌上限提高。',
    stats:()=>[['生命上限',P.maxHp],['法力',`${Math.floor(P.en)} / ${P.maxEn}`],
@@ -113,8 +135,8 @@ const CODEX=[
      ['修复消耗',TUNE.core.repair.wood+' 木 + '+TUNE.core.repair.stone+' 石'],
      ['单次修复','+'+TUNE.core.repair.heal],['白昼自愈',TUNE.core.regen+' /秒'],['黎明恢复','+'+TUNE.core.dawnHeal]],
    rel:['keeper','c_mend','wood','stone']},
-  ...[['wood','木材','wood','tree','砍伐树木获得。既是资源也是卡牌费用，没有第二种货币。','木墙 / 箭塔 / 图腾 / 箭雨',['c_wall','c_tower','c_rain']],
-      ['stone','石料','stone','rock','敲碎岩石获得，需 '+TUNE.node.hits.rock+' 次挥刃。远程火力与扩容的主要费用。','箭塔 / 雾晶炮 / 扩容',['c_tower','c_cannon','c_expand']],
+  ...[['wood','木材','wood','tree','采集或烧毁树木获得。既是资源也是卡牌费用，没有第二种货币。','木墙 / 箭塔 / 图腾 / 箭雨',['c_wall','c_tower','c_rain']],
+      ['stone','石料','stone','rock','敲碎岩石获得，需 '+TUNE.node.hits.rock+' 次采集命中。远程火力与扩容的主要费用。','箭塔 / 雾晶炮 / 扩容',['c_tower','c_cannon','c_expand']],
       ['crys','雾晶','crys','crys','雾中凝结的能量。矿脉与击杀雾裔均可获得，高阶卡牌的燃料。','雾晶炮 / 雾晶雷 / 灯焰护盾',['c_cannon','c_mine','c_ward']]]
     .map(([id,name,icon,sprite,desc,use,rel])=>{
       const src={wood:'tree',stone:'rock',crys:'crys'}[id];
@@ -124,7 +146,7 @@ const CODEX=[
           ([['来源',name+' · '+hits+' 次挥刃'],['单次产出',y[0]+'–'+y[1]],['用途',use]]))];
       return {id,cat:'res',name,icon,color:RESCOL[id],sprite,desc,stats,rel};
     }),
-  ...CIDS.map(id=>{
+  ...CARD_IDS.map(id=>{
     const d=CDEFS[id];
     return {id:'c_'+id,cat:'card',name:d.name,icon:d.icon,color:d.color,
       sprite:d.kind==='build'?d.build:null,
@@ -168,7 +190,7 @@ const CODEX=[
       return s;
     }})),
   ...BLESSINGS.map(b=>({id:'b_'+b.id,cat:'bless',name:b.n,icon:b.icon,color:RARCOL[b.rar],
-    desc:b.d+'。'+(b.cls==='mage'?'法师专属。':'')+'黎明第二步三选一获得，永久被动生效，不占用牌库。',
+    desc:b.d+'。'+(b.cls==='mage'?'法师专属。':'')+(b.weapon?weaponDef(b.weapon).name+'专属。':'')+'黎明第二步三选一获得，永久被动生效，不占用牌库。',
     stats:()=>[['稀有度',RARNAME[b.rar]],['叠加上限',b.max?b.max+' 层':'无上限'],
       ['本局叠加','×'+(P.stacks[b.id]||0)],['累计选用',save.seen.card[b.id]||0]],
     rel:['dawn','keeper','hand']})),
@@ -229,7 +251,7 @@ const CODEX=[
   {id:'spell',cat:'term',name:'法术与施法',icon:'rune',color:'#b48cff',
    desc:'法术牌消耗法力/雾能，受施法冷却限制；法师额外获得元素亲和、法术强度与职业天赋。',
    stats:()=>[['施法冷却',(MAGE_TUNE.spellGcd/castSpeedMult()).toFixed(2)+' 秒'],['当前法力',Math.floor(P.en)],
-     ['法术牌',CIDS.filter(id=>CDEFS[id].elem).length+' 张'],['基础法术','非法师也可获得']],
+     ['法术牌',CARD_IDS.filter(id=>CDEFS[id].elem).length+' 张'],['基础法术','非法师也可获得']],
    rel:['mana','mage','status']},
   {id:'status',cat:'term',name:'元素状态',icon:'flame',color:'#ff7a45',
    desc:'灼烧持续掉血，冰缓减速，冻结停止行动，奥术标记提高受到的法术伤害。',
@@ -240,7 +262,7 @@ const CODEX=[
      ['奥术标记','法术伤害 +'+Math.round(ST_DEF.mark.amp*100)+'%']],
    rel:['spell','reaction','mage']},
   {id:'reaction',cat:'term',name:'元素反应',icon:'steam',color:'#8fe3d0',
-   desc:'需要法师天赋「元素融合」。同一敌人 '+TUNE.reaction.window+' 秒内被两种元素命中触发，每敌人 '+TUNE.reaction.cooldown+' 秒冷却。',
+   desc:'法术武器自动开启元素反应；剑路线需法师天赋「元素融合」。同一敌人 '+TUNE.reaction.window+' 秒内被两种元素命中触发，每敌人 '+TUNE.reaction.cooldown+' 秒冷却。',
    stats:()=>[['火+冰','蒸汽爆炸'],['奥术+火/冰','共鸣扩散'],['雷系','接口保留，未实装']],
    rel:['status','spell','b_t_fusion']},
   {id:'downed',cat:'term',name:'灯芯熄灭',icon:'skull',color:'#ff4d6d',
@@ -259,7 +281,7 @@ function sizeCodexCv(){
   cxCv.width=Math.floor(cxW*DPR);cxCv.height=Math.floor(cxH*DPR);
 }
 function cxSeenCount(){
-  const groups={foe:Object.keys(FOES),card:BLESSINGS.map(b=>b.id),play:CIDS};
+  const groups={foe:Object.keys(FOES),card:BLESSINGS.map(b=>b.id),play:CARD_IDS};
   let n=0;
   for(const k in groups)for(const id of groups[k])if(save.seen[k][id]>0)n++;
   return n;
@@ -297,7 +319,7 @@ function cxRenderList(){
   }
   if(!cxFiltered.some(e=>e.id===cxSel))cxSelect(cxFiltered.length?cxFiltered[0].id:null,false);
   else cxSelect(cxSel,false);
-  const track=Object.keys(FOES).length+BLESSINGS.length+CIDS.length,got=cxSeenCount();
+  const track=Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length,got=cxSeenCount();
   $('cxCount').textContent=`共 ${CODEX.length} 条 · 显示 ${cxFiltered.length} 条 · 已记录 ${got}/${track}`;
   $('cxProgFill').style.width=clamp(got/track,0,1)*100+'%';
 }

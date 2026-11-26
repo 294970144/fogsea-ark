@@ -5,12 +5,13 @@
 const TUNE={
   core:{max:600,repair:{wood:10,stone:6,heal:70},dawnHeal:40,regen:1},
   node:{hits:{crys:3,rock:4,tree:3},yield:{crys:[3,5],tree:[4,6],rock:[4,6]},dropCap:8},
-  player:{atkInterval:.42},
+  player:{atkInterval:.42,baseDmg:12,baseRange:1.75},
   dash:{dur:.16,iframe:.28,mult:3.4},
   nova:{cost:60,dmg:30,radius:3.1,radiusPer:.12},
   down:{time:3,hpRatio:.6,crysKeep:.8,iframe:2,en:50},
   spell:{range:7.5,reachPer:.20},
   reaction:{window:2,cooldown:1.5},
+  fireSpread:{radius:1.35,treeTick:.6,treeHits:3},
   ember:{perNight:3,killsDiv:8,winBonus:12},
   resourceDrop:{tree:'wood',rock:'stone',crys:'crys'},
   statusNames:{burn:'灼烧',chill:'冰缓',freeze:'冻结',mark:'奥术标记',shock:'感电'}
@@ -96,15 +97,21 @@ const CDEFS={
     desc:'回收率 +10%，移除一张牌并按回收率返还其造价（取整）。',w:8},
   salvage20:{id:'salvage20',kind:'utility',target:'pick',name:'拆解·归墟',icon:'salvage',color:'#57e6ff',cost:{},tier:20,
     desc:'回收率 +20%，移除一张牌并按回收率返还其造价（取整）。',w:5},
-  sp_fireball:{id:'sp_fireball',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,
-    name:'火球术',icon:'flame',color:ELEMCOL.fire,cost:{},mana:15,radius:1.6,dmg:20,
-    status:{kind:'burn',n:2},desc:'指定区域 1.6 格内 20 火焰伤害，附加 2 层灼烧。',w:12,wNonMage:5},
-  sp_frostbolt:{id:'sp_frostbolt',kind:'instant',target:'point',shape:'point',elem:'frost',cls:'mage',basic:true,
-    name:'冰锥术',icon:'snow',color:ELEMCOL.frost,cost:{},mana:15,radius:1.6,dmg:16,
-    status:{kind:'chill',n:1},desc:'指定区域 1.6 格内 16 冰霜伤害，附加 1 层冰缓。',w:12,wNonMage:5},
-  sp_arcbolt:{id:'sp_arcbolt',kind:'instant',target:'point',shape:'point',elem:'arcane',cls:'mage',basic:true,
-    name:'奥术冲击',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,radius:1.4,dmg:18,
-    status:{kind:'mark',n:1},desc:'指定区域 1.4 格内 18 奥术伤害，附加奥术标记。',w:12,wNonMage:5},
+  sp_fireball:{id:'sp_fireball',shape:'point',elem:'fire',weaponAttack:true,radius:1.6,dmg:20,spreadFire:true,
+    status:{kind:'burn',n:2}},
+  sp_frostbolt:{id:'sp_frostbolt',shape:'point',elem:'frost',weaponAttack:true,radius:1.6,dmg:11,
+    status:{kind:'chill',n:2}},
+  sp_arcbolt:{id:'sp_arcbolt',shape:'single',elem:'arcane',weaponAttack:true,dmg:10,
+    status:{kind:'mark',n:1}},
+  sp_kindling:{id:'sp_kindling',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,fx:'sp_fireball',
+    name:'引火术',icon:'flame',color:ELEMCOL.fire,cost:{},mana:15,radius:1.35,dmg:8,spreadFire:true,
+    status:{kind:'burn',n:1},desc:'1.35 格内造成 8 点火伤并附加灼烧，可引燃邻近敌人与树木。',w:10,wNonMage:7},
+  sp_frostpatch:{id:'sp_frostpatch',kind:'instant',target:'point',shape:'point',elem:'frost',cls:'mage',basic:true,fx:'sp_frostbolt',
+    name:'霜痕',icon:'snow',color:ELEMCOL.frost,cost:{},mana:15,radius:1.9,dmg:8,
+    status:{kind:'chill',n:2},desc:'1.9 格内造成 8 点冰伤并附加 2 层冰缓。',w:10,wNonMage:7},
+  sp_arcaneneedle:{id:'sp_arcaneneedle',kind:'instant',target:'point',shape:'single',elem:'arcane',cls:'mage',basic:true,fx:'sp_arcbolt',
+    name:'奥术针',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,radius:1.1,dmg:24,
+    status:{kind:'mark',n:1},desc:'命中落点 1.1 格内最近的敌人，造成 24 点奥术伤害并附加标记。',w:10,wNonMage:7},
   sp_emberburst:{id:'sp_emberburst',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,
     name:'余烬爆发',icon:'emberburst',color:ELEMCOL.fire,cost:{},mana:30,radius:2.2,dmg:30,
     status:{kind:'burn',n:2},desc:'指定区域 2.2 格内 30 火焰伤害，附加 2 层灼烧。',w:10,wNonMage:5},
@@ -130,13 +137,28 @@ const CDEFS={
     desc:'职业启动器：转职为法师，以法力施法。生命上限降低，手牌上限提高。',w:0}
 };
 const CIDS=Object.keys(CDEFS);
+const CARD_IDS=CIDS.filter(id=>!CDEFS[id].weaponAttack);
+/* 武器是局前选择、局内固定的基础攻击来源；法器复用 CDEFS 中的攻击模板。 */
+const WEAPONS={
+  sword:{id:'sword',name:'剑',route:'近战路线',icon:'sword',color:'#ffb454',art:'assets/weapons/sword.svg',attack:'melee',
+    desc:'挥砍、剑气、迅击。'},
+  flame:{id:'flame',name:'火焰法器',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',interval:.60,
+    desc:'范围灼烧，火焰蔓延至相邻敌人和树木。'},
+  frost:{id:'frost',name:'冰霜法器',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',interval:.50,
+    desc:'范围冰缓，叠加减速控制敌群。'},
+  arcane:{id:'arcane',name:'奥术法器',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',interval:.26,
+    desc:'高频打击单个目标，附加奥术标记。'}
+};
+const WEAPON_IDS=Object.keys(WEAPONS);
+const normalizeWeaponId=id=>Object.prototype.hasOwnProperty.call(WEAPONS,id)?id:'sword';
+const weaponDef=id=>WEAPONS[normalizeWeaponId(id)];
 // 手牌短文案：一次性注入到卡牌自身，显示层只读 def.brief，不再依赖独立表
 const CARD_BRIEF={
   wall:'阻挡雾裔，卡牌可循环。',tower:'自动射击附近雾裔。',totem:'持续恢复附近玩家生命。',cannon:'范围爆炸伤害。',
   rain:'范围箭雨伤害。',mine:'范围伤害并击退。',spring:'恢复 45 点生命。',mend:'修复核心与建筑。',ward:'获得 4 秒无敌。',
   tactic:'抽取 2 张牌。',surge:'回满资源并重置冲刺。',expand:'手牌上限 +1。',
   salvage5:'回收率 +5%，移除一张牌。',salvage10:'回收率 +10%，移除一张牌。',salvage20:'回收率 +20%，移除一张牌。',
-  sp_fireball:'范围火伤并附加灼烧。',sp_frostbolt:'范围冰伤并附加冰缓。',sp_arcbolt:'范围奥术伤害并标记。',
+  sp_kindling:'范围灼烧，引燃附近敌人与树。',sp_frostpatch:'范围冰伤，附加 2 层冰缓。',sp_arcaneneedle:'单体奥术伤害并标记。',
   sp_emberburst:'范围火伤并附加灼烧。',sp_flameimpact:'范围 55 火焰伤害。',sp_flamedetonate:'每层灼烧造成 12 伤害。',
   sp_blizzard:'全屏冰伤并附加冰缓。',sp_frostring:'冻结周围敌人。',sp_magicmissile:'攻击最近 3 个敌人。',
   manawell:'持续回复附近玩家法力。',class_mage:'转职法师，以法力施法。'
@@ -212,7 +234,7 @@ const BLESSINGS=[
   {id:'shadow',n:'迅影',rar:'r',icon:'shadow',d:'冲刺冷却 −25%',f:()=>P.dashCdMax*=.75},
   {id:'thorn',n:'荆棘',rar:'r',icon:'thorn',d:'受击反伤 8',f:()=>P.thorns+=8},
   {id:'crit',n:'会心',rar:'r',icon:'crit',max:4,d:'15% 双倍伤害',f:()=>P.crit=Math.min(.6,P.crit+.15)},
-  {id:'wave',n:'双弦',rar:'e',icon:'wave',max:2,d:'挥刃附带穿透剑气',f:()=>P.wave++},
+  {id:'wave',n:'双弦',rar:'e',icon:'wave',max:2,weapon:'sword',d:'挥刃附带穿透剑气',f:()=>P.wave++},
   {id:'beacon',n:'灯塔共鸣',rar:'e',icon:'beacon',d:'建筑伤害 +25% 并修复 30',f:()=>{P.towerMult*=1.25;builds.forEach(b=>b.hp=Math.min(b.max,b.hp+30));rebuildTileCost();fieldDirty=true;}},
   {id:'draw',n:'晨读',rar:'e',icon:'cards',max:3,d:'每次黎明额外抽 1 张',f:()=>P.bonusDraw++},
   {id:'t_regenshield',n:'回能护盾',rar:'r',icon:'shield',max:2,cls:'mage',d:'获得法力时，按回复量 30% 转化为护盾，上限为 15% 法力上限/层',f:()=>{}},

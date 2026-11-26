@@ -9,7 +9,7 @@ function drawTree(n){
     ctx.fillStyle='#5a4630';ctx.beginPath();ctx.ellipse(px,py-7,5,2.5,0,0,TAU);ctx.fill();return;}
   const s=n.s;
   ctx.fillStyle='#4a3826';ctx.fillRect(px-3*s,py-20*s,6*s,20*s);
-  const L=[[-46,26,'#14524a'],[-34,30,'#1a6355'],[-22,33,'#20705c']];
+  const L=n.burnHits?[[-46,26,'#5a3328'],[-34,30,'#82402b'],[-22,33,'#a4512e']]:[[-46,26,'#14524a'],[-34,30,'#1a6355'],[-22,33,'#20705c']];
   for(let i=0;i<3;i++){
     const ly=L[i][0],r=L[i][1];ctx.fillStyle=L[i][2];
     ctx.beginPath();ctx.moveTo(px+sway,py+ly*s-14*s);

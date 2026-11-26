@@ -1,8 +1,12 @@
 'use strict';
 /* ---------------- 流程 ---------------- */
+let weaponPicker=null;
 const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','removeOv','swapOv','slotOv'];
 function showOv(id,on){$(id).classList.toggle('show',on);}
-function closeOverlays(except){OVERLAYS.forEach(id=>{if(id!==except)showOv(id,false);});}
+function closeOverlays(except){
+  OVERLAYS.forEach(id=>{if(id!==except)showOv(id,false);});
+  if(weaponPicker){weaponPicker=null;$('weaponDrop').classList.remove('show');$('prepWeaponBtn').setAttribute('aria-expanded','false');}
+}
 function blurFocus(){const el=document.activeElement;if(el&&el.blur)el.blur();}
 function menuViewHeight(el){
   const pos=el.style.position,min=el.style.minHeight;
@@ -73,6 +77,7 @@ function renderLoadList(focus=true){
   setMenuView('load',focus!==false);
 }
 function startRun(){
+  if(weaponPicker)return;
   blurFocus();auInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
   clearInterval(emberTimer);codexOpen=false;closeOverlays();
   initRun();S.mode='play';
@@ -99,6 +104,8 @@ function toTitle(){
   S.nightAmt=.55;refreshPrep();showOv('menu',true);setMenuView('title');refreshContinue();auPhase(false);
 }
 function refreshPrep(){
+  refreshPrepWeapon();
+  $('prepMageNote').style.display=weaponDef(save.weapon).attack==='spell'?'none':'';
   $('emberNum').textContent=save.embers;
   $('bestChip').textContent=save.best.nights>0?`${save.best.nights} 夜 · ${save.best.kills} 击杀`:'尚无记录';
   const dr=$('diffRow');
@@ -122,6 +129,70 @@ function refreshPrep(){
     if(lv>=b.max||save.embers<b.costs[lv])return;
     save.embers-=b.costs[lv];save.bless[k]++;persist();sfx('level');refreshPrep();
   }));
+}
+function refreshPrepWeapon(){
+  const w=weaponDef(save.weapon);
+  $('prepWeaponIcon').innerHTML=svg(w.icon,22,w.color);
+  $('prepWeaponIcon').style.color=w.color;
+  $('prepWeaponName').textContent=w.name;
+}
+function renderWeaponPicker(){
+  const row=$('weaponGrid');row.innerHTML='';
+  WEAPON_IDS.forEach((id,i)=>{
+    const w=WEAPONS[id],sel=weaponPicker.draft===id;
+    const el=document.createElement('button');
+    el.classList.add('weaponCard');if(sel)el.classList.add('sel');
+    el.dataset.weapon=id;
+    el.style.setProperty('--weapon-color',w.color);
+    el.innerHTML=`<span class="weaponHotkey kb kb-hint">${i+1}</span>
+      <span class="weaponIcon"><img src="${w.art}" alt=""></span>
+      <span class="weaponCardBody"><b>${w.name}</b><p>${w.desc}</p></span>`;
+    el.addEventListener('click',()=>selectWeaponDraft(id,true));
+    row.appendChild(el);
+  });
+}
+function positionWeaponDrop(){
+  if(!weaponPicker)return;
+  const prep=document.querySelector('.menuView[data-view="prep"]'),btn=$('prepWeaponBtn'),drop=$('weaponDrop');
+  const pr=prep.getBoundingClientRect(),br=btn.getBoundingClientRect(),cs=getComputedStyle(prep);
+  drop.style.top=(br.bottom-pr.top+8)+'px';
+  drop.style.left=(br.left-pr.left)+'px';
+  drop.style.width=br.width+'px';
+  drop.style.bottom=Math.max(0,parseFloat(cs.paddingBottom)-2)+'px';
+}
+function openWeaponPicker(){
+  if(S.mode!=='prep')return;
+  if(weaponPicker){cancelWeaponPicker();return;}
+  weaponPicker={draft:normalizeWeaponId(save.weapon),opener:document.activeElement};
+  renderWeaponPicker();$('weaponDrop').classList.add('show');
+  $('prepWeaponBtn').setAttribute('aria-expanded','true');$('prepWeaponBtn').querySelector('em').textContent='收起';
+  setMenuView('prep',false);positionWeaponDrop();
+  $('weaponGrid').querySelector('.weaponCard.sel')?.focus({preventScroll:true});sfx('ui');
+}
+function selectWeaponDraft(id,focus=true){
+  if(!weaponPicker)return;
+  weaponPicker.draft=normalizeWeaponId(id);renderWeaponPicker();sfx('ui');
+  if(focus)$('weaponGrid').querySelector('.weaponCard.sel')?.focus({preventScroll:true});
+}
+function closeWeaponPicker(restoreFocus=false){
+  if(!weaponPicker)return;
+  const opener=weaponPicker.opener;weaponPicker=null;$('weaponDrop').classList.remove('show');
+  $('prepWeaponBtn').setAttribute('aria-expanded','false');$('prepWeaponBtn').querySelector('em').textContent='更换';
+  setMenuView('prep',false);
+  if(restoreFocus&&opener&&opener.focus)opener.focus({preventScroll:true});
+}
+function confirmWeaponPicker(){
+  if(!weaponPicker)return;
+  save.weapon=normalizeWeaponId(weaponPicker.draft);persist();
+  refreshPrep();closeWeaponPicker(true);sfx('card');
+}
+function cancelWeaponPicker(){closeWeaponPicker(true);sfx('ui');}
+function trapWeaponFocus(e){
+  const items=[...$('weaponDrop').querySelectorAll('button:not(:disabled)')];
+  if(!items.length)return;
+  const first=items[0],last=items[items.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
 }
 
 /* ---------------- 存档位 ---------------- */
@@ -176,6 +247,7 @@ function clearHudCache(){
   }
 }
 function beginRun(){
+  if(weaponPicker)return;
   if(slots.slots.every(Boolean))openSlots('new');else startRun();
 }
 function doLoadSlot(i){
@@ -287,6 +359,7 @@ function loop(now){
 }
 
 /* ---------------- 启动 ---------------- */
+save.weapon=normalizeWeaponId(save.weapon);
 cacheUI();resize();setMuted(save.muted);
 $('btnSpeed').textContent='1×';
 $('btnNight').addEventListener('click',()=>{auInit();skipToNight();});
@@ -305,13 +378,16 @@ $('btnEndless').addEventListener('click',()=>{auInit();continueEndless();});
 $('btnContinue').addEventListener('click',openLoadView);
 $('startBtn').addEventListener('click',openPrep);
 $('launchBtn').addEventListener('click',beginRun);
+$('prepWeaponBtn').addEventListener('click',openWeaponPicker);
+$('weaponConfirm').addEventListener('click',confirmWeaponPicker);
+$('weaponCancel').addEventListener('click',cancelWeaponPicker);
 $('btnPrepBack').addEventListener('click',toTitle);
 $('btnLoadBack').addEventListener('click',()=>{resetLoadUi();setMenuView('title');sfx('ui');});
 $('slotDelete').addEventListener('click',confirmDelete);
 $('slotBack').addEventListener('click',closeSlots);
 $('repairBtn').addEventListener('click',tryRepair);
 initRun();S.nightAmt=.55;refreshPrep();refreshStacks();setMenuView('title',false);refreshContinue();
-const resizeMenu=()=>setMenuView($('menuPanel').dataset.view||'title',false);
+const resizeMenu=()=>{setMenuView($('menuPanel').dataset.view||'title',false);positionWeaponDrop();};
 addEventListener('resize',resizeMenu);
 document.fonts?.addEventListener('loadingdone',resizeMenu);
 requestAnimationFrame(loop);

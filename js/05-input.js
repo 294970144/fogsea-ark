@@ -21,6 +21,20 @@ function cheatKey(k){
 function clearHold(){if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}}
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
+  if(weaponPicker){
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    if(k==='escape'){
+      e.preventDefault();cancelWeaponPicker();
+    }else if(['1','2','3','4'].includes(k)){
+      e.preventDefault();selectWeaponDraft(WEAPON_IDS[+k-1],true);
+    }else if(['arrowleft','arrowup','arrowright','arrowdown'].includes(k)){
+      e.preventDefault();
+      const step=(k==='arrowleft'||k==='arrowup')?-1:1;
+      const i=WEAPON_IDS.indexOf(weaponPicker.draft);
+      selectWeaponDraft(WEAPON_IDS[(i+step+WEAPON_IDS.length)%WEAPON_IDS.length],true);
+    }else if(k==='tab')trapWeaponFocus(e);
+    return;
+  }
   if(codexOpen){
     if(k==='escape'){e.preventDefault();closeCodex();}
     else if(k==='arrowdown'||k==='arrowup'){e.preventDefault();cxMove(k==='arrowdown'?1:-1);}

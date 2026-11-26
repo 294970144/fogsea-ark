@@ -20,7 +20,7 @@ let codexOpen=false,codexReturn='menu';
 /* ---------------- 存档 ---------------- */
 const SAVE_KEY='arkmist_v3';
 let save={embers:0,bless:{blade:0,iron:0,stock:0},best:{nights:0,kills:0,wins:0},
-  seen:{foe:{},build:{},card:{},play:{}},diff:'std',muted:false};
+  seen:{foe:{},build:{},card:{},play:{}},diff:'std',muted:false,weapon:'sword'};
 function persist(){
   try{localStorage.setItem(SAVE_KEY,JSON.stringify(save));return true;}
   catch(e){
@@ -56,6 +56,7 @@ function loadSave(){
         const valid=next&&typeof next==='object'&&!Array.isArray(next)&&(
           (Number.isFinite(next.embers)&&next.embers>=0)||typeof next.muted==='boolean'||
           (typeof next.diff==='string'&&Object.prototype.hasOwnProperty.call(DIFFS,next.diff))||
+          typeof next.weapon==='string'||
           (next.bless&&typeof next.bless==='object'&&Object.keys(BLESS).some(k=>Number.isInteger(next.bless[k])&&next.bless[k]>=0&&next.bless[k]<=BLESS[k].max))||
           (next.best&&typeof next.best==='object'&&['nights','kills','wins'].some(k=>Number.isInteger(next.best[k])&&next.best[k]>=0))||seenValid);
         if(valid)p=next;
@@ -66,6 +67,7 @@ function loadSave(){
   if(Number.isFinite(p.embers)&&p.embers>=0)save.embers=Math.floor(p.embers);
   if(typeof p.muted==='boolean')save.muted=p.muted;
   if(typeof p.diff==='string'&&Object.prototype.hasOwnProperty.call(DIFFS,p.diff))save.diff=p.diff;
+  if(typeof p.weapon==='string')save.weapon=p.weapon;
   if(p.bless&&typeof p.bless==='object')for(const k in BLESS){
     const v=p.bless[k];
     if(Number.isInteger(v)&&v>=0&&v<=BLESS[k].max)save.bless[k]=v;

@@ -20,7 +20,8 @@ const dayScale=day=>1+.13*(effDay(day)-1);
 function resetPlayer(){
   const b=save.bless;
   Object.assign(P,{x:CEN+2.2,y:CEN+.5,hp:100+15*b.iron,maxHp:100+15*b.iron,en:100,maxEn:100,
-    lvl:1,xp:0,next:24,dmg:12*(1+.08*b.blade),atkCd:0,atkSpd:1,range:1.75,spd:4.3,face:0,moving:false,
+    lvl:1,xp:0,next:24,dmg:TUNE.player.baseDmg*(1+.08*b.blade),atkCd:0,atkSpd:1,range:TUNE.player.baseRange,spd:4.3,face:0,moving:false,
+    weapon:normalizeWeaponId(save.weapon),
     dashT:0,dashCd:0,dashCdMax:1.6,dashDx:0,dashDy:0,ifr:0,downed:false,respT:0,
     crit:0,ls:0,thorns:0,wave:0,magnet:2.3,gather:1,towerMult:1,novaMult:1,regen:1,bonusDraw:0,
     cls:null,shield:0,regenAcc:0,enRegenFlat:14,spellCd:0,charge:0,chargeAcc:0,arcCharge:0,arcDiscount:false,
@@ -53,7 +54,10 @@ function initRun(){
   auPhase(false);refreshRes();renderHand();
   rebuildSolids();rebuildTileCost();fieldDirty=true;
 }
-function mkCard(id){return {uid:DECK.uid++,id};}
+function mkCard(id){
+  if(!Object.prototype.hasOwnProperty.call(CDEFS,id)||CDEFS[id].weaponAttack)return null;
+  return {uid:DECK.uid++,id};
+}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=irand(0,i);const t=a[i];a[i]=a[j];a[j]=t;}}
 function drawOne(cap){
   if(DECK.hand.length>=(cap===undefined?DECK.max:cap))return false;
@@ -91,7 +95,7 @@ function purgeCard(id){
   S.handDirty=true;
 }
 function poolIds(){
-  return CIDS.filter(id=>{
+  return CARD_IDS.filter(id=>{
     const d=CDEFS[id];
     if(d.cls==='class')return false;
     if(d.core)return false;
@@ -162,6 +166,7 @@ function restoreSnapshot(s){
     dragStart:[0,0],dragPointerId:null,handDirty:true,pendingSalvage:null,swapLeft:0,swapReason:''});
   _putObj(S,sd);
   const pd=d.P;
+  pd.weapon=normalizeWeaponId(pd.weapon);
   Object.assign(pd,{anim:0,hurtT:0,swingT:0,moving:false});
   _putObj(P,pd);
   _putObj(res,d.res);

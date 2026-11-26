@@ -157,7 +157,7 @@ function placeCheck(def,tx,ty){
 }
 function tryPlayAt(uid,wx,wy){
   const c=handCard(uid);if(!c)return false;
-  const def=CDEFS[c.id];
+  const def=CDEFS[c.id];if(!def||def.weaponAttack)return false;
   if(def.target==='self'||def.target==='pick')return playCard(uid,wx,wy);
   const tx=def.kind==='build'?Math.floor(wx)+.5:wx;
   const ty=def.kind==='build'?Math.floor(wy)+.5:wy;
@@ -166,6 +166,7 @@ function tryPlayAt(uid,wx,wy){
 function playCard(uid,tx,ty){
   const idx=DECK.hand.findIndex(c=>c.uid===uid);if(idx<0)return false;
   const card=DECK.hand[idx],def=CDEFS[card.id];
+  if(!def||def.weaponAttack)return false;
   if(def.target==='pick'){beginSalvage(card);return false;}
   const chk=placeCheck(def,tx,ty);
   if(!chk.ok){toast(chk.msg,'warn');sfx('deny');return false;}
