@@ -5,11 +5,12 @@ function cardInner(def,hot){
   const cost=def.cls==='class'?'<b style="color:#b48cff">职业</b>':costHtml(def,true);
   const q=CARD_Q[def.q||1];
   const badge=(def.q||1)>=2?`<i class="hcQ" style="background:linear-gradient(135deg,${q.c1},${q.c2});color:${q.fg}">${q.name}</i>`:'';
+  const slot=def.sigil?'<i class="hcSlot" aria-hidden="true"></i>':'';
   return `<span class="hcHot kb-hint">${hot||''}</span>
     <div class="hcCost">${cost}${badge}</div>
     <div class="hcMark" style="color:${def.color}">${svg(def.icon,96)}</div>
     <div class="hcName">${def.name}</div>
-    <div class="hcDesc">${def.brief||def.desc}</div>`;
+    <div class="hcDesc">${def.brief||def.desc}</div>${slot}`;
 }
 function renderHand(){
   const row=$('handRow');row.innerHTML='';

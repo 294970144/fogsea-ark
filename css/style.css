@@ -240,6 +240,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   border-left:2px solid var(--el,#8fa9b8);padding-left:7px;z-index:2}
 .hcHot{position:absolute;top:4px;left:5px;min-width:14px;padding:1px 3px;border-radius:4px;text-align:center;
   font-size:10px;font-weight:900;line-height:1.2;color:var(--dim2);background:rgba(7,15,22,.82);border:1px solid var(--line);z-index:3}
+/* 刻印卡标识：右下角胶囊凹槽，颜色跟随元素色；不用图标与说明文字 */
+.hcSlot{position:absolute;right:11px;bottom:40px;width:8px;height:32px;
+  border-radius:4px;background:rgba(4,12,19,.9);
+  border:1px solid color-mix(in srgb,var(--el,#8fa9b8) 60%,transparent);
+  pointer-events:none;z-index:4}
 /* ---- 卡牌品质：3 档双色（普通白绿 / 稀有蓝紫 / 史诗橙红），渐变底色由 cardInner 内联注入 ---- */
 .hcQ{font-style:normal;display:inline-flex;align-items:center;margin-right:auto;
   font-size:10px;font-weight:900;line-height:1.3;letter-spacing:.6px;padding:1px 5px;border-radius:6px}

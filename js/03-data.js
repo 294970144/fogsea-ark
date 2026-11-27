@@ -188,8 +188,8 @@ for(const s of SIGIL_SPELLS){
     fx:src.fx||src.id,
     shape:src.shape,elem:src.elem,radius:src.radius,dmg:src.dmg,spreadFire:src.spreadFire,status:src.status,
     name:s.name,icon:s.icon,color:s.color,cost:{},mana:s.mana,
-    desc:`装入法杖槽位后成为自动攻击，也可作为瞬发法术打出：${src.dmg} 点${ELEMNAME[src.elem]}伤害。`,
-    brief:`${src.dmg} ${ELEMNAME[src.elem]}伤害 · 可装槽或瞬发`,w:s.w,wNonMage:s.wNonMage};
+    desc:`${src.dmg} 点${ELEMNAME[src.elem]}伤害。`,
+    brief:`${src.dmg} ${ELEMNAME[src.elem]}伤害`,w:s.w,wNonMage:s.wNonMage};
 }
 const SIGIL_SPELL_IDS=SIGIL_SPELLS.map(s=>s.id);
 const CIDS=Object.keys(CDEFS);
@@ -288,7 +288,7 @@ const sigilMeta=id=>{
   return null;
 };
 const isSigilId=id=>!!(SIGILS[id]||(CDEFS[id]&&CDEFS[id].sigil));
-for(const id of SIGIL_IDS){CDEFS[id].desc=sigilDesc(id);CDEFS[id].brief=sigilDesc(id)+' · 仅可装槽';}
+for(const id of SIGIL_IDS){CDEFS[id].desc=sigilDesc(id);CDEFS[id].brief=sigilDesc(id);}
 // 手牌短文案：一次性注入到卡牌自身，显示层只读 def.brief，不再依赖独立表
 const CARD_BRIEF={
   wall:'阻挡雾裔，卡牌可循环。',tower:'自动射击附近雾裔。',totem:'持续恢复附近玩家生命。',cannon:'范围爆炸伤害。',
