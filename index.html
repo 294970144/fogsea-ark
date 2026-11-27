@@ -31,6 +31,7 @@
     </div>
     <span id="weaponHudChev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
     <div id="weaponSlots"><div id="weaponSlotsRow"></div></div>
+    <div id="castBar" aria-hidden="true"><i id="castFill"></i></div>
   </div>
   <div id="topRight">
     <button class="iconBtn" id="btnNight" aria-label="提前入夜" title="提前入夜 (N)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14A8.5 8.5 0 019.5 3.5 8.5 8.5 0 1020 14z"/></svg></button>
@@ -62,10 +63,10 @@
   <div id="handArea">
     <div id="handMeta">
       <div id="resRow"></div>
-      <span class="pileChip draw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="12" height="16" rx="2"/><path d="M8 7h12v14H8"/></svg>牌库 <b id="drawN">0</b></span>
+      <span class="pileChip draw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="12" height="16" rx="2"/><path d="M8 7h12v14H8"/></svg>抽牌堆 <b id="drawN">0</b></span>
       <span class="pileChip disc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>弃牌 <b id="discN">0</b></span>
       <span class="pileChip limit">手牌 <b id="handN">0/5</b><em id="handWarn"></em></span>
-      <span class="pileChip rec">回收 <b id="recN">0%</b></span>
+      <span class="pileChip rec">回收率 <b id="recN">0%</b></span>
       <button id="repairBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.7 2.7-3-3 2.7-2.7z"/></svg>修复 <span class="kb kb-hint">F</span></button>
     </div>
     <div id="handRow"></div>
@@ -79,7 +80,7 @@
     <div id="mmWrap" class="panel"><canvas id="mm" width="132" height="132"></canvas></div>
   </div>
   <div id="recycleZone" class="recycleZone" role="button" tabindex="0" aria-label="回收超额手牌">
-    <div class="rzHead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg><b>回收卡牌</b></div>
+    <div class="rzHead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5 3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-3"/></svg><b>回收卡牌</b></div>
     <div class="rzBack">返还 <b id="recycleBack">0%</b></div>
     <div class="rzHint">拖入 · 或选中后点击</div>
   </div>
@@ -163,18 +164,6 @@
     <div class="dawnSub" id="dawnSub"></div>
     <div class="pickRow" id="dawnRow"></div>
     <button class="skipBtn" id="dawnSkip">跳过</button>
-  </div>
-</div>
-
-<div class="overlay" id="removeOv" role="dialog" aria-modal="true">
-  <div class="scrim"></div>
-  <div id="removeBox">
-    <div class="rmHead">
-      <h2 id="rmTitle">拆解</h2>
-      <p id="rmSub"></p>
-    </div>
-    <div id="rmList"></div>
-    <div class="rmFoot"><button class="skipBtn" id="rmCancel" style="margin:0">取消</button></div>
   </div>
 </div>
 

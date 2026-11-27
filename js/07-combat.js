@@ -3,8 +3,40 @@
 function weaponAttackRange(w=weaponDef(P.weapon)){
   return w.attack==='spell'?TUNE.spell.range*(P.range/TUNE.player.baseRange):P.range;
 }
+/* 节奏按 Noita 语义分两段：castDelay=轮内两次施放之间，recharge=一轮法术全部打完到队列回位。
+   祝福与天赋的 atkSpd 对两段同除；迅捷刻印只压充能（见 weaponRechargeTime）。 */
+function weaponCastDelay(w=weaponDef(P.weapon)){
+  return (w.castDelay||0)/P.atkSpd;
+}
+/* 迅捷把整轮缩短 1/spd（spd 是乘算系数，1=无迅捷），缺口全部从 recharge 扣；扣不够就到底，不动 castDelay。 */
+function weaponRechargeTime(w=weaponDef(P.weapon),casts=1){
+  const rc=(w.recharge||0)/P.atkSpd;
+  const spd=sigilMods().spd;
+  if(!(spd>1)||rc<=0)return rc;
+  const cycle=rc+Math.max(0,casts-1)*weaponCastDelay(w);
+  return Math.max(0,rc-cycle*(1-1/spd));
+}
+function weaponCastCost(w,cast){
+  return cast.last?weaponRechargeTime(w,cast.n):weaponCastDelay(w);
+}
+/* 记冷却并标记本段是轮内施放延迟还是整轮充能，HUD 进度条只读这两个值。 */
+function setWeaponCd(w,cast){
+  P.atkCd=weaponCastCost(w,cast);
+  P.atkCdMax=Math.max(.001,P.atkCd);
+  P.reload=!!cast.last;
+}
+/* 平均每发时间：只给图鉴/HUD 摘要用，战斗计时走上面两段。 */
 function weaponAttackInterval(w=weaponDef(P.weapon)){
-  return (w.interval??TUNE.player.atkInterval)/(P.atkSpd*sigilMods().spd);
+  if(w.attack!=='spell')return weaponRechargeTime(w,1);
+  const n=Math.max(1,weaponSpells(w).length);
+  return ((n-1)*weaponCastDelay(w)+weaponRechargeTime(w,n))/n;
+}
+function weaponTimingStats(w=weaponDef(P.weapon)){
+  if(w.attack!=='spell')return [['攻击间隔',weaponRechargeTime(w,1).toFixed(2)+' 秒']];
+  const n=P.weapon===w.id?Math.max(1,weaponSpells(w).length):(w.slots||1);
+  return [['施放延迟',weaponCastDelay(w).toFixed(2)+' 秒'],
+    ['充能',((w.recharge||0)/P.atkSpd).toFixed(2)+' 秒'],
+    ['平均每发',(((n-1)*weaponCastDelay(w)+weaponRechargeTime(w,n))/n).toFixed(2)+' 秒']];
 }
 function sigilMods(){
   const m={dmg:1,spd:1,echo:0};
@@ -16,30 +48,93 @@ function sigilMods(){
   }
   return m;
 }
-/* 槽位中的法术刻印按从左到右轮发；没有法术刻印时法杖不攻击。剑不能施法，故不参与轮发。 */
-function weaponSpells(){
-  if(weaponDef(P.weapon).attack!=='spell')return [];
-  const out=[];
-  for(const c of P.sigils||[]){
-    const d=CDEFS[c&&c.id];
-    if(d&&d.sigil&&!d.sigilOnly&&!d.weaponAttack)out.push(d);
+/* 功能类刻印（多重/阵型）只作用于它左边最近的那一张法术：
+   从 slot+1 向右扫，空槽跳过、纯数值刻印跳过，遇到法术即停下。
+   扫到的功能刻印按顺序收集成链——链上多个刻印叠加到同一个法术上。 */
+function sigilChain(slot){
+  const out=[],g=P.sigils||[];
+  for(let i=(slot|0)+1;i<g.length;i++){
+    const c=g[i];if(!c)continue;
+    const s=SIGILS[c.id];
+    if(!s)break;                       // 遇到法术：链到此为止
+    if(s.copies!=null)out.push(s);     // 数值刻印不参与，也不截断链
   }
   return out;
 }
+/* 阵型叠加：份数相乘，总张角相加，再摊成「相邻两发的夹角」。
+   二叉(2 发 90°) + 三叉(3 发 40°) = 6 发 130°（每段 26°），而不是各自为政。 */
+function formationOf(slot){
+  const ch=sigilChain(slot).filter(s=>s.formation);
+  if(!ch.length)return null;
+  let copies=1,arc=0,dmgB=1;
+  for(const s of ch){
+    copies*=s.copies;
+    arc+=(s.copies-1)*(s.spread||0);
+    dmgB*=s.dmgB==null?1:s.dmgB;
+  }
+  return{copies,arc,spread:copies>1?arc/(copies-1):0,dmgB};
+}
+/* 二重叠加：每多一张就多一次错峰补发，伤害系数连乘。 */
+function repeatOf(slot){
+  const ch=sigilChain(slot).filter(s=>s.repeat);
+  if(!ch.length)return null;
+  let n=1,dmgB=1;
+  for(const s of ch){n+=s.copies-1;dmgB*=s.dmgB==null?1:s.dmgB;}
+  return{n,dmgB};
+}
+/* 剑只有一次挥砍、没有槽内序列，阵型刻印全部作用于这一次挥砍。 */
+function swordFormation(){
+  const ch=[];
+  for(const c of P.sigils||[]){
+    const s=SIGILS[c&&c.id];
+    if(s&&s.formation)ch.push(s);
+  }
+  if(!ch.length)return null;
+  let copies=1,arc=0,dmgB=1;
+  for(const s of ch){
+    copies*=s.copies;arc+=(s.copies-1)*(s.spread||0);dmgB*=s.dmgB==null?1:s.dmgB;
+  }
+  return{copies,arc,spread:copies>1?arc/(copies-1):0,dmgB};
+}
+/* 非乱序法杖严格从左到右施放；空槽与纯数值刻印跳过，槽位变化不会让序列错位。 */
+function weaponCastSlots(w=weaponDef(P.weapon)){
+  const out=[];
+  if(w.attack!=='spell')return out;
+  const N=w.slots||0;
+  for(let i=0;i<N;i++){
+    const d=CDEFS[P.sigils&&P.sigils[i]&&P.sigils[i].id];
+    if(d&&d.sigil&&!d.sigilOnly&&!d.weaponAttack)out.push(i);
+  }
+  return out;
+}
+function weaponSpells(w=weaponDef(P.weapon)){
+  return weaponCastSlots(w).map(i=>CDEFS[P.sigils[i].id]);
+}
+/* 取本轮下一发：游标记绝对槽位下标；last 表示整轮最后一发，打完进入充能。 */
+function nextWeaponCast(){
+  const w=weaponDef(P.weapon),idx=weaponCastSlots(w);
+  if(!idx.length)return null;
+  const N=w.slots||0;
+  let cur=P.sigCast|0;
+  if(!(cur>=0&&cur<N))cur=0;
+  let k=idx.find(i=>i>=cur);
+  if(k===undefined)k=idx[0];
+  P.sigCast=(k+1)%N;
+  return {def:CDEFS[P.sigils[k].id],slot:k,last:k===idx[idx.length-1],n:idx.length};
+}
 function nextWeaponSpell(){
-  const list=weaponSpells();if(!list.length)return null;
-  const def=list[(P.sigCast||0)%list.length];
-  P.sigCast=((P.sigCast||0)+1)%list.length;
-  return def;
+  const c=nextWeaponCast();
+  return c?c.def:null;
 }
 let sigilEchoing=false;
-function sigilEcho(w,tgt){
+function sigilEcho(w,tgt,cast){
   if(sigilEchoing)return;
   const m=sigilMods();
   if(m.echo<=0||Math.random()>=m.echo)return;
   sigilEchoing=true;
+  const echo={def:cast&&cast.def,slot:cast&&cast.slot!=null?cast.slot:-1,last:true,n:1};
   try{
-    if(tgt&&!tgt.dead){if(w.attack==='spell')autoCastWeapon(w,tgt);else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));return;}
+    if(tgt&&!tgt.dead){if(w.attack==='spell')autoCastWeapon(w,tgt,echo,{echo:true});else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x),{echo:true});return;}
     let near=null,bd=1e9;
     forFoes(P.x,P.y,weaponAttackRange(w)+1.2,f=>{
       if(f.dead)return;
@@ -47,8 +142,8 @@ function sigilEcho(w,tgt){
       if(d<=weaponAttackRange(w)+f.r&&d<bd){bd=d;near=f;}
     });
     if(!near)return;
-    if(w.attack==='spell')autoCastWeapon(w,near);
-    else swing(Math.atan2(near.y-P.y,near.x-P.x));
+    if(w.attack==='spell')autoCastWeapon(w,near,echo,{echo:true});
+    else swing(Math.atan2(near.y-P.y,near.x-P.x),{echo:true});
   }finally{sigilEchoing=false;}
 }
 function autoAttack(){
@@ -62,8 +157,8 @@ function autoAttack(){
   });
   if(tgt){
     if(w.attack==='spell'){
-      const def=nextWeaponSpell();if(!def)return;
-      autoCastWeapon(w,tgt,def);
+      const cast=nextWeaponCast();if(!cast)return;
+      autoCastWeapon(w,tgt,cast);
     }else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));
     return;
   }
@@ -76,44 +171,98 @@ function autoAttack(){
   const ang=Math.atan2(tgt.y-P.y,tgt.x-P.x);
   if(w.attack==='melee')swing(ang);
   else {
-    const def=nextWeaponSpell();if(!def)return;
-    P.atkCd=weaponAttackInterval(w);P.face=ang;
+    const cast=nextWeaponCast();if(!cast)return;
+    const def=cast.def;
+    setWeaponCd(w,cast);P.face=ang;
     const tx=tgt.x,ty=tgt.y;
-    queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(d,x,y)=>{
+    const shot=queueSpellHit(def,tx,ty,{mode:'weapon',node:tgt,resolve:(d,x,y)=>{
       const node=nodes.find(n=>n===tgt&&n.alive);
       if(!node)return; // 树已倒下即打空
       if(d.spreadFire&&node.type==='tree')spreadFire(x,y,d.radius,[]);
       hitNode(node);
     }});
-    spellFx(def,tx,ty,def.elem,[]);
+    spellFx(def,tx,ty,def.elem,[],shot);
   }
 }
-function autoCastWeapon(w,tgt,def){
-  def=def||nextWeaponSpell();if(!def)return;
-  const ang=Math.atan2(tgt.y-P.y,tgt.x-P.x);
-  P.atkCd=weaponAttackInterval(w);P.face=ang;
-  const tx=tgt.x,ty=tgt.y;
-  const targets=def.shape==='single'?[tgt]:spellTargets(def,tx,ty);
-  // 弹道到达时按落点重新索敌：目标死了或跑出范围即打空。单体锁定发射时那只目标。
-  queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(d,x,y)=>{
-    const now=(d.shape==='single'
-      ? (tgt&&!tgt.dead&&dist(x,y,tgt.x,tgt.y)<=(tgt.r||.3)+.6?[tgt]:[])
-      : spellTargets(d,x,y));
-    for(const f of now){
-      if(!f||f.dead)continue;
-      let dmg=(d.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell*sigilMods().dmg;
-      const crit=Math.random()<P.crit;if(crit)dmg*=2;
-      if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),crit,{noKnock:true});
-      if(d.status&&!f.dead)applyElement(f,d.elem,d.status.n,d.status.kind);
-    }
-    if(d.spreadFire)spreadFire(x,y,d.radius,now);
-    if(now.length)S.hitstop=Math.max(S.hitstop,.02);
-  }});
-  spellFx(def,tx,ty,def.elem,targets);
-  sigilEcho(w,tgt);
+/* 二重补发的错峰队列：瞬态，不入存档；原目标已死就换最近的敌人，换不到就丢弃这一发。 */
+const weaponRepeats=[];
+function nearestWeaponFoe(w){
+  const range=weaponAttackRange(w);let tgt=null,bd=1e9;
+  forFoes(P.x,P.y,range+1.2,f=>{
+    if(f.dead)return;
+    const d=dist(P.x,P.y,f.x,f.y);
+    if(d<=range+f.r&&d<bd){bd=d;tgt=f;}
+  });
+  return tgt;
 }
-function swing(ang){
-  P.atkCd=weaponAttackInterval(WEAPONS.sword);P.swingT=.18;P.face=ang;
+function updateWeaponRepeats(){
+  if(!weaponRepeats.length)return;
+  for(let i=weaponRepeats.length-1;i>=0;i--){
+    const r=weaponRepeats[i];
+    if(r.at>S.combatT)continue;
+    weaponRepeats.splice(i,1);
+    const tgt=r.tgt&&!r.tgt.dead?r.tgt:nearestWeaponFoe(r.w);
+    if(tgt)fireWeaponCast(r.w,tgt,r.cast,r.mul);
+  }
+}
+function autoCastWeapon(w,tgt,cast,opts){
+  cast=cast||nextWeaponCast();if(!cast)return;
+  const echo=!!(opts&&opts.echo);
+  P.face=Math.atan2(tgt.y-P.y,tgt.x-P.x);
+  if(echo){fireWeaponCast(w,tgt,cast,1);return;}
+  setWeaponCd(w,cast);
+  fireWeaponCast(w,tgt,cast,1);
+  // 二重：只把刚施放的这个法术错峰再打一遍，不跨槽取下一个法术
+  const rp=repeatOf(cast.slot);
+  if(rp)for(let i=1;i<rp.n;i++)
+    weaponRepeats.push({w,cast,tgt,mul:rp.dmgB,at:S.combatT+(TUNE.weapon.repeatDelay||0)*i});
+  sigilEcho(w,tgt,cast);
+}
+/* 单次法术出手：阵型刻印让同一发分裂多路，复制体按 dmgB 衰减；每路各自走弹道与结算。 */
+function fireWeaponCast(w,tgt,cast,mul){
+  const def=cast.def,f=formationOf(cast.slot);
+  const base=Math.atan2(tgt.y-P.y,tgt.x-P.x);
+  const d=Math.max(.6,dist(P.x,P.y,tgt.x,tgt.y));
+  const copies=f?f.copies:1;
+  for(let i=0;i<copies;i++){
+    const off=(i-(copies-1)/2)*(f?f.spread:0)*Math.PI/180;
+    const tx=P.x+Math.cos(base+off)*d,ty=P.y+Math.sin(base+off)*d;
+    const k=(i===0?1:(f?f.dmgB:1))*mul;
+    const targets=def.shape==='single'?[tgt]:spellTargets(def,tx,ty);
+    // 投掷物有真实弹道，命中位置才是结算点；非投掷物仍按落点重新索敌（目标死了或跑出范围即打空）。
+    const shot=queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(dd,x,y,foe)=>weaponSpellHit(dd,x,y,foe,tgt,k)});
+    spellFx(def,tx,ty,def.elem,targets,shot);
+  }
+}
+function weaponSpellHit(def,x,y,foe,tgt,mul){
+  const now=(def.shape==='single'
+    ? (tgt&&!tgt.dead&&dist(x,y,tgt.x,tgt.y)<=(tgt.r||.3)+.6?[tgt]:[])
+    : spellTargets(def,x,y));
+  for(const f of now){
+    if(!f||f.dead)continue;
+    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell*sigilMods().dmg*(mul==null?1:mul);
+    const crit=Math.random()<P.crit;if(crit)dmg*=2;
+    if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),crit,{noKnock:true});
+    if(def.status&&!f.dead)applyElement(f,def.elem,def.status.n,def.status.kind);
+  }
+  if(def.spreadFire)spreadFire(x,y,def.radius,now);
+  if(now.length)S.hitstop=Math.max(S.hitstop,.02);
+  return now;
+}
+/* 剑同样吃阵型刻印：同一挥砍变成带角度的多段，复制段按 dmgB 衰减。 */
+function swing(ang,opts){
+  const echo=!!(opts&&opts.echo);
+  if(!echo)setWeaponCd(WEAPONS.sword,{last:true,n:1});
+  const f=echo?null:swordFormation(),copies=f?f.copies:1;
+  P.swingT=.18;P.face=ang;
+  let any=false;
+  for(let i=0;i<copies;i++){
+    const a=ang+(i-(copies-1)/2)*(f?f.spread:0)*Math.PI/180;
+    if(swingArc(a,i===0?1:(f?f.dmgB:1)))any=true;
+  }
+  if(any)sigilEcho(WEAPONS.sword,{x:P.x+Math.cos(ang)*.6,y:P.y+Math.sin(ang)*.6});
+}
+function swingArc(ang,mult){
   slashes.push({x:P.x,y:P.y,ang,t:0,R:P.range});
   sfx('swing');
   const inArc=(t,extra)=>{
@@ -125,7 +274,7 @@ function swing(ang){
     return da<=1.15;
   };
   let hit=false;const fxHits=[];
-  const dm=sigilMods().dmg;
+  const dm=sigilMods().dmg*mult;
   forFoes(P.x,P.y,P.range+1.2,f=>{
     if(f.dead||!inArc(f,f.r))return;
     let dmg=P.dmg*TUNE.dmgMul.melee*dm;const crit=Math.random()<P.crit;if(crit)dmg*=2;
@@ -137,7 +286,7 @@ function swing(ang){
     FX.waveShot(P.x+Math.cos(ang)*.5,P.y+Math.sin(ang)*.5,ang);}
   if(hit)S.hitstop=Math.max(S.hitstop,.02);
   FX.sword(P.x,P.y,ang,P.range);for(const h of fxHits)FX.swordHit(h.x,h.y,ang,h.crit,h.node);
-  if(hit)sigilEcho(WEAPONS.sword,{x:P.x+Math.cos(ang)*.6,y:P.y+Math.sin(ang)*.6});
+  return hit;
 }
 function damageFoe(f,dmg,ang,crit,opts){
   if(f.dead)return;
@@ -651,13 +800,15 @@ function update(dt){
       dx/=m;dy/=m;moveCircle(P,dx*P.spd*moveSpeedMult()*dt,dy*P.spd*moveSpeedMult()*dt,.3,false);
       P.face=Math.atan2(dy,dx);P.anim+=dt*10;
     }else depenetrate(P,.3,false);
-    P.atkCd-=dt;P.swingT=Math.max(0,P.swingT-dt);
+    P.atkCd-=dt;if(P.atkCd<=0)P.reload=false;P.swingT=Math.max(0,P.swingT-dt);
     P.dashCd=Math.max(0,P.dashCd-dt);P.ifr=Math.max(0,P.ifr-dt);P.hurtT=Math.max(0,P.hurtT-dt);
     gainMana(manaRegenRate()*dt);
     autoAttack();
   }
   updateSpellState(dt);
+  updateWeaponRepeats();
   updatePendingHits();
+  updateSpellShots(dt);
   updateBurningTrees(dt);
   updateFoes(dt);updateBuilds(dt);updateShots(dt);updatePicks(dt);updateParts(dt);
   core.flash=Math.max(0,core.flash-dt);

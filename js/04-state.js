@@ -6,8 +6,8 @@ const S={mode:'menu',phase:'day',day:1,timeLeft:70,toSpawn:0,nightTotal:0,nightK
   speed:1,hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,stats:null,hints:{},elapsed:0,combatT:0,
   aimUid:null,dragUid:null,dragMoved:false,dragStart:[0,0],dragPointerId:null,
   endless:false,endlessBase:null,settled:null,handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],dawnSigils:[],
-  pendingSalvage:null,overflowWarned:false};
-const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=80,FOE_CAP=44;
+  overflowWarned:false};
+const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=50,FOE_CAP=44;
 /* 个人测试作弊码（仅个人测试用，不在页面呈现任何入口或文案）
    暂停时键入 l3131 切换：雾爆伤害 ×10（提升至 1000%）、范围 ×10（提升 1000%）。 */
 const CHEAT={code:'l3131',buf:'',on:false,dmg:10,rad:10};
@@ -20,7 +20,7 @@ const dayScale=day=>1+.13*(effDay(day)-1);
 function resetPlayer(){
   const b=save.bless,w=weaponDef(save.weapon);
   Object.assign(P,{x:CEN+2.2,y:CEN+.5,hp:100+15*b.iron,maxHp:100+15*b.iron,en:100,maxEn:100,
-    lvl:1,xp:0,next:24,dmg:TUNE.player.baseDmg*(1+.08*b.blade),atkCd:0,atkSpd:1,range:TUNE.player.baseRange,spd:4.3,face:0,moving:false,
+    lvl:1,xp:0,next:24,dmg:TUNE.player.baseDmg*(1+.08*b.blade),atkCd:0,atkCdMax:0,reload:false,atkSpd:1,range:TUNE.player.baseRange,spd:4.3,face:0,moving:false,
     weapon:normalizeWeaponId(save.weapon),
     dashT:0,dashCd:0,dashCdMax:1.6,dashDx:0,dashDy:0,ifr:0,downed:false,respT:0,
     crit:0,ls:0,thorns:0,wave:0,magnet:2.3,gather:1,towerMult:1,novaMult:1,regen:1,bonusDraw:0,
@@ -34,6 +34,7 @@ function resetPlayer(){
 function initRun(){
   genWorld();
   builds=[];foes=[];shots=[];picks=[];parts=[];floats=[];slashes=[];ghosts=[];warns=[];
+  spellShots.length=0;pendingHits.length=0;weaponRepeats.length=0;
   if(typeof FX!=='undefined')FX.clear();
   core.hp=core.max=TUNE.core.max;core.flash=0;core.beam=0;
   resetPlayer();
@@ -41,13 +42,13 @@ function initRun(){
   Object.assign(S,{phase:'day',day:1,timeLeft:DAY_LEN,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,
     hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,elapsed:0,combatT:0,hints:{},aimUid:null,dragUid:null,
     dragMoved:false,dragStart:[0,0],dragPointerId:null,endless:false,endlessBase:null,settled:null,
-    handDirty:true,dawnStep:0,dawnSigils:[],pendingSalvage:null,
+    handDirty:true,dawnStep:0,dawnSigils:[],
     stats:{kills:0,gathered:0,dmg:0,nights:0,level:1,played:0}});
   DECK.draw=[];DECK.hand=[];DECK.discard=[];DECK.max=5;DECK.recycle=0;DECK.uid=1;
   // 法杖开局：一张实体法术刻印卡直接进首槽，牌库不再生成同款
   (weaponDef(P.weapon).startSigils||[]).forEach((id,i)=>{P.sigils[i]=mkCard(id);});
-  const starter=['wall','wall','wall','tower','tower','totem','rain','spring','tactic'];
-  starter.forEach(id=>DECK.draw.push(mkCard(id)));
+  // 起始牌库来自 03-data.js 的 STARTER_DECK：一张表决定开局有什么、各多少张
+  for(const [id,n] of STARTER_DECK)for(let i=0;i<n;i++){const c=mkCard(id);if(c)DECK.draw.push(c);}
   shuffle(DECK.draw);
   // 开局保底：手中必有木墙与箭塔
   const take=id=>{const i=DECK.draw.findIndex(c=>c.id===id);if(i>=0)DECK.hand.push(DECK.draw.splice(i,1)[0]);};
@@ -62,13 +63,26 @@ function mkCard(id){
   if(!Object.prototype.hasOwnProperty.call(CDEFS,id)||CDEFS[id].weaponAttack)return null;
   return {uid:DECK.uid++,id};
 }
-function shuffle(a){for(let i=a.length-1;i>0;i--){const j=irand(0,i);const t=a[i];a[i]=a[j];a[j]=t;}}
+/* 牌库洗牌走独立随机流：牌库张数会随设计调整，若共用 Math.random 会连带打乱
+   刷怪/掉落序列（前 7 夜基线要求逐值稳定）。种子固定，顺序可复现。 */
+let deckSeed=0x9e3779b9;
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    deckSeed^=deckSeed<<13;deckSeed>>>=0;
+    deckSeed^=deckSeed>>>17;
+    deckSeed^=deckSeed<<5;deckSeed>>>=0;
+    const j=deckSeed%(i+1);
+    const t=a[i];a[i]=a[j];a[j]=t;
+  }
+}
 function drawOne(cap){
   if(DECK.hand.length>=(cap===undefined?DECK.max:cap))return false;
-  if(!DECK.draw.length){
-    if(!DECK.discard.length)return false;
-    DECK.draw=DECK.discard;DECK.discard=[];shuffle(DECK.draw);
+  // 抽牌堆见底前就并回弃牌堆重洗
+  if(DECK.draw.length<=(TUNE.deck.shuffleFloor||0)&&DECK.discard.length){
+    for(const c of DECK.discard)DECK.draw.push(c);
+    DECK.discard=[];shuffle(DECK.draw);
   }
+  if(!DECK.draw.length)return false;
   DECK.hand.push(DECK.draw.pop());S.handDirty=true;return true;
 }
 function drawToFull(){let n=0;while(DECK.hand.length<DECK.max&&drawOne())n++;if(n)sfx('draw');return n;}
@@ -148,7 +162,7 @@ function rollRewards(n){
    const 对象只能原地恢复，禁止对 S/P/DECK/res 重新赋值。 */
 const S_SAVE_FIELDS=['mode','phase','day','timeLeft','toSpawn','nightTotal','nightKilled','spawnT','speed',
   'nightAmt','win','elapsed','combatT','stats','hints','endless','endlessBase','settled',
-  'dawnStep','dawnCards','dawnBless','dawnSigils','pendingSalvage'];
+  'dawnStep','dawnCards','dawnBless','dawnSigils'];
 function _pickFields(src,keys){const out={};for(const k of keys)if(k in src)out[k]=src[k];return out;}
 function _clone(v){return JSON.parse(JSON.stringify(v));}
 
@@ -162,7 +176,8 @@ function captureSnapshot(){
   const pd=_pickFields(P,Object.keys(P));
   // 保留空位，读档后刻印必须回到原来的槽位
   pd.sigils=Array.isArray(pd.sigils)?pd.sigils.map(c=>c&&isSigilId(c.id)?{uid:c.uid,id:c.id}:null):[];
-  const cards=a=>a.map(c=>({uid:c.uid,id:c.id})).slice(0,240);
+  // 牌堆可能有两三百张（构筑物管够），截断上限必须留够余量，否则读档会少牌
+  const cards=a=>a.map(c=>({uid:c.uid,id:c.id})).slice(0,400);
   const plain=(a,cap)=>a.map(o=>_clone(o)).slice(0,cap);
   return _clone({
     seed,nodes:plain(nodes,240),fogBlobs:plain(fogBlobs,40),
@@ -188,7 +203,7 @@ function restoreSnapshot(s){
   sd.dawnSigils=Array.isArray(sd.dawnSigils)?sd.dawnSigils.map(id=>SIGILS[id]).filter(Boolean):[];
   if(sd.mode!=='dawn')sd.mode='play';
   Object.assign(sd,{hitstop:0,launchT:0,overT:0,aimUid:null,dragUid:null,dragMoved:false,
-    dragStart:[0,0],dragPointerId:null,    handDirty:true,pendingSalvage:null,overflowWarned:false});
+    dragStart:[0,0],dragPointerId:null,    handDirty:true,overflowWarned:false});
   _putObj(S,sd);
   const pd=d.P;
   pd.weapon=normalizeWeaponId(pd.weapon);

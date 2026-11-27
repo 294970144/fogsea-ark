@@ -8,6 +8,7 @@ function cacheUI(){
   UI.weaponHud=$('weaponHud');UI.weaponIcon=$('weaponHudIcon');UI.weaponName=$('weaponHudName');
   UI.weaponLv=$('weaponHudLv');UI.weaponRoute=$('weaponHudRoute');
   UI.weaponXpWrap=$('weaponHudXpWrap');UI.weaponXp=$('weaponHudXp');
+  UI.castBar=$('castBar');UI.castFill=$('castFill');
   UI.weaponSlots=$('weaponSlots');UI.weaponSlotsRow=$('weaponSlotsRow');
   UI.hpBar=$('hpBar');UI.hpFill=UI.hpBar.firstElementChild;UI.hpTxt=$('hpTxt');
   UI.enBar=$('enBar');UI.enFill=UI.enBar.firstElementChild;UI.enTxt=$('enTxt');UI.enLabel=$('enLabel');
@@ -90,6 +91,17 @@ function syncHUD(){
   }
   setTxt(UI.weaponLv,'Lv.'+P.lvl);
   setBar(UI.weaponXpWrap,UI.weaponXp,P.xp/P.next);
+  // 节奏条：满=就绪；施放延迟段武器色，整轮充能段暖色；空手法杖不涨条
+  if(UI.castBar){
+    const canCast=w.attack!=='spell'||weaponCastSlots().length>0;
+    const cd=Math.max(0,P.atkCd),max=P.atkCdMax||1;
+    const k=!canCast?0:(cd<=0?1:1-cd/max);
+    UI.castFill.style.transform='scaleX('+k.toFixed(3)+')';
+    const rl=canCast&&cd>0&&!!P.reload&&w.attack==='spell';
+    if(UI.castBar._r!==rl){UI.castBar._r=rl;UI.castBar.classList.toggle('reload',rl);}
+    const idle=!canCast;
+    if(UI.castBar._i!==idle){UI.castBar._i=idle;UI.castBar.classList.toggle('idle',idle);}
+  }
   const sigKey=(P.weapon||'')+'|'+(P.sigils||[]).map(c=>c&&c.uid).join(',');
   if(UI.weaponSlots._k!==sigKey){UI.weaponSlots._k=sigKey;syncSlotEls();}
   const night=S.phase==='night';
@@ -173,7 +185,7 @@ const CODEX=[
   {id:'keeper',cat:'role',name:'守灯人',icon:'lantern',color:'#ffb454',sprite:'player',
    desc:'你操控的角色。武器优先自动攻击范围内最近的敌人；没有敌人时自动采集资源。',
    stats:()=>[['当前生命',`${Math.ceil(P.hp)} / ${P.maxHp}`],['当前武器',weaponDef(P.weapon).name],['通用伤害',P.dmg.toFixed(1)],
-     ['攻击间隔',weaponAttackInterval().toFixed(2)+' 秒'],['攻击范围',weaponAttackRange().toFixed(2)+' 格'],
+     ...weaponTimingStats(),['攻击范围',weaponAttackRange().toFixed(2)+' 格'],
      ['移动速度',P.spd.toFixed(2)+' 格/秒'],['暴击率',Math.round(P.crit*100)+'%'],['等级','Lv.'+P.lvl],
      ['刻印槽位',(P.sigils||[]).filter(Boolean).length+' / '+sigilCap()],['已刻刻印',sigilList()]],
    rel:['core','dash','nova','hand','w_sword']},
@@ -185,7 +197,7 @@ const CODEX=[
       desc:w.desc+' 武器在开局前选择，本局内固定。',tags:weaponTags(w),
       stats:()=>{
         const s=[['路线',w.route],['当前装备',P.weapon===id?'是':'否'],
-          ['攻击间隔',weaponAttackInterval(w).toFixed(2)+' 秒'],
+          ...weaponTimingStats(w),
           ['攻击范围',weaponAttackRange(w).toFixed(2)+' 格'],
           ['刻印槽位',(w.slots||0)+' 格'],
           ['基础伤害',a?(a.dmg*P.dmg/TUNE.player.baseDmg).toFixed(1):P.dmg.toFixed(1)],['自动采集','无敌人时']];
@@ -299,12 +311,12 @@ const CODEX=[
    stats:()=>[['当前手牌',DECK.hand.length],['当前上限',DECK.max],['上限天花板',handCap()],
      ['扩容存世',cardTotal('expand')+' 张']],rel:['c_expand','dawn','deck']},
   {id:'deck',cat:'term',name:'牌库循环',icon:'cards',color:'#8fe3d0',
-   desc:'抽牌堆 → 手牌 → 弃牌堆 → 洗牌回到抽牌堆。建筑留场，卡牌回库，所以同一张箭塔可以反复部署。',
+   desc:'抽牌堆 → 手牌 → 弃牌堆 → 洗牌回到抽牌堆。建筑留场，卡牌回库。',
    stats:()=>[['抽牌堆',DECK.draw.length],['手牌',DECK.hand.length],['弃牌堆',DECK.discard.length],
      ['总张数',DECK.draw.length+DECK.hand.length+DECK.discard.length],['本局出牌',S.stats?S.stats.played:0]],
    rel:['dawn','c_tactic','hand']},
-  {id:'recycle',cat:'term',name:'回收率',icon:'salvage',color:'#6fe08a',
-   desc:'拆解牌分 '+['salvage5','salvage10','salvage20'].map(id=>CDEFS[id].tier).join('% / ')+'% 三档，累加至最高 '+REC_CAP+'%。移除一张牌时按当前回收率返还其造价，向下取整。到顶后拆解牌退场。',
+  {id:'recycle',cat:'term',name:'回收率 / 拆解',icon:'salvage',color:'#6fe08a',
+   desc:'拆解牌分 '+['salvage5','salvage10','salvage20'].map(id=>CDEFS[id].tier).join('% / ')+'% 三档，累加至最高 '+REC_CAP+'%。拖到任意手牌上按回收率返还其造价，两牌回弃牌堆。到顶后拆解牌退场。',
    stats:()=>[['当前回收率',DECK.recycle+'%'],['上限',REC_CAP+'%'],
      ['拆解存世',cardTotal('salvage5')+cardTotal('salvage10')+cardTotal('salvage20')+' 张']],
    rel:['c_salvage5','c_salvage10','c_salvage20']},

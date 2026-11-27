@@ -32,7 +32,7 @@ function renderDawn(){
     $('dawnStep').textContent='1 / 2 · 拾获卡牌';
     t.className='dawnTitle';t.textContent=`第 ${S.day} 日 · 黎明`;
     const fullHand=DECK.hand.length>=DECK.max;
-    sub.innerHTML=`选择一张加入牌库 <span class="kb-hint">（1 / 2 / 3）</span> · 手牌 ${DECK.hand.length}/${DECK.max}`+
+    sub.innerHTML=`选择一组加入牌库 <span class="kb-hint">（1 / 2 / 3）</span> · 手牌 ${DECK.hand.length}/${DECK.max}`+
       (fullHand?' <i style="color:var(--danger);font-style:normal">手牌已满 · 新牌直接入手，超限后需回收</i>':'');
     S.dawnCards.forEach((id,i)=>{
       const d=CDEFS[id],own=cardTotal(id);
@@ -76,12 +76,12 @@ function pickDawn(i){
       S.dawnStep=1;renderDawn();sfx('card');
       return;
     }
-    // 黎明选牌直接入手：手牌已满时故意造成临时超限，交给右下角回收区处理，不再静默塞进弃牌堆。
-    const picked=mkCard(id);
+    // 拾获一张，直接进手牌（手牌满时临时超限，交给右下角回收区）
+    const d=CDEFS[id],picked=mkCard(id);
     if(picked)DECK.hand.push(picked);
-    if(CDEFS[id].elem)P.aff[CDEFS[id].elem]++;
+    if(d.elem)P.aff[d.elem]++;
     S.handDirty=true;syncHand(true);
-    toast('获得 '+CDEFS[id].name+(DECK.hand.length>DECK.max?' · 手牌超限，记得回收':''),'good');sfx('card');
+    toast('获得 '+d.name+(DECK.hand.length>DECK.max?' · 手牌超限，记得回收':''),'good');sfx('card');
     S.dawnStep=1;renderDawn();
   }else if(S.dawnStep===1){
     const b=S.dawnBless[i];if(!b)return;
@@ -168,7 +168,7 @@ function settle(win){
   return finishSettle(prev,{win,embers:e,nights0:st.nights,kills0:st.kills});
 }
 function freezeBattle(){
-  shots.length=0;warns.length=0;
+  shots.length=0;warns.length=0;spellShots.length=0;pendingHits.length=0;weaponRepeats.length=0;
   core.hp=clamp(core.hp,0,core.max);
   stopEmberTimer();
 }

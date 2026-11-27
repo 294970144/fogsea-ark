@@ -58,11 +58,6 @@ addEventListener('keydown',e=>{
     if(k==='escape')skipDawn();
     return;
   }
-  if(S.mode==='remove'){
-    if(k==='escape')cancelSalvage();
-    else if(k>='1'&&k<='9'){const b=$('rmList').children[+k-1];if(b&&b.click)b.click();}
-    return;
-  }
   if(S.mode==='play'){
     const hi=HAND_KEYS.indexOf(k);
     if(hi>=0&&DECK.hand[hi])selectCard(DECK.hand[hi].uid);

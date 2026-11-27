@@ -826,8 +826,9 @@ function updateQuad(q){
 function projectile(o){
   if(projs.length>=16)projs.shift();
   projs.push({x0:o.from[0],y0:o.from[1],z0:o.from[2]||14,
-    x1:o.to[0],y1:o.to[1],z1:o.to[2]||8,target:o.target||null,
+    x1:o.to[0],y1:o.to[1],z1:o.to[2]||8,target:o.target||null,track:o.track||null,
     birth:FX.time+(o.delay||0),dur:o.dur||.2,arc:o.arc||0,
+    px:o.from[0],py:o.from[1],ph:o.from[2]||14,
     col:o.col||'#ffffff',trail:o.trail||'fire',onArrive:o.onArrive||null,done:false});
 }
 const TRAILS={
@@ -840,19 +841,33 @@ const TRAILS={
 };
 function updateProj(pr){
   if(FX.time<pr.birth)return;
-  const k=(FX.time-pr.birth)/pr.dur;
   if(pr.target&&!pr.target.dead){pr.x1=pr.target.x;pr.y1=pr.target.y;}
-  if(k>=1){pr.done=true;if(pr.onArrive)pr.onArrive(pr.x1,pr.y1);return;}
-  const x=pr.x0+(pr.x1-pr.x0)*k,y=pr.y0+(pr.y1-pr.y0)*k;
+  const k=Math.min(1,(FX.time-pr.birth)/pr.dur);
+  let x,y;
+  if(pr.track){
+    // 逻辑弹道接管：位置完全取弹丸坐标，视觉不再做二次插值（否则会先慢后快、追在弹丸后面）
+    if(pr.track.dead){pr.done=true;if(!pr.track.fade&&pr.onArrive)pr.onArrive(pr.track.x,pr.track.y);return;}
+    if(FX.time-pr.birth>pr.dur*2.2){pr.done=true;return;}
+    x=pr.x1=pr.track.x;y=pr.y1=pr.track.y;
+  }else{
+    if(k>=1){pr.done=true;if(pr.onArrive)pr.onArrive(pr.x1,pr.y1);return;}
+    x=pr.x0+(pr.x1-pr.x0)*k;y=pr.y0+(pr.y1-pr.y0)*k;
+  }
+  // 弧高只作用在竖直分量：地面轨迹始终是逻辑弹道那条直线
   const h=pr.z0+(pr.z1-pr.z0)*k+pr.arc*Math.sin(Math.PI*k);
+  pr.ix=x;pr.iy=y;pr.h=h;
   const tr=TRAILS[pr.trail]||TRAILS.fire,col=rgb(pr.col||tr.col);
-  for(let i=0;i<2;i++){
-    spawn(pools.add,{x:x+(R()-.5)*.12,y:y+(R()-.5)*.12,
-      vx:(R()-.5)*.8,vy:(R()-.5)*.8,z0:h+(R()-.5)*5,vz:(R()-.5)*14,grav:20,drag:2,
-      life:tr.life*(.7+R()*.6),size:tr.size*(.5+R()*.7),
-      shape:tr.shape2!==undefined&&R()<.4?tr.shape2:tr.shape,
-      col:tr.col2&&R()<.5?rgb(tr.col2):col,
-      seed:R(),spin:(R()-.5)*5});
+  if(pr.trail==='fire'){
+    fireTrail(pr,x,y,h);
+  }else{
+    for(let i=0;i<2;i++){
+      spawn(pools.add,{x:x+(R()-.5)*.12,y:y+(R()-.5)*.12,
+        vx:(R()-.5)*.8,vy:(R()-.5)*.8,z0:h+(R()-.5)*5,vz:(R()-.5)*14,grav:20,drag:2,
+        life:tr.life*(.7+R()*.6),size:tr.size*(.5+R()*.7),
+        shape:tr.shape2!==undefined&&R()<.4?tr.shape2:tr.shape,
+        col:tr.col2&&R()<.5?rgb(tr.col2):col,
+        seed:R(),spin:(R()-.5)*5});
+    }
   }
   if(pr.trail==='meteor'&&R()<.7)
     spawn(pools.alpha,{x,y,z0:h,vz:8,grav:-6,drag:1,life:.7,size:13,shape:6,col:rgb('#7d8f96')});
@@ -861,7 +876,35 @@ function updateProj(pr){
     const sa=Math.atan2((dx+dy)*16,(dx-dy)*32);
     spawn(pools.add,{x,y,z0:h,life:.12,size:17,shape:4,col:rgb('#dffaff'),seed:-sa/TAU2,spin:0,hold:true});
   }
-  spawn(pools.add,{x,y,z0:h,life:.1,size:pr.trail==='meteor'?22:14,shape:7,col});
+  if(pr.trail!=='fire')spawn(pools.add,{x,y,z0:h,life:.1,size:pr.trail==='meteor'?22:14,shape:7,col});
+  pr.px=x;pr.py=y;pr.ph=h;
+}
+
+/* 火球拖尾：沿两帧之间的路径按固定间距采样（掉帧也不会断成点），
+   尾焰细、寿命短，头上一团橙红外焰加一颗白热核，做出「亮头细尾」的连续火带。 */
+function fireTrail(pr,x,y,h){
+  const dx=x-pr.px,dy=y-pr.py,dh=h-pr.ph,L=Math.hypot(dx,dy);
+  const n=Math.max(1,Math.min(10,Math.ceil(L/.07)));
+  for(let i=0;i<n;i++){
+    const t=(i+1)/n,sx=pr.px+dx*t,sy=pr.py+dy*t,sh=pr.ph+dh*t,hot=R()<.3;
+    for(let j=0;j<2;j++){
+      spawn(pools.add,{
+        x:sx+(R()-.5)*.1,y:sy+(R()-.5)*.1,z0:sh+(R()-.5)*4,
+        vx:(R()-.5)*.45,vy:(R()-.5)*.45,vz:(R()-.5)*7,grav:5,drag:2.6,
+        life:(hot?.14:.26)*(.75+R()*.5),
+        size:hot?3.4+R()*2:2.4+R()*1.8,
+        shape:hot?(R()<.5?1:7):(R()<.18?1:0),
+        col:rgb(hot?'#ffcf6b':(R()<.55?'#ff7a45':'#d94a1e')),
+        seed:R(),spin:(R()-.5)*4});
+    }
+  }
+  // 火头三层：橙红外焰 / 黄焰 / 白热核心，靠短寿命贴着火球不拖影
+  spawn(pools.add,{x,y,z0:h,life:.18,size:16,shape:6,col:rgb('#ff4d12'),seed:R(),spin:0});
+  spawn(pools.add,{x,y,z0:h,life:.13,size:10,shape:6,col:rgb('#ff9b3d'),seed:R(),spin:0});
+  spawn(pools.add,{x,y,z0:h,life:.1,size:7,shape:7,col:rgb('#ffe08a')});
+  spawn(pools.add,{x,y,z0:h,life:.08,size:4.5,shape:0,col:rgb('#fffaf0')});
+  if(R()<.5)spawn(pools.alpha,{x:x+(R()-.5)*.35,y:y+(R()-.5)*.35,z0:h+(R()-.5)*2,
+    vx:(R()-.5)*.25,vy:(R()-.5)*.25,vz:8,grav:-3,drag:1,life:.5,size:6,shape:6,col:rgb('#8d99a1')});
 }
 
 /* ---------------- 事件时钟 ---------------- */
@@ -990,16 +1033,16 @@ FX.waveShot=function(x,y,ang){
     dur:.34,trail:'sword',col:MINT});
 };
 
-FX.spell=function(def,tx,ty,elem,targets){
+FX.spell=function(def,tx,ty,elem,targets,shot){
   const w=def.weaponAttack?.6:1;
   const sc=n=>Math.max(1,Math.round(n*w));
   const id=def.fx||def.id;
   if(id==='sp_fireball'){
     burstW(P.x,P.y,{n:sc(8),col:FIRE,col2:FIRE2,spd:1,life:.25,size:4,shape:0,z0:16,vz:10,grav:0});
-    projectile({from:[P.x,P.y,18],to:[tx,ty,8],dur:spellFxTime(def),arc:26,trail:'fire',col:FIRE,
+    projectile({from:[P.x,P.y,18],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:shot?8:26,trail:'fire',col:FIRE,
       onArrive:(x,y)=>{explodeFire(x,y,false);impact(1.5,0);if(typeof sfx==='function')sfx('boom');}});
   }else if(id==='sp_frostbolt'){
-    projectile({from:[P.x,P.y,18],to:[tx,ty,8],dur:spellFxTime(def),arc:12,trail:'frost',col:FROST,
+    projectile({from:[P.x,P.y,18],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:shot?5:12,trail:'frost',col:FROST,
       onArrive:(x,y)=>{explodeFrost(x,y,false);impact(1,0);}});
   }else if(id==='sp_arcbolt'){
     beamW(P.x,P.y,tx,ty,{col:ARC,life:.12,width:6});
@@ -1052,8 +1095,14 @@ FX.spell=function(def,tx,ty,elem,targets){
   }else if(id==='sp_magicmissile'){
     ringW(P.x,P.y,{r0:.15,r1:1.2,col:ARC,life:.3});
     const ts=(targets||[]).slice(0,def.missiles||3);
+    const shots=Array.isArray(shot)?shot:[];
     ts.forEach((f,i)=>{
-      const fx=f.x,fy=f.y; // 固定落点，不追踪；目标跑开即打空，与逻辑一致
+      if(shots[i]){ // 逻辑弹道存在时视觉跟随弹丸，命中点由逻辑决定
+        projectile({from:[P.x,P.y,20],to:[f.x,f.y,10],track:shots[i],dur:shots[i].dur||spellFxTime(def),arc:10,trail:'arcane',col:ARC,
+          onArrive:(x,y)=>{explodeArcane(x,y);glyphW(x,y,{shape:3,col:ARC,size:32,life:.5});impact(1.5,0);}});
+        return;
+      }
+      const fx=f.x,fy=f.y; // 无弹道（如测试打桩）时固定落点：目标跑开即打空，与逻辑一致
       after(i*.06,()=>{
         projectile({from:[P.x,P.y,20],to:[fx,fy,10],dur:spellFxTime(def),arc:60,trail:'arcane',col:ARC,
           onArrive:(x,y)=>{explodeArcane(x,y);glyphW(x,y,{shape:3,col:ARC,size:32,life:.5});impact(1.5,0);}});
@@ -1278,7 +1327,7 @@ FX.frame=function(){
   let mult=1;
   if(typeof codexOpen!=='undefined'&&codexOpen)mult=0;
   else if(S.mode==='play')mult=S.hitstop>0?.12:Math.min(S.speed,2);
-  else if(S.mode==='pause'||S.mode==='dawn'||S.mode==='remove'||S.mode==='swap'||S.mode==='menu'||S.mode==='prep')mult=0;
+  else if(S.mode==='pause'||S.mode==='dawn'||S.mode==='swap'||S.mode==='menu'||S.mode==='prep')mult=0;
   FX.time+=dt*mult;
   if(FX._magePending&&S.mode==='play')playMage();
   for(let i=events.length-1;i>=0;i--){

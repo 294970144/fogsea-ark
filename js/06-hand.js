@@ -353,7 +353,7 @@ function playCard(uid,tx,ty){
   const idx=DECK.hand.findIndex(c=>c.uid===uid);if(idx<0)return false;
   const card=DECK.hand[idx],def=CDEFS[card.id];
   if(!def||def.weaponAttack||def.sigilOnly)return false;
-  if(def.target==='pick'){beginSalvage(card);return false;}
+  if(def.salvage){toast('拆解牌要拖到要拆的手牌上','warn');sfx('deny');return false;}
   const chk=placeCheck(def,tx,ty);
   if(!chk.ok){toast(chk.msg,'warn');sfx('deny');return false;}
   const overflow=!!def.elem&&manaOverflow();
@@ -371,7 +371,8 @@ function playCard(uid,tx,ty){
     DECK.discard.push(card);
   }else{
     applyInstant(def,tx,ty,overflow);
-    DECK.discard.push(card);
+    /* 熔铸产物打出即消失 */
+    if(!def.fuseOut)DECK.discard.push(card);
   }
   if(def.id==='expand'){
     DECK.max=Math.min(handCap(),DECK.max+1);
@@ -425,27 +426,35 @@ function applyInstant(def,tx,ty,overflow){
   }
 }
 /* ---------------- 熔铸 ----------------
-   把一张手牌拖到另一张手牌上：两张源牌永久离场，产物直接进当前手牌。
-   代价 = 两张源牌 + TUNE.fusion.crys 雾晶；手牌净减 1 张，牌库净减 1 张。
-   产物带 fuseOut 标记：不进奖励池，也不能再次作为熔铸源（见 fusionOf）。 */
+   两张源牌回弃牌堆，产物进手牌、打出即消失。
+   产物带 fuseOut：不进奖励池，也不能再作为熔铸源。 */
 const FUSE_SEL='fuseOK';
-/* 拖起某张牌时，把能与它熔铸的手牌标亮 */
+/* 拖起某张牌时，把能与之组合的手牌标亮：熔铸走配方表，拆解对任意手牌成立 */
+const SALVAGE_SEL='salvageOK';
 function markFuseTargets(uid){
   const src=handCard(uid);if(!src)return;
+  const srcSalvage=isSalvage(src.id);
   document.querySelectorAll('#handRow .hcard').forEach(el=>{
     const t=+el.dataset.uid;
     if(!t||t===uid)return;
     const other=handCard(t);
-    el.classList.toggle(FUSE_SEL,!!(other&&fusionOf(src.id,other.id)));
+    if(!other)return;
+    const bySalvage=srcSalvage||isSalvage(other.id);
+    el.classList.toggle(FUSE_SEL,!bySalvage&&!!fusionOf(src.id,other.id));
+    el.classList.toggle(SALVAGE_SEL,bySalvage);
   });
 }
 function clearFuseMarks(){
-  document.querySelectorAll('#handRow .hcard.'+FUSE_SEL).forEach(el=>el.classList.remove(FUSE_SEL));
+  document.querySelectorAll('#handRow .hcard.'+FUSE_SEL+', #handRow .hcard.'+SALVAGE_SEL)
+    .forEach(el=>el.classList.remove(FUSE_SEL,SALVAGE_SEL));
 }
 /* 拖放落点判定：两张手牌合法则熔铸，否则回退到原逻辑（出牌/选中） */
 function tryFuse(uidA,uidB){
   const a=handCard(uidA),b=handCard(uidB);
   if(!a||!b||uidA===uidB)return false;
+  // 拆解牌与任意手牌「融合」= 拆解：任一方向拖放都成立
+  if(isSalvage(a.id))return trySalvageFuse(a,b);
+  if(isSalvage(b.id))return trySalvageFuse(b,a);
   const out=fusionOf(a.id,b.id);
   if(!out){sfx('deny');toast('这两张牌无法熔铸','warn');return false;}
   const def=CDEFS[out],fee=TUNE.fusion.crys;
@@ -454,10 +463,10 @@ function tryFuse(uidA,uidB){
   const card=mkCard(out);
   if(!card)return false;
   res.crys-=fee;
-  /* 按 uid 精确移除两张源牌：只消耗手上这两张，不触碰同名牌的其他副本 */
+  /* 只动手上这两张，同名牌的其他副本不动 */
   for(let i=DECK.hand.length-1;i>=0;i--){
-    const u=DECK.hand[i].uid;
-    if(u===uidA||u===uidB)DECK.hand.splice(i,1);
+    const c=DECK.hand[i],u=c.uid;
+    if(u===uidA||u===uidB){DECK.hand.splice(i,1);DECK.discard.push(c);}
   }
   DECK.hand.push(card);
   if(S.aimUid===uidA||S.aimUid===uidB)S.aimUid=card.uid;
@@ -513,64 +522,49 @@ function applyFuse(def,tx,ty){
     sfx('repair');
   }
 }
-/* 拆解 */
-function beginSalvage(card){
-  S.pendingSalvage=card;S.mode='remove';
-  const def=CDEFS[card.id];
-  const rate=Math.min(REC_CAP,DECK.recycle+def.tier);
-  $('rmTitle').textContent='拆解 · 回收率 '+rate+'%';
-  $('rmSub').textContent=`选择一张牌永久移除，按 ${rate}% 返还其造价（取整）`;
-  const list=$('rmList');list.innerHTML='';
-  const all=[...DECK.hand,...DECK.draw,...DECK.discard].filter(c=>c.uid!==card.uid);
-  const uniq={};all.forEach(c=>{if(!uniq[c.id])uniq[c.id]={id:c.id,n:0};uniq[c.id].n++;});
-  const ids=Object.keys(uniq);
-  if(!ids.length){list.innerHTML='<div class="cxEmpty">牌库已空，无可拆解</div>';}
-  ids.forEach(id=>{
-    const d=CDEFS[id],u=uniq[id];
-    const back=Object.keys(d.cost).map(k=>Math.floor(d.cost[k]*rate/100)).filter(v=>v>0);
-    const backTxt=back.length?Object.keys(d.cost).map((k,i)=>{
-      const v=Math.floor(d.cost[k]*rate/100);return v>0?`+${v}${RESNAME[k]}`:'';
-    }).filter(Boolean).join(' '):'无返还';
-    const el=document.createElement('button');
-    el.className='rmItem';
-    el.innerHTML=`<span class="ri" style="color:${d.color}">${svg(d.icon,17)}</span>
-      <span class="rt"><b>${d.name}</b><span>${costStr(d)} · 共 ${u.n} 张</span></span>
-      <span class="rf">${backTxt}</span>`;
-    el.addEventListener('click',()=>confirmSalvage(id,rate));
-    list.appendChild(el);
-  });
-  showOv('removeOv',true);sfx('page');
+/* ---------------- 拆解 ----------------
+   拆解牌拖到任意手牌上：两牌回弃牌堆，按回收率返还造价，回收率 +tier，到 REC_CAP 后退场。 */
+function salvageRateOf(card){
+  const d=CDEFS[card.id];
+  return Math.min(REC_CAP,DECK.recycle+(d&&d.tier||0));
 }
-function confirmSalvage(id,rate){
-  const sc=S.pendingSalvage;if(!sc)return;
-  const hi=DECK.hand.findIndex(c=>c.uid===sc.uid);
-  if(hi>=0)DECK.hand.splice(hi,1);
-  let target=null;
-  for(const p of [DECK.hand,DECK.draw,DECK.discard]){
-    const i=p.findIndex(c=>c.id===id);
-    if(i>=0){target=p.splice(i,1)[0];break;}
+function salvageReturnText(cost,rate){
+  const parts=Object.keys(cost).map(k=>{
+    const v=Math.floor(cost[k]*rate/100);
+    return v>0?'+'+v+RESNAME[k]:'';
+  }).filter(Boolean);
+  return parts.length?parts.join(' '):'无返还';
+}
+function trySalvageFuse(src,target){
+  const def=CDEFS[target.id];
+  if(!def){sfx('deny');return false;}
+  const rate=salvageRateOf(src);
+  const back=salvageReturnText(def.cost,rate);
+  for(let i=DECK.hand.length-1;i>=0;i--){
+    const c=DECK.hand[i],u=c.uid;
+    if(u===src.uid||u===target.uid){DECK.hand.splice(i,1);DECK.discard.push(c);}
   }
-  if(target){
-    const d=CDEFS[id];
-    for(const k in d.cost){
-      const v=Math.floor(d.cost[k]*rate/100);
-      if(v>0){res[k]+=v;floater(P.x,P.y,'+'+v+RESNAME[k],RESCOL[k]);}
-    }
-    refreshRes();
+  for(const k in def.cost){
+    const v=Math.floor(def.cost[k]*rate/100);
+    if(v>0){res[k]+=v;floater(P.x,P.y,'+'+v+RESNAME[k],RESCOL[k]);}
   }
   DECK.recycle=rate;
+  if(S.aimUid===src.uid||S.aimUid===target.uid)S.aimUid=null;
+  S.stats.played++;bumpSeen('play',src.id);
+  S.handDirty=true;
+  refreshRes();
+  FX.cast('salvage',P.x,P.y,{tier:CDEFS[src.id].tier||5});
+  sfx('salvage');
+  const hit=Object.keys(def.cost).length?' · 返还 '+back:'';
   if(DECK.recycle>=REC_CAP){
     ['salvage5','salvage10','salvage20'].forEach(purgeCard);
-    toast('回收率已达 80% · 拆解牌退场','good');
+    toast('拆解 '+def.name+' · 回收率到顶 · 拆解牌退场','good');
+  }else{
+    toast('拆解 '+def.name+hit+' · 回收率 '+rate+'%','good');
   }
-  S.stats.played++;bumpSeen('play',sc.id);
-  S.pendingSalvage=null;S.mode='play';S.handDirty=true;S.aimUid=null;
-  showOv('removeOv',false);
-  FX.cast('salvage',P.x,P.y,{tier:CDEFS[sc.id].tier||5});
-  sfx('salvage');
+  syncHand(true);
+  return true;
 }
-function cancelSalvage(){S.pendingSalvage=null;S.mode='play';showOv('removeOv',false);}
-$('rmCancel').addEventListener('click',cancelSalvage);
 
 /* 超限手牌：永久回收，按当前回收率返还造价。没有弹窗，右下角区域只在超限时出现。 */
 function recycleSparkBurst(zone){
@@ -589,7 +583,7 @@ function flyRecycledCard(src,zone){
   const a=src.getBoundingClientRect(),b=zone.getBoundingClientRect();
   const ghost=src.cloneNode(true);
   ghost.removeAttribute&&ghost.removeAttribute('id');
-  ghost.classList.remove('sel','drag','fuseOK','overCap');
+  ghost.classList.remove('sel','drag','fuseOK','salvageOK','overCap');
   ghost.classList.add('recycleFly');
   ghost.style.left=a.left+'px';ghost.style.top=a.top+'px';
   ghost.style.width=a.width+'px';ghost.style.height=a.height+'px';
@@ -603,25 +597,25 @@ function flyRecycledCard(src,zone){
     recycleSparkBurst(zone);
   },460);
 }
+function deckTotal(){return DECK.hand.length+DECK.draw.length+DECK.discard.length;}
+/* 回收（手牌超限的出口）：放回弃牌堆 + 按当前回收率返还材料。 */
 function recycleHandCard(uid){
   if(DECK.hand.length<=DECK.max)return false;
   const i=DECK.hand.findIndex(c=>c.uid===uid);if(i<0)return false;
   const card=DECK.hand[i],def=CDEFS[card.id],rate=Math.min(REC_CAP,DECK.recycle);
   const src=document.querySelector?document.querySelector(`.hcard[data-uid="${uid}"]`):null;
-  const zone=UI.recycleZone;
-  flyRecycledCard(src,zone);
-  // 永久离场：不进弃牌堆，牌库总数 -1；按当前回收率返还造价。
-  DECK.hand.splice(i,1);
-  const back=[];
+  flyRecycledCard(src,UI.recycleZone);
   for(const k in def.cost){
     const v=Math.floor(def.cost[k]*rate/100);
-    if(v>0){res[k]+=v;back.push('+'+v+RESNAME[k]);floater(P.x,P.y,'+'+v+RESNAME[k],RESCOL[k]);}
+    if(v>0){res[k]+=v;floater(P.x,P.y,'+'+v+RESNAME[k],RESCOL[k]);}
   }
-  refreshRes();
+  DECK.hand.splice(i,1);
+  DECK.discard.push(card);
   S.aimUid=null;S.handDirty=true;renderHand();
-  FX.cast('salvage',P.x,P.y,{tier:rate});
-  sfx('salvage');
-  toast('已回收 '+def.name+(back.length?' · '+back.join(' '):' · 无返还'),'good');
+  refreshRes();
+  sfx('card');
+  const back=salvageReturnText(def.cost,rate);
+  toast('已回收 '+def.name+(back==='无返还'?'':' · 返还 '+back),'good');
   return true;
 }
 function recycleSelected(){

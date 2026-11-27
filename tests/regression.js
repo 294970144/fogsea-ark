@@ -241,7 +241,8 @@ testCase('R3_deck_and_card_text', () => {
     return JSON.stringify({before,mid,after,swapFn:typeof offerSwap,swapKey:'swapLeft' in S});
   })()`);
   assert.deepEqual(over.before, { hand: 10, draw: 0, warn: ' · 手牌已达上限', show: true });
-  assert.deepEqual(over.mid, { hand: 9, draw: 0, discard: 0, total: 9, wood: 4, mode: 'play', show: true });
+  // 回收 = 放回牌库 + 按当前回收率（此处 50%）返还材料：卡进弃牌堆，总数不变，木墙 8 造价返 4
+  assert.deepEqual(over.mid, { hand: 9, draw: 0, discard: 1, total: 10, wood: 4, mode: 'play', show: true });
   assert.deepEqual(over.after, { hand: 8, warn: '', show: false });
   assert.equal(over.swapFn, 'undefined');
   assert.equal(over.swapKey, false);
@@ -277,8 +278,11 @@ testCase('R3_deck_and_card_text', () => {
   assert.ok(derived.ward.includes('7 秒'));
   assert.ok(derived.totem.includes('9 点'));
   assert.ok(derived.totemBrief.includes('9 点'));
-  env.run(`const sc=mkCard('salvage5');DECK.hand=[sc,mkCard('wall')];DECK.draw=[];DECK.discard=[];beginSalvage(sc)`);
-  assert.ok(!/undefined|\[object Object\]|NaN/.test(env.ids.get('rmList').children.map(e => e.innerHTML).join('')));
+  // 拆解返还文案由造价表派生：不能出现 undefined / NaN / [object Object]
+  const salvageTxt = j(env)(`JSON.stringify(['wall','tower','totem','tactic','salvage5'].map(id=>salvageReturnText(CDEFS[id].cost,salvageRateOf({id:'salvage5'}))))`);
+  assert.ok(!/undefined|\[object Object\]|NaN/.test(salvageTxt.join(' ')));
+  assert.equal(salvageTxt[0], '无返还');
+  assert.equal(env.run(`salvageReturnText(CDEFS.wall.cost,50)`), '+4木');
   const expand = j(env)(`(()=>{
     initRun();P.cls='mage';DECK.max=11;DECK.hand=[mkCard('expand'),mkCard('wall'),mkCard('wall')];DECK.draw=[mkCard('wall')];DECK.discard=[];
     res.wood=99;res.stone=99;playCard(DECK.hand[0].uid,0,0);
@@ -310,8 +314,9 @@ testCase('R4_mage_transform_and_pool', () => {
   assert.equal(out.maxHp, Math.round(out.old * .6));
   assert.deepEqual([out.maxEn, out.regen, out.deckMax, out.cap], [200, 19, 7, 12]);
   assert.equal(out.classCards, 0);
-  assert.equal(out.well, 1);
-  assert.equal(out.burst, 1);
+  // 转职补牌成组发放：法力之井(构筑) 10 张、余烬爆(瞬发) 5 张
+  assert.equal(out.well, 10);
+  assert.equal(out.burst, 5);
   assert.equal(out.oldBasicsInDeck, false);
   assert.deepEqual(out.aff, [2, 1, 1]);
   assert.equal(out.seen, 1);
@@ -411,7 +416,6 @@ testCase('R8_shields_surge_and_audio', () => {
   assert.deepEqual(out.absorb, { hp: 100, shield: 10 });
   assert.equal(out.low, true);
   assert.deepEqual(out.guard, { hp: 10, en: 0, downed: false });
-  assert.ok(fs.readFileSync(path.join(ROOT, 'js', '01-audio.js'), 'utf8').includes("case 'ward':"));
 });
 
 testCase('R9_codex_progress', () => {
@@ -517,7 +521,7 @@ testCase('R13_save_slots_roundtrip', () => {
       day:S.day,phase:S.phase,timeLeft:S.timeLeft,wood:res.wood,deckMax:DECK.max,deckUid:DECK.uid,
       blessOk:S.dawnBless.length===1&&S.dawnBless[0]===BLESSINGS.find(b=>b.id==='t_fusion')&&typeof S.dawnBless[0].f==='function',
       seedSame:seed===seed0,nodeSame:JSON.stringify(nodes[0])===node0,
-      transient:{drag:S.dragUid,hit:S.hitstop,aim:S.aimUid,pending:S.pendingSalvage}
+      transient:{drag:S.dragUid,hit:S.hitstop,aim:S.aimUid}
     });
   })()`);
   assert.equal(out.error, undefined);
@@ -533,7 +537,7 @@ testCase('R13_save_slots_roundtrip', () => {
   assert.equal(out.blessOk, true);
   assert.equal(out.seedSame, true);
   assert.equal(out.nodeSame, true);
-  assert.deepEqual(out.transient, { drag: null, hit: 0, aim: null, pending: null });
+  assert.deepEqual(out.transient, { drag: null, hit: 0, aim: null });
 
   const bad = makeEnv({ storage: [['arkmist_slots_v1', '{bad']] });
   assert.equal(bad.run('slots.corrupt'), true);
@@ -738,7 +742,8 @@ testCase('R15_weapon_data_pool_and_save', () => {
 
 testCase('R16_weapon_auto_attacks', () => {
   const env = makeEnv();
-  const expected = { sword: [12, 12, .42], flame: [20, 20, .60], frost: [11, 11, .50], arcane: [10, 0, .26] };
+  // 第三列是开局只装一张刻印时的冷却：一轮仅一发，打完直接进充能。
+  const expected = { sword: [12, 12, .42], flame: [20, 20, 1.05], frost: [11, 11, .88], arcane: [10, 0, .46] };
   const weaponIds = env.run('WEAPON_IDS');
   for (const id of weaponIds) {
     env.run(`initRun();S.mode='play';P.weapon='${id}';
@@ -951,7 +956,7 @@ testCase('R19_fx_degradation_contract', () => {
       if(walk(x,y)&&dist(x,y,P.x,P.y)>1&&!nodes.some(n=>n.alive&&dist(n.x,n.y,x,y)<.9)){bx=x;by=y;break;}}
     const play=id=>{DECK.hand=[mkCard(id)];DECK.draw=[];DECK.discard=[];return playCard(DECK.hand[0].uid,id==='wall'?bx:P.x+1,id==='wall'?by:P.y);};
     play('wall');play('expand');play('rain');play('spring');play('mend');play('ward');play('tactic');play('surge');
-    const sv=mkCard('salvage5');DECK.hand=[sv];beginSalvage(sv);confirmSalvage('wall');
+    const sv=mkCard('salvage5'),tw=mkCard('wall');DECK.hand=[sv,tw];trySalvageFuse(sv,tw);
     becomeMage();
     const mkFoe=()=>({type:'crawler',x:P.x+1,y:P.y,r:.3,hp:10000,max:10000,spd:0,dmg:6,xp:5,coreDmg:6,
       atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
@@ -1059,10 +1064,10 @@ testCase('R22_weapon_slots_and_sigils', () => {
   // 1) 槽位数按武器登记：剑 3 槽，法杖 6 槽
   const slots = j(env)(`JSON.stringify(Object.fromEntries(WEAPON_IDS.map(id=>[id,WEAPONS[id].slots])))`);
   assert.deepEqual(slots, {sword:3,flame:6,frost:6,arcane:6});
-  // 2) 刻印表只有三件，且文案由数值派生
+  // 2) 刻印表六件（数值三 + 多重三），文案由数值派生
   const defs = j(env)(`JSON.stringify(SIGIL_IDS.map(id=>({id,n:SIGILS[id].n,d:sigilDesc(id)})))`);
-  assert.equal(defs.length, 3);
-  assert.deepEqual(defs.map(x=>x.id), ['keen','swift','echo']);
+  assert.equal(defs.length, 6);
+  assert.deepEqual(defs.map(x=>x.id), ['keen','swift','echo','burst','scatter','trident']);
   const live = j(env)(`(()=>{
     const before=sigilDesc('keen');
     SIGILS.keen.dmg=.5;const after=sigilDesc('keen');
@@ -1164,8 +1169,8 @@ testCase('R23_codex_sigil_and_seen_source', () => {
       catOk:!CX_CATS.some(c=>c.id==='sigil')&&CX_CATS.some(c=>c.id==='role'),
       inRole:entries.every(e=>e.cat==='role')});
   })()`);
-  assert.deepEqual(derived.ids, ['keen', 'swift', 'echo']);
-  assert.equal(derived.count, 3);
+  assert.deepEqual(derived.ids, ['keen', 'swift', 'echo', 'burst', 'scatter', 'trident']);
+  assert.equal(derived.count, 6);
   assert.equal(derived.metaOk, true);
   assert.equal(derived.descOk, true);
   assert.equal(derived.catOk, true);
@@ -1181,7 +1186,7 @@ testCase('R23_codex_sigil_and_seen_source', () => {
   })()`);
   assert.equal(dawn.steps, true);
   assert.ok(dawn.desc.includes('牌库'));
-  assert.equal(dawn.pool, '6 种');
+  assert.equal(dawn.pool, '9 种');
 
   // 3) 武器条目带槽位
   const wp = j(env)(`(()=>{
@@ -1250,9 +1255,8 @@ testCase('R24_codex_tag_derivation_and_display', () => {
   // 归属标签：武器只命中武器；sigil 命中所有可装槽的卡与数值刻印
   assert.equal(out.ownW, out.wLen);
   assert.equal(out.ownS, out.sLen+out.sigilCards);
-  // 3) 每张卡牌都挂了 tags；无标签卡牌白名单固化
+  // 3) 每张卡牌都挂了 tags（白名单与具体数量交给新牌体检）
   assert.equal(out.cover, true);
-  assert.deepEqual(out.untagged, ['surge', 'salvage5', 'salvage10', 'salvage20', 'class_mage']);
   // 4) 派生规则：单体优先于范围；元素/法力/范围/状态四条链路
   assert.ok(out.s.arcneedle.includes('single'));
   assert.ok(!out.s.arcneedle.includes('aoe'));
@@ -1268,7 +1272,6 @@ testCase('R24_codex_tag_derivation_and_display', () => {
   // 6) 武器攻击模板不进图鉴
   assert.equal(out.tplInCodex, false);
   // 7) 标签只做展示，不再参与筛选：分类与搜索仍是唯二过滤条件
-  assert.equal(out.all, 113);
   assert.equal(out.cards, out.cardsLen);
   assert.ok(!out.labelAll.includes('已选'));
   assert.ok(/已记录 \d+\/\d+/.test(out.labelAll));
@@ -1302,27 +1305,34 @@ testCase('R25_card_fusion_recipe_and_drag', () => {
       partner:fusionRecipesOf('ward').map(r=>r.name).sort()
     });
   })()`);
-  assert.equal(table.n, 6);
   assert.deepEqual(table.missing, []);
   assert.deepEqual(table.notFuseOut, []);
   assert.deepEqual(table.inPool, []);
   assert.deepEqual(table.asym, []);
   assert.deepEqual(table.chain, []);
-  assert.deepEqual(table.q, [2, 2, 2, 2, 3, 3]);
   assert.deepEqual(table.partner, ['凝神']);
 
-  // 2) 熔铸执行：扣雾晶、两张源牌按 uid 永久离场、产物进当前手牌、同名牌其他副本不动
+  // 2) 熔铸执行：扣雾晶、两张源牌回弃牌堆、产物进当前手牌、同名其他副本不动、产物打出即消失
   const exec = j(env)(`(()=>{
     initRun();S.mode='play';
     const a=mkCard('ward'),b=mkCard('tactic'),spare=mkCard('tactic');
-    DECK.hand=[a,b,spare];res.crys=TUNE.fusion.crys+2;
+    DECK.hand=[a,b,spare];res.crys=50;res.wood=99;
     const before=res.crys,draw0=DECK.draw.length,disc0=DECK.discard.length;
     const ok=tryFuse(a.uid,b.uid);
+    const fee=before-res.crys;
     const fused=DECK.hand.filter(c=>c.id==='fuse_focus');
-    return JSON.stringify({ok,fee:before-res.crys,feeDef:TUNE.fusion.crys,
-      hand:DECK.hand.map(c=>c.id),spareKept:DECK.hand.some(c=>c.uid===spare.uid),
+    const discGain=DECK.discard.length-disc0;
+    const drawSame=DECK.draw.length===draw0;
+    const hand1=DECK.hand.map(c=>c.id);
+    /* 产物打出即消失：先清空两堆，避免 fuse_focus 的 draw:2 把刚回库的源牌又抽回来 */
+    DECK.draw=[];DECK.discard=[];
+    const played=playCard(fused[0].uid,P.x,P.y);
+    return JSON.stringify({ok,fee,feeDef:TUNE.fusion.crys,
+      hand:hand1,spareKept:DECK.hand.some(c=>c.uid===spare.uid),
       srcGone:!DECK.hand.some(c=>c.uid===a.uid||c.uid===b.uid),
-      pilesSame:DECK.discard.length===disc0&&DECK.draw.length===draw0,
+      discGain,drawSame,played,
+      prodGone:!DECK.hand.some(c=>c.id==='fuse_focus'),
+      prodNotInDiscard:!DECK.discard.some(c=>c.id==='fuse_focus'),
       q:CDEFS[fused[0].id].q,handDirty:S.handDirty});
   })()`);
   assert.equal(exec.ok, true);
@@ -1331,7 +1341,11 @@ testCase('R25_card_fusion_recipe_and_drag', () => {
   assert.deepEqual(exec.hand, ['tactic', 'fuse_focus']);
   assert.equal(exec.spareKept, true);
   assert.equal(exec.srcGone, true);
-  assert.equal(exec.pilesSame, true);
+  assert.equal(exec.discGain, 2);
+  assert.equal(exec.drawSame, true);
+  assert.equal(exec.played, true);
+  assert.equal(exec.prodGone, true);
+  assert.equal(exec.prodNotInDiscard, true);
   assert.equal(exec.q, 2);
   assert.equal(exec.handDirty, true);
 
@@ -1406,45 +1420,69 @@ testCase('R25_card_fusion_recipe_and_drag', () => {
   assert.deepEqual(brief.filter(b => !b.shorter).map(b => b.id), []);
 });
 
-testCase('R26_delayed_spell_hit_and_miss', () => {
+testCase('R26_projectile_impact_and_miss', () => {
   const env = makeEnv();
-  env.run(`initRun();S.mode='play';S.phase='day';P.en=100;P.crit=0;P.stacks={};
+  env.run(`initRun();S.mode='play';S.phase='day';P.en=200;P.crit=0;P.stacks={};
     P.cls='mage';spellFxTime=__realSpellFxTime;`);
   const setup = () => {
-    env.run(`pendingHits.length=0;foes.length=0;`);
+    env.run(`pendingHits.length=0;spellShots.length=0;foes.length=0;P.en=200;`);
     seedFoe(env, 1.5, 0);
     env.run(`foes[0].hp=foes[0].max=1000;foes[0].dead=false;rebuildFoeGrid();`);
   };
   const fire = () => env.run(`castSpell(CDEFS.sp_fireball,foes[0].x,foes[0].y)`);
-  const arrive = () => env.run(`S.combatT+=1;updatePendingHits();`);
+  const step = (n = 40) => env.run(`for(let i=0;i<${n};i++)updateSpellShots(1/60);`);
 
-  // 1) 施法帧不结算；弹道到达帧才掉血、才附加燃烧
+  // 1) 施法帧只生成弹丸，不结算
   setup(); fire();
-  const early = j(env)(`JSON.stringify({hp:foes[0].hp,burn:foes[0].burnStacks||0,queued:pendingHits.length})`);
-  assert.deepEqual(early, { hp: 1000, burn: 0, queued: 1 });
-  arrive();
-  const landed = j(env)(`JSON.stringify({dmg:1000-foes[0].hp,burn:foes[0].burnStacks||0,queued:pendingHits.length})`);
+  const early = j(env)(`JSON.stringify({hp:foes[0].hp,burn:foes[0].burnStacks||0,shots:spellShots.length,queued:pendingHits.length})`);
+  assert.deepEqual(early, { hp: 1000, burn: 0, shots: 1, queued: 0 });
+
+  // 2) 推进到命中帧才掉血、才附加燃烧，命中即销毁
+  step();
+  const landed = j(env)(`JSON.stringify({dmg:1000-foes[0].hp,burn:foes[0].burnStacks||0,shots:spellShots.length})`);
   assert.ok(landed.dmg > 0);
   assert.equal(landed.burn, 2);
-  assert.equal(landed.queued, 0);
+  assert.equal(landed.shots, 0);
 
-  // 2) 目标在弹道途中死亡 = 打空
+  // 3) 目标在弹丸途中死亡 = 穿过去，超时消散且不结算
   setup(); fire();
   env.run(`killFoe(foes[0]);`);
-  arrive();
+  step();
   assert.equal(env.run('foes[0].hp'), 1000);
+  assert.equal(env.run('spellShots.length'), 0);
 
-  // 3) 目标在弹道途中跑出落点 = 打空
+  // 4) 目标在途中跑开 = 打空（落点无敌人，超时只消散）
   setup(); fire();
   env.run(`foes[0].x+=4;foes[0].y+=4;rebuildFoeGrid();`);
-  arrive();
+  step();
   assert.equal(env.run('foes[0].hp'), 1000);
 
-  // 4) 延迟值与 FX 同源：改表后逻辑延迟跟着变
-  const t = j(env)(`(()=>{pendingHits.length=0;spellFxTime=()=>.5;
-    castSpell(CDEFS.sp_fireball,P.x+1,P.y);const at=pendingHits[0].at;spellFxTime=__realSpellFxTime;
-    return JSON.stringify({delay:+(at-S.combatT).toFixed(2)});})()`);
-  assert.deepEqual(t, { delay: .5 });
+  // 5) 撞不可通行地形：在撞点结算，不越过地形继续飞
+  const terrain = j(env)(`(()=>{
+    spellShots.length=0;foes.length=0;rebuildFoeGrid();
+    const ix=(P.x+3)|0,iy=P.y|0,t=tiles[iy*GRID+ix],was=t.land;t.land=false;
+    const real=resolveSpellHit;let at=null;
+    resolveSpellHit=(d,x,y,c)=>{at=[x,y];return real(d,x,y,c);};
+    castSpell(CDEFS.sp_frostbolt,P.x+6,P.y);
+    const n0=spellShots.length;
+    for(let i=0;i<80&&spellShots.length;i++)updateSpellShots(1/60);
+    resolveSpellHit=real;t.land=was;
+    return JSON.stringify({n0,left:spellShots.length,at,ix:ix});
+  })()`);
+  assert.equal(terrain.n0, 1);
+  assert.equal(terrain.left, 0);
+  assert.ok(terrain.at && terrain.at[0] >= terrain.ix && terrain.at[0] < terrain.ix + 1);
+
+  // 6) 弹速是固定值：飞行时间 = 距离 / 速度，与 spellFxTime 解耦
+  const t = j(env)(`(()=>{spellShots.length=0;foes.length=0;
+    castSpell(CDEFS.sp_fireball,P.x+2,P.y);
+    const s=spellShots[0];
+    return JSON.stringify({spd:+Math.hypot(s.vx,s.vy).toFixed(2),dur:+s.dur.toFixed(4),life:+s.life.toFixed(4),
+      want:{spd:spellShotSpeed(CDEFS.sp_fireball),dur:2/spellShotSpeed(CDEFS.sp_fireball)}});})()`);
+  assert.equal(t.spd, 13);
+  assert.equal(t.spd, t.want.spd);
+  assert.ok(Math.abs(t.dur - t.want.dur) < 1e-3, '飞行时间必须由距离与固定弹速决定');
+  assert.ok(Math.abs(t.life - t.dur * 1.6) < 1e-3);
 });
 
 testCase('R27_overflow_recycle_zone', () => {
@@ -1459,6 +1497,7 @@ testCase('R27_overflow_recycle_zone', () => {
       zone:UI.recycleZone.classList.contains('show'),warn:UI.handWarn.textContent,
       back:UI.recycleBack.textContent,swapFn:typeof offerSwap,swapMode:'swap' in OVERLAYS});
   })()`);
+  // 回收区读数改成「牌库总张数」，不再是返还率（回收不再返还资源）
   assert.deepEqual(over, { hand: 10, cap: 8, hard: 10, zone: true,
     warn: ' · 手牌已达上限', back: '0%', swapFn: 'undefined', swapMode: false });
 
@@ -1466,23 +1505,175 @@ testCase('R27_overflow_recycle_zone', () => {
   assert.equal(env.run('drawN(2)'), 0);
   assert.equal(env.run('DECK.hand.length'), 10);
 
-  // 选中一张后点击右下角回收区：永久移除，不进弃牌堆。
+  // 选中一张后点击右下角回收区：放回牌库（进弃牌堆），牌库总数不变。
   const uid = env.run('DECK.hand[0].uid');
   env.run(`S.aimUid=${uid}`);
   env.ids.get('recycleZone')._listeners.click[0]();
   const clicked = j(env)(`JSON.stringify({hand:DECK.hand.length,discard:DECK.discard.length,
     total:cardTotal('wall'),aim:S.aimUid,mode:S.mode})`);
-  assert.deepEqual(clicked, { hand: 9, discard: 0, total: 9, aim: null, mode: 'play' });
+  assert.deepEqual(clicked, { hand: 9, discard: 1, total: 10, aim: null, mode: 'play' });
 
-  // 拖到回收区：同样的永久回收路径。
+  // 拖到回收区：同样的放回牌库路径。
   const uid2 = env.run('DECK.hand[0].uid');
   const zone = env.ids.get('recycleZone');
   env.ctx.document.elementFromPoint = () => ({ closest: sel => sel === '#recycleZone' ? zone : null });
   env.run(`S.dragUid=${uid2};S.dragMoved=true;S.dragPointerId=1;S.aimUid=${uid2}`);
   env.winL.pointerup[0]({ pointerId: 1, clientX: 100, clientY: 100 });
   const dragged = j(env)(`JSON.stringify({hand:DECK.hand.length,discard:DECK.discard.length,total:cardTotal('wall')})`);
-  assert.deepEqual(dragged, { hand: 8, discard: 0, total: 8 });
+  assert.deepEqual(dragged, { hand: 8, discard: 2, total: 10 });
   assert.equal(env.run(`UI.recycleZone.classList.contains('show')`), false);
+});
+
+testCase('R34_salvage_fuse_and_recycle_return', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    save.weapon='sword';initRun();S.mode='play';
+    DECK.hand=[];DECK.draw=[];DECK.discard=[];DECK.recycle=0;DECK.max=5;
+    res.wood=0;res.stone=0;res.crys=0;
+    const isS=[isSalvage('salvage5'),isSalvage('salvage20'),isSalvage('wall'),isSalvage('burst')];
+
+    // 1) 正向：拆解牌拖到任意手牌 → 两张都回弃牌堆（不销毁），按回收率返还目标牌造价
+    const a=mkCard('salvage20'),t=mkCard('tower');
+    DECK.hand=[a,t];
+    const ok=tryFuse(a.uid,t.uid);
+    const fwd={ok,hand:DECK.hand.length,wood:res.wood,stone:res.stone,recycle:DECK.recycle,discard:DECK.discard.length};
+
+    // 2) 反向：普通牌拖到拆解牌，同样成立；回收率累加
+    const b=mkCard('salvage10'),t2=mkCard('tower');
+    DECK.hand=[b,t2];
+    const ok2=tryFuse(t2.uid,b.uid);
+    const rev={ok:ok2,hand:DECK.hand.length,wood:res.wood,stone:res.stone,recycle:DECK.recycle};
+
+    // 3) 拆解牌拖到地面 = 拒绝，手牌不动
+    const c=mkCard('salvage5');DECK.hand=[c,mkCard('wall')];
+    const played=playCard(c.uid,0,0);
+    const ground={played,hand:DECK.hand.length,mode:S.mode};
+
+    // 4) 顶到上限：回收率封顶 REC_CAP，拆解牌全部退场
+    for(const id of ['salvage20','salvage5'])DECK.draw.push(mkCard(id));
+    const d=mkCard('salvage20');DECK.hand=[d,mkCard('tower')];res.wood=0;res.stone=0;
+    tryFuse(d.uid,DECK.hand[1].uid);
+    const cap={recycle:DECK.recycle,left:cardTotal('salvage5')+cardTotal('salvage10')+cardTotal('salvage20'),
+      wood:res.wood,stone:res.stone};
+
+    // 5) 回收（超限出口）：放回牌库 + 按 50% 返还，张数不变
+    DECK.max=1;DECK.hand=[mkCard('tower'),mkCard('wall')];
+    res.wood=0;res.stone=0;
+    const total0=DECK.hand.length+DECK.draw.length+DECK.discard.length;
+    recycleHandCard(DECK.hand[0].uid);
+    const rec={total0,total1:DECK.hand.length+DECK.draw.length+DECK.discard.length,
+      wood:res.wood,stone:res.stone,recycle:DECK.recycle};
+    return JSON.stringify({isS,fwd,rev,ground,cap,rec});
+  })()`);
+
+  assert.deepEqual(out.isS, [true, true, false, false], '只有带 salvage 标记的牌能任意拆');
+  // 20% 的箭塔：12 木 / 6 石 → +2 木 +1 石；两张牌都回弃牌堆
+  assert.deepEqual(out.fwd, { ok: true, hand: 0, wood: 2, stone: 1, recycle: 20, discard: 2 });
+  // 再来一张 10%：回收率 30%，箭塔返还 3 木 1 石
+  assert.deepEqual(out.rev, { ok: true, hand: 0, wood: 5, stone: 2, recycle: 30 });
+  assert.deepEqual(out.ground, { played: false, hand: 2, mode: 'play' }, '拆解牌不能拖到地上');
+  // 拆解牌堆到 50% 封顶：箭塔返还 6 木 3 石，其余拆解牌全部退场
+  assert.deepEqual(out.cap, { recycle: 50, left: 0, wood: 6, stone: 3 });
+  // 回收不销毁：牌回牌库，总张数不变，按 50% 返还
+  assert.equal(out.rec.total1, out.rec.total0);
+  assert.equal(out.rec.recycle, 50);
+  assert.equal(out.rec.wood, 6);
+  assert.equal(out.rec.stone, 3);
+});
+
+testCase('R35_formation_sigil_scoped_to_left_neighbour', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    save.weapon='flame';initRun();S.mode='play';spellFxTime=__realSpellFxTime;
+    const w=weaponDef(P.weapon),blank=()=>Array.from({length:w.slots},()=>null);
+    const tgt={x:P.x+3,y:P.y};
+    const fire=slot=>{
+      spellShots.length=0;
+      fireWeaponCast(w,tgt,{def:CDEFS[P.sigils[slot].id],slot,last:false,n:3},1);
+      return [spellShots.length,spellShots.map(s=>+(Math.atan2(s.vy,s.vx)*180/Math.PI).toFixed(1))];
+    };
+    const fmt=f=>f&&{c:f.copies,arc:f.arc,s:+f.spread.toFixed(4),b:+f.dmgB.toFixed(4)};
+    P.crit=0;P.atkSpd=1;P.cls='mage';P.maxEn=200;P.en=200;
+    foes.length=0;nodes.length=0;spellShots.length=0;
+
+    // 0 火焰 | 1 锋锐 | 2 二叉：数值刻印不截断链；3 冰霜 | 4 三叉：只吃自己右边这张
+    P.sigils=blank();
+    P.sigils[0]=mkCard('sig_flame');P.sigils[1]=mkCard('keen');P.sigils[2]=mkCard('scatter');
+    P.sigils[3]=mkCard('sig_frost');P.sigils[4]=mkCard('trident');
+    const f0=fire(0),f3=fire(3);
+    const fm=[formationOf(0),formationOf(2),formationOf(3),formationOf(5)].map(fmt);
+
+    // 链式叠加：0 火焰 | 1 二叉 | 2 三叉 → 6 发，总张角 90+40=130°
+    P.sigils=blank();
+    P.sigils[0]=mkCard('sig_flame');P.sigils[1]=mkCard('scatter');P.sigils[2]=mkCard('trident');
+    const stack=fmt(formationOf(0)),stackShots=fire(0);
+
+    // 二重同样叠加：两张 = 首发 + 2 次错峰补发，系数连乘
+    P.sigils=blank();
+    P.sigils[0]=mkCard('sig_flame');P.sigils[1]=mkCard('burst');P.sigils[2]=mkCard('burst');
+    const r=repeatOf(0),rp={n:r.n,b:+r.dmgB.toFixed(4)};
+
+    // 剑没有槽内序列：所有阵型作用于同一次挥砍
+    save.weapon='sword';initRun();S.mode='play';
+    P.sigils=Array.from({length:weaponDef('sword').slots},()=>null);
+    P.sigils[0]=mkCard('scatter');P.sigils[2]=mkCard('trident');
+    return JSON.stringify({f0,f3,fm,stack,stackShots,rp,sw:fmt(swordFormation()),desc:CDEFS.scatter.desc});
+  })()`);
+  // 二叉 ±45°，且只让槽 0 分裂
+  assert.deepEqual(out.f0, [2, [-45, 45]]);
+  // 三叉 -20/0/+20，槽 3 不吃槽 2 的二叉
+  assert.deepEqual(out.f3, [3, [-20, 0, 20]]);
+  assert.deepEqual(out.fm, [{ c: 2, arc: 90, s: 90, b: .55 }, null, { c: 3, arc: 40, s: 20, b: .45 }, null]);
+  // 二叉 + 三叉：6 发均分 130°，伤害系数连乘
+  assert.deepEqual(out.stack, { c: 6, arc: 130, s: 26, b: .2475 });
+  assert.deepEqual(out.stackShots, [6, [-65, -39, -13, 13, 39, 65]]);
+  assert.deepEqual(out.rp, { n: 3, b: .49 });
+  assert.deepEqual(out.sw, { c: 6, arc: 130, s: 26, b: .2475 });
+  assert.ok(out.desc.includes('左侧相邻'), '阵型文案要写明只修饰左侧相邻法术');
+});
+
+testCase('R33_starter_deck_scale', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    initRun();
+    const total=DECK.draw.length+DECK.hand.length+DECK.discard.length;
+    const want=STARTER_DECK.reduce((n,[,k])=>n+k,0);
+    const n=id=>cardTotal(id);
+    const sigils=SIGIL_IDS.filter(id=>SIGILS[id]).map(id=>cardTotal(id));
+    const salvage=['salvage5','salvage10','salvage20'].map(id=>cardTotal(id));
+    // 存档截断必须留够余量：全部牌读档后一张都不能少
+    const snap=captureSnapshot();
+    const saved=snap.DECK.draw.length+snap.DECK.hand.length+snap.DECK.discard.length;
+    const uids=new Set([...DECK.draw,...DECK.hand,...DECK.discard].map(c=>c.uid));
+    return JSON.stringify({total,want,wall:n('wall'),tower:n('tower'),rain:n('rain'),
+      spring:n('spring'),tactic:n('tactic'),sigils,salvage,saved,uniq:uids.size});
+  })()`);
+  assert.equal(out.total, out.want);
+  assert.equal(out.uniq, out.total, '每张牌有独立 uid');
+  assert.equal(out.saved, out.total, '存档不截断牌堆');
+
+  // 回收不销毁：手牌超限回收后，牌库总数与 uid 集合不变
+  const keep = j(env)(`(()=>{
+    DECK.max=3;
+    while(DECK.hand.length<=DECK.max&&DECK.draw.length)DECK.hand.push(DECK.draw.pop());
+    const before=DECK.hand.length+DECK.draw.length+DECK.discard.length;
+    const uid=DECK.hand[0].uid;
+    recycleHandCard(uid);
+    const after=DECK.hand.length+DECK.draw.length+DECK.discard.length;
+    return JSON.stringify({before,after,inDiscard:DECK.discard.some(c=>c.uid===uid)});
+  })()`);
+  assert.equal(keep.after, keep.before);
+  assert.equal(keep.inDiscard, true);
+
+  // 黎明拾获只给 1 张、直接进手牌（不再成组发放）
+  const dawn = j(env)(`(()=>{
+    DECK.hand=[];DECK.draw=[];DECK.discard=[];DECK.max=5;
+    S.day=2;S.mode='dawn';S.dawnStep=0;S.dawnCards=['wall'];pickDawn(0);
+    const wall={hand:DECK.hand.length,draw:DECK.draw.length,total:cardTotal('wall')};
+    DECK.hand=[];DECK.draw=[];DECK.discard=[];S.mode='dawn';S.dawnStep=0;S.dawnCards=['trident'];pickDawn(0);
+    return JSON.stringify({wall,sigil:cardTotal('trident')});
+  })()`);
+  assert.deepEqual(dawn, { wall: { hand: 1, draw: 0, total: 1 }, sigil: 1 });
 });
 
 testCase('R28_dawn_card_and_overflow_gate', () => {
@@ -1556,13 +1747,247 @@ testCase('R29_new_run_uses_empty_slot', () => {
   assert.equal(full.run(`localStorage.getItem(SLOT_KEY)===__raw`), true);
 });
 
+testCase('R30_weapon_cast_rhythm', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    save.weapon='flame';initRun();S.mode='play';
+    const w=weaponDef(P.weapon),cap=w.slots;
+    const blank=n=>Array.from({length:n},()=>null);
+    // 槽 1/3/4 装法术，0 装迅捷，其余留空：轮发按绝对槽位从左到右跳过空槽
+    P.sigils=blank(cap);P.sigils[0]=mkCard('swift');
+    P.sigils[1]=mkCard('sig_flame');P.sigils[3]=mkCard('sig_frost');P.sigils[4]=mkCard('sig_arcane');
+    P.sigCast=0;P.atkSpd=1;P.crit=0;P.wave=0;P.cls='mage';P.maxEn=200;P.en=200;
+    foes.length=0;nodes.length=0;
+    const seq=[];
+    for(let i=0;i<4;i++){const c=nextWeaponCast();seq.push([c.slot,c.def.id,c.last,+weaponCastCost(w,c).toFixed(6)]);}
+    const cd=weaponCastDelay(w),rcBase=(w.recharge||0)/P.atkSpd,rc=weaponRechargeTime(w,3);
+    const cycle=2*cd+rc,cycleBase=2*cd+rcBase;
+    // 槽位变动不改变轮内顺序：抽走槽 3 后，剩余 1→4 继续
+    P.sigils[3]=null;P.sigCast=1;
+    const after=nextWeaponCast(),after2=nextWeaponCast();
+    // 剑：castDelay=0，整段间隔落在充能上，迅捷只压这一段
+    save.weapon='sword';initRun();S.mode='play';P.atkSpd=1;
+    const sw=weaponDef('sword');
+    P.sigils=blank(sw.slots);
+    const swordCd=weaponCastDelay(sw),swordPlain=weaponRechargeTime(sw,1);
+    P.sigils[0]=mkCard('swift');
+    const swordSwift=weaponRechargeTime(sw,1),swordCdSwift=weaponCastDelay(sw);
+    foes.length=0;nodes.length=0;
+    foes.push({type:'crawler',x:P.x+1.1,y:P.y,hp:10000,max:10000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
+      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+      fireCd:99,spawnCd:99,stompCd:99,px:P.x+1.1,py:P.y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
+    rebuildFoeGrid();
+    P.atkCd=0;autoAttack();const swordHitCd=P.atkCd;
+    return JSON.stringify({seq,cd,rc,cycle,cycleBase,
+      after:[after.slot,after.def.id],after2:[after2.slot,after2.def.id],
+      swordCd,swordPlain,swordSwift,swordCdSwift,swordHitCd});
+  })()`);
+  assert.deepEqual(out.seq.map(x => x[0]), [1, 3, 4, 1]);
+  assert.deepEqual(out.seq.map(x => x[1]), ['sig_flame', 'sig_frost', 'sig_arcane', 'sig_flame']);
+  assert.deepEqual(out.seq.map(x => x[2]), [false, false, true, false]);
+  // 轮内两次施放走 castDelay，末发走充能
+  assert.equal(out.seq[0][3], Number(out.cd.toFixed(6)));
+  assert.equal(out.seq[1][3], Number(out.cd.toFixed(6)));
+  assert.equal(out.seq[2][3], Number(out.rc.toFixed(6)));
+  // 迅捷只压充能：整轮缩短 1/1.15，castDelay 不动
+  assert.ok(Math.abs(out.cycleBase / 1.15 - out.cycle) < 1e-9);
+  assert.deepEqual(out.after, [1, 'sig_flame']);
+  assert.deepEqual(out.after2, [4, 'sig_arcane']);
+  assert.equal(out.swordCd, 0);
+  assert.ok(Math.abs(out.swordPlain - .42) < 1e-9);
+  assert.ok(Math.abs(out.swordSwift - .42 / 1.15) < 1e-9);
+  assert.equal(out.swordCdSwift, 0);
+  assert.ok(Math.abs(out.swordHitCd - .42 / 1.15) < 1e-9);
+
+  // 二重：只把刚施放的那个法术错峰补发，不跨槽取下一个法术；错峰期间不出第二发
+  const rep = j(env)(`(()=>{
+    save.weapon='flame';initRun();S.mode='play';spellFxTime=__realSpellFxTime;
+    P.sigils=Array.from({length:6},()=>null);
+    P.sigils[0]=mkCard('sig_flame');P.sigils[1]=mkCard('burst');P.sigils[3]=mkCard('sig_frost');
+    P.sigCast=0;P.atkSpd=1;P.crit=0;P.cls='mage';P.maxEn=200;P.en=200;
+    foes.length=0;nodes.length=0;shots.length=0;spellShots.length=0;weaponRepeats.length=0;
+    foes.push({type:'crawler',x:P.x+2,y:P.y,hp:10000,max:10000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
+      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+      fireCd:99,spawnCd:99,stompCd:99,px:P.x+2,py:P.y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
+    rebuildFoeGrid();
+    P.atkCd=0;autoAttack();
+    const first={shots:spellShots.length,queued:weaponRepeats.length,def:spellShots.map(s=>s.def.id)};
+    S.combatT+=.08;updateWeaponRepeats();
+    const mid=spellShots.length;
+    S.combatT+=.08;updateWeaponRepeats();
+    return JSON.stringify({first,mid,delay:TUNE.weapon.repeatDelay,queued:weaponRepeats.length,
+      def:spellShots.map(s=>s.def.id)});
+  })()`);
+  assert.equal(rep.delay, .14);
+  assert.deepEqual(rep.first, { shots: 1, queued: 1, def: ['sig_flame'] });
+  assert.equal(rep.mid, 1, '错峰期间不该有第二发');
+  assert.equal(rep.queued, 0);
+  assert.deepEqual(rep.def, ['sig_flame', 'sig_flame'], '二重只补发同一法术，不取相邻槽');
+
+});
+
+testCase('R31_projectile_intercept_and_splash', () => {
+  const env = makeEnv();
+  env.run(`initRun();S.mode='play';S.phase='day';P.en=200;P.crit=0;P.stacks={};
+    P.cls='mage';spellFxTime=__realSpellFxTime;pendingHits.length=0;spellShots.length=0;`);
+  const spawn = (dx, dy = 0) => env.run(`foes.push({type:'crawler',x:P.x+${dx},y:P.y+${dy},hp:1000,max:1000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
+    atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+    fireCd:99,spawnCd:99,stompCd:99,px:P.x+${dx},py:P.y+${dy},stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});rebuildFoeGrid();`);
+  const hp = () => j(env)(`JSON.stringify(foes.map(f=>1000-f.hp))`);
+  const step = (n = 40) => env.run(`for(let i=0;i<${n};i++)updateSpellShots(1/60);`);
+
+  // 1) 路径上更近的敌人会拦下弹丸：瞄远处那只，近处那只挨打
+  env.run(`foes.length=0;rebuildFoeGrid();`);
+  spawn(1.2); spawn(3.2);
+  env.run(`castSpell(CDEFS.sp_fireball,foes[1].x,foes[1].y)`);
+  step();
+  const intercepted = hp();
+  assert.ok(intercepted[0] > 0, '近处敌人应被弹丸拦下并结算');
+  assert.equal(intercepted[1], 0, '远处目标不该越过拦截吃伤害');
+
+  // 2) 溅射在命中点结算：紧挨被命中者的第三人一起掉血，远处者不受影响
+  env.run(`foes.length=0;rebuildFoeGrid();`);
+  spawn(1.2); spawn(1.2, 1.0); spawn(3.2);
+  env.run(`castSpell(CDEFS.sp_fireball,foes[2].x,foes[2].y)`);
+  step();
+  const splash = hp();
+  assert.ok(splash[0] > 0 && splash[1] > 0, '命中点 1.6 格半径内的敌人都应结算');
+  assert.equal(splash[2], 0);
+
+  // 3) 弹丸状态瞬态：不写存档快照
+  const snap = j(env)(`(()=>{
+    spellShots.length=0;castSpell(CDEFS.sp_fireball,P.x+2,P.y);
+    const s=captureSnapshot();
+    return JSON.stringify({shots:spellShots.length,hasKey:Object.prototype.hasOwnProperty.call(s,'spellShots')});
+  })()`);
+  assert.deepEqual(snap, { shots: 1, hasKey: false });
+
+  // 4) 多发飞弹：每发一条弹道、各自锁定自己的目标（目标不共线，避免被彼此拦截）
+  env.run(`spellShots.length=0;foes.length=0;rebuildFoeGrid();`);
+  spawn(1.0, 0); spawn(0, 1.7); spawn(-1.2, -1.2);
+  env.run(`castSpell(CDEFS.sp_magicmissile,P.x,P.y)`);
+  const multi = j(env)(`JSON.stringify({shots:spellShots.length,locked:spellShots.map(s=>foes.indexOf(s.ctx.locked)).sort()})`);
+  assert.deepEqual(multi, { shots: 3, locked: [0, 1, 2] });
+  step(60);
+  const multiHit = hp();
+  assert.deepEqual(multiHit.map(v => Math.round(v)), [14, 14, 14]);
+});
+
+testCase('R32_cast_bar_reads_weapon_rhythm', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    const bar=()=>{syncHUD();const b=document.getElementById('castBar'),f=document.getElementById('castFill');
+      return {reload:b.classList.contains('reload'),idle:b.classList.contains('idle'),scale:f.style.transform};};
+    const blank=n=>Array.from({length:n},()=>null);
+    initRun();S.mode='play';P.weapon='flame';P.atkSpd=1;P.crit=0;
+    P.sigils=blank(weaponDef(P.weapon).slots);P.sigils[0]=mkCard('sig_flame');P.sigCast=0;P.atkCd=0;
+    foes.length=0;nodes.length=0;
+    foes.push({type:'crawler',x:P.x+3,y:P.y,hp:900,max:900,spd:0,dmg:0,r:.32,xp:5,coreDmg:6,
+      atkCd:999,retarget:999,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+      fireCd:999,spawnCd:999,stompCd:999,px:P.x+3,py:P.y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
+    rebuildFoeGrid();
+    const readyBar=bar();
+    autoAttack();
+    const reloadState={cd:+P.atkCd.toFixed(3),max:+P.atkCdMax.toFixed(3),reload:P.reload};
+    const reloadBar=bar();
+    P.atkCd=0;P.reload=false;const doneBar=bar();
+    // 空手法杖：条不涨、标红
+    P.sigils=blank(weaponDef(P.weapon).slots);P.sigCast=0;P.atkCd=0;
+    const emptyBar=bar();
+    return JSON.stringify({readyBar,reloadState,reloadBar,doneBar,emptyBar});
+  })()`);
+  assert.equal(out.readyBar.scale, 'scaleX(1.000)');
+  assert.equal(out.reloadState.reload, true);
+  assert.equal(out.reloadState.max, out.reloadState.cd);
+  assert.equal(out.reloadBar.reload, true);
+  assert.equal(out.reloadBar.scale, 'scaleX(0.000)');
+  assert.equal(out.doneBar.reload, false);
+  assert.equal(out.doneBar.scale, 'scaleX(1.000)');
+  assert.equal(out.emptyBar.idle, true);
+  assert.equal(out.emptyBar.scale, 'scaleX(0.000)');
+});
+
+/* ------------------------------------------------------------------
+   新牌体检：node tests/regression.js --new-card
+   只在设计新牌时运行。只查静态接线（图标/特效/音效/来源/黄金值），
+   不测设计定位，也不重复日常用例已动态守护的派生规则。
+   ------------------------------------------------------------------ */
+testCase('C0_new_card_wiring', () => {
+  const src = ORDER.map(n => fs.readFileSync(path.join(ROOT, 'js', n + '.js'), 'utf8')).join('\n');
+  const audioSrc = fs.readFileSync(path.join(ROOT, 'js', '01-audio.js'), 'utf8');
+  const fxSrc = fs.readFileSync(path.join(ROOT, 'js', '09b-fx.js'), 'utf8');
+
+  // 音效：源码里所有字面量 sfx('x') 都必须在音频表登记
+  const usedSfx = [...new Set([...src.matchAll(/sfx\(['"]([^'"]+)['"]\)/g)].map(m => m[1]))];
+  const audioCases = new Set([...audioSrc.matchAll(/case ['"]([^'"]+)['"]:/g)].map(m => m[1]));
+  const missingSfx = usedSfx.filter(x => !audioCases.has(x));
+
+  // 特效：FX.spell / FX.cast 的 id 分支 + 建筑主题表
+  const fxIds = new Set([...fxSrc.matchAll(/id===['"]([^'"]+)['"]/g)].map(m => m[1]));
+  const themeBlock = fxSrc.match(/const BUILD_THEME=\{([\s\S]*?)\n\};/);
+  if (themeBlock) for (const m of themeBlock[1].matchAll(/^\s*(\w+):/gm)) fxIds.add(m[1]);
+  const castCalls = [...new Set([...src.matchAll(/FX\.cast\(['"]([^'"]+)['"]/g)].map(m => m[1]))];
+  const missingFx = castCalls.filter(x => !fxIds.has(x));
+
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    initRun();
+    const malformed=[],noIcon=[],noSource=[];
+    const starters=new Set(STARTER_DECK.map(x=>x[0]));
+    const crafted=new Set(FUSION_RECIPES.map(r=>r.out));
+    const granted=new Set(CARD_IDS.filter(id=>CDEFS[id].core||CDEFS[id].cls==='class'));
+    const pool=new Set(poolIds());const oldCls=P.cls;P.cls='mage';for(const id of poolIds())pool.add(id);P.cls=oldCls;
+    for(const id of CARD_IDS){
+      const d=CDEFS[id];
+      if(!d.name||!d.color||!d.desc)malformed.push(id);
+      if(!ICONS[d.icon])noIcon.push(id);
+      if(!starters.has(id)&&!crafted.has(id)&&!granted.has(id)&&!pool.has(id))noSource.push(id);
+    }
+    return JSON.stringify({malformed,noIcon,noSource,
+      fxes:CARD_IDS.filter(id=>CDEFS[id].fx).map(id=>id+':'+CDEFS[id].fx),
+      total:STARTER_DECK.reduce((n,[,k])=>n+k,0),
+      wall:cardTotal('wall'),tower:cardTotal('tower'),rain:cardTotal('rain'),
+      spring:cardTotal('spring'),tactic:cardTotal('tactic'),
+      sigils:SIGIL_IDS.filter(id=>SIGILS[id]).map(id=>cardTotal(id)),
+      salvage:['salvage5','salvage10','salvage20'].map(id=>cardTotal(id)),
+      recipes:FUSION_RECIPES.length,recipeQ:FUSION_RECIPES.map(r=>CDEFS[r.out].q),
+      untagged:CARD_IDS.filter(id=>!cardTags(CDEFS[id]).length),
+      codexAll:CODEX.length});
+  })()`);
+  const badFx = out.fxes.filter(s => !fxIds.has(s.split(':')[1]));
+
+  assert.deepEqual(missingSfx, [], '音效调用必须在音频表有登记');
+  assert.deepEqual(missingFx, [], '特效调用必须在特效层有分派');
+  assert.deepEqual(badFx, [], '卡牌 fx 别名必须指向已登记特效');
+  assert.deepEqual(out.malformed, [], '卡面字段必须完整');
+  assert.deepEqual(out.noIcon, [], '图标必须在图标表里');
+  assert.deepEqual(out.noSource, [], '每张牌至少有一条获取途径');
+
+  // 黄金值只在新牌体检里维护，日常回归不再重复
+  assert.equal(out.total, 143);
+  assert.equal(out.wall, 30);
+  assert.equal(out.tower, 24);
+  assert.equal(out.rain, 10);
+  assert.equal(out.spring, 10);
+  assert.equal(out.tactic, 10);
+  assert.deepEqual(out.sigils, [6, 6, 6, 4, 4, 4]);
+  assert.deepEqual(out.salvage, [4, 2, 1]);
+  assert.equal(out.recipes, 6);
+  assert.deepEqual(out.recipeQ, [2, 2, 2, 2, 3, 3]);
+  assert.deepEqual(out.untagged, ['surge', 'salvage5', 'salvage10', 'salvage20', 'class_mage']);
+  assert.equal(out.codexAll, 119);
+});
+
 function main() {
   if (process.env.CAPTURE) {
     console.log(JSON.stringify({ r0: captureBaseline(makeEnv()), saves: captureSaves() }, null, 2));
     return;
   }
+  // --new-card 只跑体检；平时不跑，避免与日常用例重复
+  const onlyNew = process.argv.includes('--new-card');
+  const list = onlyNew ? cases.filter(([n]) => n.startsWith('C')) : cases.filter(([n]) => !n.startsWith('C'));
   let pass = 0, fail = 0;
-  for (const [name, fn] of cases) {
+  for (const [name, fn] of list) {
     try { fn(); console.log(`  PASS  ${name}`); pass++; }
     catch (e) { console.log(`  FAIL  ${name}: ${e.message}`); fail++; }
   }

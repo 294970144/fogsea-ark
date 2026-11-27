@@ -11,18 +11,73 @@ const CORE_CARDS={
 /* 飞行法术的延迟命中队列。施法帧只发 FX 与施法副作用；伤害/状态/蔓延在弹道到达帧结算。
    到达时按落点重新索敌：目标死了或跑出范围即打空。瞬态，不入存档。 */
 const pendingHits=[];
+/* 投掷物（def.proj）：逻辑层持有真实坐标，逐帧子步长推进，撞到敌人才结算；
+   撞地形/被瞄准的资源节点也在原位结算；超时只消散。视觉层按 track 跟随本对象。 */
+const spellShots=[];
+function spawnSpellShot(def,fx,fy,tx,ty,ctx){
+  // 固定弹速：飞行时间 = 距离 / 速度，远处的弹丸不会因为「时长固定」而变成瞬移
+  const dx=tx-fx,dy=ty-fy,d=Math.hypot(dx,dy)||.001;
+  const spd=spellShotSpeed(def),dur=Math.max(.06,d/spd);
+  const shot={def,x:fx,y:fy,vx:dx/d*spd,vy:dy/d*spd,dur,life:dur*1.6,ctx:ctx||{},dead:false};
+  spellShots.push(shot);
+  return shot;
+}
+function updateSpellShots(dt){
+  for(let i=spellShots.length-1;i>=0;i--){
+    const s=spellShots[i];
+    s.life-=dt;
+    if(s.life<=0){s.dead=true;s.fade=true;spellShots.splice(i,1);continue;} // 超时：只消散，不结算
+    const spd=Math.hypot(s.vx,s.vy);
+    const steps=Math.min(10,Math.max(1,Math.ceil(spd*dt/.25)));
+    const sx=s.vx*dt/steps,sy=s.vy*dt/steps;
+    let done=false;
+    for(let k=0;k<steps&&!done;k++){
+      s.x+=sx;s.y+=sy;
+      done=spellShotStepHit(s);
+    }
+    if(done)spellShots.splice(i,1);
+  }
+}
+function spellShotStepHit(s){
+  let hit=null;
+  forFoes(s.x,s.y,1.2,f=>{
+    if(hit||f.dead)return;
+    if(dist(s.x,s.y,f.x,f.y)<f.r+.22)hit=f;
+  });
+  if(hit){impactSpellShot(s,hit.x,hit.y,hit);return true;}
+  const n=s.ctx.node;
+  if(n&&n.alive&&dist(s.x,s.y,n.x,n.y)<.45){impactSpellShot(s,n.x,n.y,null);return true;}
+  if(!walk(s.x,s.y)){impactSpellShot(s,s.x,s.y,null);return true;}
+  return false;
+}
+/* 命中结算：单体与多发飞弹锁定被撞的那只；范围弹丸按命中点重新索敌，溅射不能只打一只。 */
+function impactSpellShot(s,x,y,foe){
+  s.x=x;s.y=y;s.dead=true;
+  if(s.ctx.resolve)return s.ctx.resolve(s.def,x,y,foe);
+  const locked=s.ctx.locked||(s.def.shape==='single'?foe:null);
+  return resolveSpellHit(s.def,x,y,{...s.ctx,locked});
+}
 function queueSpellHit(def,tx,ty,ctx){
   const delay=spellFxTime(def);
-  if(delay<=0){resolveSpellHit(def,tx,ty,ctx);return;}
+  if(delay<=0){resolveSpellHit(def,tx,ty,ctx);return null;}
+  if(def.proj){
+    // 多发飞弹：每发一条独立弹道，各自锁定发射时的那只目标
+    if(def.shape==='multi'){
+      const ts=spellTargets(def,tx,ty);
+      return ts.length?ts.map(f=>spawnSpellShot(def,P.x,P.y,f.x,f.y,{...ctx,locked:f})):null;
+    }
+    return spawnSpellShot(def,P.x,P.y,tx,ty,ctx);
+  }
   // 多发飞弹：每发独立落点与错峰到达，各自验证目标是否还在
   if(def.shape==='multi'){
     const ts=spellTargets(def,tx,ty);
     ts.forEach((f,i)=>pendingHits.push({
       def,tx:f.x,ty:f.y,ctx:{...ctx,locked:f},at:S.combatT+delay+i*.06
     }));
-    return;
+    return null;
   }
   pendingHits.push({def,tx,ty,ctx,at:S.combatT+delay});
+  return null;
 }
 function updatePendingHits(force){
   if(!pendingHits.length)return;
@@ -131,7 +186,8 @@ function becomeMage(){
   P.en=P.maxEn;
   P.enRegenFlat+=MAGE_TUNE.regenAdd;
   DECK.max=Math.min(handCap(),DECK.max+MAGE_TUNE.handAdd);
-  ['sp_emberburst','manawell'].forEach(id=>DECK.discard.push(mkCard(id)));
+  // 转职补牌同样成组：牌池有近三百张，一张牌下去等于没发
+  ['sp_emberburst','manawell'].forEach(id=>{for(let i=0;i<cardBatch(CDEFS[id]);i++)DECK.discard.push(mkCard(id));});
   P.aff.fire+=2;P.aff.frost+=1;P.aff.arcane+=1;
   purgeCard('class_mage');
   P.spellCd=0;
@@ -223,9 +279,9 @@ function spellMult(elem,f,overflow){
   return m;
 }
 
-function spellFx(def,tx,ty,elem,targets){
+function spellFx(def,tx,ty,elem,targets,shot){
   if(def.shape==='single'&&targets?.length){tx=targets[0].x;ty=targets[0].y;}
-  FX.spell(def,tx,ty,elem,targets);
+  FX.spell(def,tx,ty,elem,targets,shot||null);
   if((def.mana||0)>=45)shake(4);
   sfx(elem==='fire'?'fire':elem==='frost'?'frost':elem==='arcane'?'arcane':'cast');
 }
@@ -234,8 +290,8 @@ function castSpell(def,tx,ty,overflow=manaOverflow()){
   const elem=def.elem;
   const speed=castSpeedMult();
   const targets=spellTargets(def,tx,ty);
-  queueSpellHit(def,tx,ty,{overflow,mode:'cast'});
-  spellFx(def,tx,ty,elem,targets);
+  const shot=queueSpellHit(def,tx,ty,{overflow,mode:'cast'});
+  spellFx(def,tx,ty,elem,targets,shot);
   if(isMage())spellCastSideEffects(elem,def);
   P.spellCd=MAGE_TUNE.spellGcd/speed;
   return targets.length>0;

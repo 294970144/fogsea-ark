@@ -5,7 +5,7 @@
 const TUNE={
   core:{max:600,repair:{wood:10,stone:6,heal:70},dawnHeal:40,regen:1},
   node:{hits:{crys:3,rock:4,tree:3},yield:{crys:[3,5],tree:[4,6],rock:[4,6]},dropCap:8},
-  player:{atkInterval:.42,baseDmg:12,baseRange:1.75},
+  player:{baseDmg:12,baseRange:1.75},
   // 伤害倍率：默认 1 不改变现有平衡；近战=剑挥砍/剑气，法术=法术牌/法杖/反应/风暴/灼烧
   dmgMul:{melee:1,spell:1},
   dash:{dur:.16,iframe:.28,mult:3.4},
@@ -16,7 +16,9 @@ const TUNE={
   fireSpread:{radius:1.35,treeTick:.6,treeHits:3},
   ember:{perNight:3,killsDiv:8,winBonus:12},
   resourceDrop:{tree:'wood',rock:'stone',crys:'crys'},
-  fusion:{crys:5}, // 熔铸手续费：两张源牌永久消耗外，额外支付雾晶
+  fusion:{crys:5}, // 熔铸手续费：两张源牌回弃牌堆，产物打出后不再回收
+  weapon:{repeatDelay:.14}, // 二重错峰：同一法术补发之间的间隔（秒）
+  deck:{shuffleFloor:8}, // 抽牌堆降到 8 张就把弃牌堆并回来重洗
   statusNames:{burn:'灼烧',chill:'冰缓',freeze:'冻结',mark:'奥术标记',shock:'感电'}
 };
 /* ---------------- 建筑 & 敌人定义 ---------------- */
@@ -70,13 +72,17 @@ const RX_DEF={
 };
 // 反应显示名统一取自 RX_DEF，避免图鉴与数据表分叉；多键命中时以「/」并列
 const rxName=(...keys)=>[...new Set(keys.map(k=>RX_DEF[k]&&RX_DEF[k].name).filter(Boolean))].join('/');
-/* 飞行法术：弹道时长（秒）单一数据源。FX 弹道与逻辑延迟命中都读这里，
-   保证「火球到达的同一帧才结算伤害/状态」。非飞行法术不登记，延迟为 0。 */
+/* 法术到达延时（秒）：hitscan 与天降类读这里，同时是「是否走延迟结算」的开关。
+   投掷物（def.proj）的飞行时间由距离与弹速实时算出，见下面的 SPELL_SHOT_SPEED。 */
 const SPELL_FX_TIME={
   sp_fireball:.16,sp_frostbolt:.15,sp_arcbolt:.06,sp_flameimpact:.2,
   sp_magicmissile:.28,sp_emberburst:.1
 };
 function spellFxTime(def){return SPELL_FX_TIME[def&&(def.fx||def.id)]||0;}
+/* 投掷物固定弹速（格/秒）：飞行时间 = 距离 / 速度，不再「无论多远都飞同样久」。
+   参照：玩家常速 4.3、冲刺 14.6。火球略慢于冲刺，看得见也躲得开。 */
+const SPELL_SHOT_SPEED={sp_fireball:13,sp_frostbolt:16,sp_magicmissile:20};
+function spellShotSpeed(def){return SPELL_SHOT_SPEED[def&&(def.fx||def.id)]||16;}
 const CDEFS={
   wall:{id:'wall',kind:'build',build:'wall',name:'木墙',icon:'wall',color:'#e0b070',cost:{wood:8},
     desc:'筑起木墙阻挡雾裔。打出后卡牌回到弃牌堆，可再次抽到。',w:26},
@@ -103,15 +109,16 @@ const CDEFS={
     desc:'当前资源立即回满，冲刺冷却清零。',w:9},
   expand:{id:'expand',kind:'utility',target:'self',name:'扩容',icon:'expand',color:'#ffb454',cost:{wood:10,stone:6},
     draw:1,desc:'手牌上限 +1（最高 10，法师 12），并立即抽 1 张。满上限后不再出现。',w:11},
-  salvage5:{id:'salvage5',kind:'utility',target:'pick',name:'拆解·微光',icon:'salvage',color:'#6fe08a',cost:{},tier:5,
-    desc:'回收率 +5%，移除一张牌并按回收率返还其造价（取整）。',w:11},
-  salvage10:{id:'salvage10',kind:'utility',target:'pick',name:'拆解·熔解',icon:'salvage',color:'#8fe3d0',cost:{},tier:10,
-    desc:'回收率 +10%，移除一张牌并按回收率返还其造价（取整）。',w:8},
-  salvage20:{id:'salvage20',kind:'utility',target:'pick',name:'拆解·归墟',icon:'salvage',color:'#57e6ff',cost:{},tier:20,
-    desc:'回收率 +20%，移除一张牌并按回收率返还其造价（取整）。',w:5},
-  sp_fireball:{id:'sp_fireball',shape:'point',elem:'fire',weaponAttack:true,radius:1.6,dmg:20,spreadFire:true,
+  // 拆解牌：拖到任意一张手牌上（等同「融合」），按回收率返还目标牌造价，两牌回弃牌堆
+  salvage5:{id:'salvage5',kind:'utility',target:'self',salvage:true,name:'拆解·微光',icon:'salvage',color:'#6fe08a',cost:{},tier:5,
+    desc:'拖到任意手牌上拆解：按回收率返还其造价，两张牌都回弃牌堆；回收率 +5%。',w:11},
+  salvage10:{id:'salvage10',kind:'utility',target:'self',salvage:true,name:'拆解·熔解',icon:'salvage',color:'#8fe3d0',cost:{},tier:10,
+    desc:'拖到任意手牌上拆解：按回收率返还其造价，两张牌都回弃牌堆；回收率 +10%。',w:8},
+  salvage20:{id:'salvage20',kind:'utility',target:'self',salvage:true,name:'拆解·归墟',icon:'salvage',color:'#57e6ff',cost:{},tier:20,
+    desc:'拖到任意手牌上拆解：按回收率返还其造价，两张牌都回弃牌堆；回收率 +20%。',w:5},
+  sp_fireball:{id:'sp_fireball',shape:'point',elem:'fire',weaponAttack:true,radius:1.6,dmg:20,spreadFire:true,proj:true,
     status:{kind:'burn',n:2}},
-  sp_frostbolt:{id:'sp_frostbolt',shape:'point',elem:'frost',weaponAttack:true,radius:1.6,dmg:11,
+  sp_frostbolt:{id:'sp_frostbolt',shape:'point',elem:'frost',weaponAttack:true,radius:1.6,dmg:11,proj:true,
     status:{kind:'chill',n:2}},
   sp_arcbolt:{id:'sp_arcbolt',shape:'single',elem:'arcane',weaponAttack:true,dmg:10,
     status:{kind:'mark',n:1}},
@@ -127,6 +134,7 @@ const CDEFS={
   sp_emberburst:{id:'sp_emberburst',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,
     name:'余烬爆发',icon:'emberburst',color:ELEMCOL.fire,cost:{},mana:30,radius:2.2,dmg:30,
     status:{kind:'burn',n:2},desc:'指定区域 2.2 格内 30 火焰伤害，附加 2 层灼烧。',w:10,wNonMage:5},
+  // 烈焰冲击是天降：落点固定、垂直落下，没有水平弹道可拦，故不标 proj
   sp_flameimpact:{id:'sp_flameimpact',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',core:true,
     name:'烈焰冲击',icon:'flame',color:ELEMCOL.fire,cost:{},mana:45,radius:1.9,dmg:55,
     status:{kind:'burn',n:3},desc:'核心火系法术：1.9 格内 55 火焰伤害，附加 3 层灼烧。',w:0},
@@ -139,7 +147,7 @@ const CDEFS={
   sp_frostring:{id:'sp_frostring',kind:'instant',target:'self',shape:'self',elem:'frost',cls:'mage',core:true,
     name:'冰封之环',icon:'snow',color:ELEMCOL.frost,cost:{},mana:30,radius:3.2,dmg:18,
     status:{kind:'freeze',n:1},desc:'核心冰系法术：冻结周围 3.2 格内敌人 1 秒并造成 18 冰霜伤害。',w:0},
-  sp_magicmissile:{id:'sp_magicmissile',kind:'instant',target:'self',shape:'multi',elem:'arcane',cls:'mage',core:true,
+  sp_magicmissile:{id:'sp_magicmissile',kind:'instant',target:'self',shape:'multi',elem:'arcane',cls:'mage',core:true,proj:true,
     name:'魔法飞弹',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,dmg:14,missiles:3,
     status:{kind:'mark',n:1},desc:'核心奥术法术：向最近 3 个敌人各发射 1 枚 14 伤害飞弹。',w:0},
   manawell:{id:'manawell',kind:'build',build:'manawell',cls:'mage',
@@ -173,7 +181,10 @@ const CDEFS={
      数值源仍是下方 SIGILS，卡面文案由 sigilDesc 同步注入。 */
   keen:{id:'keen',kind:'utility',sigil:true,sigilOnly:true,name:'锋锐刻印',icon:'crit',color:'#ffb454',cost:{},desc:'',brief:'',w:6,wNonMage:6},
   swift:{id:'swift',kind:'utility',sigil:true,sigilOnly:true,name:'迅捷刻印',icon:'bolt',color:'#8fe3d0',cost:{},desc:'',brief:'',w:6,wNonMage:6},
-  echo:{id:'echo',kind:'utility',sigil:true,sigilOnly:true,name:'回响刻印',icon:'wave',color:'#c9a8ff',cost:{},desc:'',brief:'',w:6,wNonMage:6}
+  echo:{id:'echo',kind:'utility',sigil:true,sigilOnly:true,name:'回响刻印',icon:'wave',color:'#c9a8ff',cost:{},desc:'',brief:'',w:6,wNonMage:6},
+  burst:{id:'burst',kind:'utility',sigil:true,sigilOnly:true,name:'二重法术',icon:'burst',color:'#ffd166',cost:{},desc:'',brief:'',w:6,wNonMage:6},
+  scatter:{id:'scatter',kind:'utility',sigil:true,sigilOnly:true,name:'二叉',icon:'wind',color:'#ffb454',cost:{},desc:'',brief:'',w:6,wNonMage:6},
+  trident:{id:'trident',kind:'utility',sigil:true,sigilOnly:true,name:'三叉',icon:'thorn',color:'#c9a8ff',cost:{},desc:'',brief:'',w:6,wNonMage:6}
 };
 /* 法术刻印：带 sigil 标记的卡 —— 既能装入法杖槽自动施放，也能当瞬发牌拖地释放。
    效果数值从武器攻击模板派生，避免同一份数值写两处。 */
@@ -186,7 +197,7 @@ for(const s of SIGIL_SPELLS){
   const src=CDEFS[s.from];
   CDEFS[s.id]={id:s.id,kind:'instant',target:'point',sigil:true,short:s.short,
     fx:src.fx||src.id,
-    shape:src.shape,elem:src.elem,radius:src.radius,dmg:src.dmg,spreadFire:src.spreadFire,status:src.status,
+    shape:src.shape,elem:src.elem,radius:src.radius,dmg:src.dmg,spreadFire:src.spreadFire,status:src.status,proj:src.proj,
     name:s.name,icon:s.icon,color:s.color,cost:{},mana:s.mana,
     desc:`${src.dmg} 点${ELEMNAME[src.elem]}伤害。`,
     brief:`${src.dmg} ${ELEMNAME[src.elem]}伤害`,w:s.w,wNonMage:s.wNonMage};
@@ -202,6 +213,20 @@ for(const id of CARD_IDS){
 }
 /* 品质默认「普通」：q 为档位号，1 普通 / 2 稀有 / 3 史诗 */
 for(const id in CDEFS)if(CDEFS[id].q==null)CDEFS[id].q=1;
+/* ---------------- 起始牌库 ----------------
+   [卡 id, 张数]；新增开局卡只改这张表。 */
+const STARTER_DECK=[
+  ['wall',30],['tower',24],['totem',12],     // 构筑物：造价越低给得越多
+  ['rain',10],['spring',10],['mend',10],     // 一次性消耗牌：不低于 10 张
+  ['tactic',10],
+  ['keen',6],['swift',6],['echo',6],         // 数值刻印
+  ['burst',4],['scatter',4],['trident',4],   // 多重刻印
+  ['salvage5',4],['salvage10',2],['salvage20',1]  // 拆解：合计能把回收率堆到 60%，到顶后按规则退场
+];
+/* 拆解牌识别：拖放时「任意手牌互融」只对带 salvage 的牌成立。 */
+const isSalvage=id=>!!(CDEFS[id]&&CDEFS[id].salvage);
+/* 法师转职时的补牌张数：构筑 10 / 瞬发 5 / 刻印 2 */
+const cardBatch=d=>d.sigilOnly?2:d.kind==='build'?10:5;
 /* ---------------- 卡牌品质 ----------------
    3 档，每档 2 色成对：普通(白+绿) / 稀有(蓝+紫) / 史诗(橙+红)。
    卡面用该档两色渐变角标显示档位名，图鉴详情显示「品质」行。 */
@@ -212,7 +237,7 @@ const CARD_Q={
 };
 const cardQ=d=>CARD_Q[(d&&d.q)||1];
 /* ---------------- 熔铸配方 ----------------
-   两张基础牌熔成一张高级牌：产物直接进手牌，源牌永久离场。
+   两张基础牌熔成一张高级牌：产物直接进手牌，源牌回弃牌堆，产物打出即消失。
    a/b 指定固定牌；ea/eb 表示元素组（该元素的任意牌均可）。
    产物卡带 fuseOut 标记：不进奖励池，也不能再次作为熔铸源。 */
 const FUSION_RECIPES=[
@@ -252,15 +277,18 @@ function fusionRecipesOf(id){
   if(!d||d.fuseOut)return [];
   return FUSION_RECIPES.filter(r=>fusionSide(r,'a',id)||fusionSide(r,'b',id));
 }
-/* 武器是局前选择、局内固定的基础攻击来源；法杖复用 CDEFS 中的攻击模板。 */
+/* 武器是局前选择、局内固定的基础攻击来源；法杖复用 CDEFS 中的攻击模板。
+   节奏参照 Noita：castDelay = 同一轮内两次施放之间的冷却；recharge = 一轮内所有法术施放完后的冷却，
+   队列回到第一槽再重来。剑一轮只有一次挥砍，故 castDelay=0、整段间隔落在 recharge 上。 */
 const WEAPONS={
   sword:{id:'sword',name:'剑',route:'近战路线',icon:'sword',color:'#ffb454',art:'assets/weapons/sword.svg',attack:'melee',slots:3,
+    castDelay:0,recharge:.42,
     desc:'挥砍、剑气、迅击。'},
-  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',interval:.60,slots:6,startSigils:['sig_flame'],
+  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',castDelay:.95,recharge:1.05,slots:6,startSigils:['sig_flame'],
     desc:'范围灼烧，火焰蔓延至相邻敌人和树木。'},
-  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',interval:.50,slots:6,startSigils:['sig_frost'],
+  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',castDelay:.80,recharge:.88,slots:6,startSigils:['sig_frost'],
     desc:'范围冰缓，叠加减速控制敌群。'},
-  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',interval:.26,slots:6,startSigils:['sig_arcane'],
+  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',castDelay:.42,recharge:.46,slots:6,startSigils:['sig_arcane'],
     desc:'高频打击单个目标，附加奥术标记。'}
 };
 const WEAPON_IDS=Object.keys(WEAPONS);
@@ -270,15 +298,23 @@ const weaponDef=id=>WEAPONS[normalizeWeaponId(id)];
 const SIGILS={
   keen:{id:'keen',n:'锋锐刻印',short:'锋锐',icon:'crit',color:'#ffb454',dmg:.20},
   swift:{id:'swift',n:'迅捷刻印',short:'迅捷',icon:'bolt',color:'#8fe3d0',spd:.15},
-  echo:{id:'echo',n:'回响刻印',short:'回响',icon:'wave',color:'#c9a8ff',echo:.25}
+  echo:{id:'echo',n:'回响刻印',short:'回响',icon:'wave',color:'#c9a8ff',echo:.25},
+  // 多重类：copies=一次施放的份数，spread=相邻两发的夹角(度)，repeat=同一法术错峰补发，dmgB=复制体伤害系数
+  // 阵型类（formation）：只修饰左侧紧邻的那一个法术槽，不作用于整把武器
+  burst:{id:'burst',n:'二重法术',short:'二重',icon:'burst',color:'#ffd166',copies:2,spread:0,repeat:true,dmgB:.7},
+  scatter:{id:'scatter',n:'二叉',short:'二叉',icon:'wind',color:'#ffb454',copies:2,spread:90,dmgB:.55,formation:true},
+  trident:{id:'trident',n:'三叉',short:'三叉',icon:'thorn',color:'#c9a8ff',copies:3,spread:20,dmgB:.45,formation:true}
 };
 const SIGIL_IDS=Object.keys(SIGILS);
 const SIGIL_COPIES=3;
 // 文案实时派生：改数值即改描述，避免与表漂移
+/* 刻印文案直接从 SIGILS 派生：迅捷只压整轮充能，换算成充能降幅展示（出手频率等效 +spd）。 */
 const sigilDesc=id=>{
   const s=SIGILS[id];if(!s)return CDEFS[id]&&CDEFS[id].sigil?`武器攻击：${CDEFS[id].brief}`:'';
-  return s.dmg!=null?`武器伤害 +${Math.round(s.dmg*100)}%`
-    :s.spd!=null?`武器攻速 +${Math.round(s.spd*100)}%`
+  return s.copies!=null?(s.repeat?`左侧相邻法术错峰连打 ${s.copies} 发，后续每发 ${Math.round(s.dmgB*100)}% 伤害`
+      :`左侧相邻法术分裂 ${s.copies} 发，±${(s.copies-1)*s.spread/2}°`)
+    :s.dmg!=null?`武器伤害 +${Math.round(s.dmg*100)}%`
+    :s.spd!=null?`武器充能时间 −${Math.round((1-1/(1+s.spd))*100)}%`
     :`武器攻击 ${Math.round(s.echo*100)}% 概率追加一次`;
 };
 /* 槽位条目元信息：数值刻印 SIGILS 与法术刻印 CDEFS.sigil 共用一接口 */
@@ -294,7 +330,7 @@ const CARD_BRIEF={
   wall:'阻挡雾裔，卡牌可循环。',tower:'自动射击附近雾裔。',totem:'持续恢复附近玩家生命。',cannon:'范围爆炸伤害。',
   rain:'范围箭雨伤害。',mine:'范围伤害并击退。',spring:'恢复 45 点生命。',mend:'修复核心与建筑。',ward:'获得 4 秒无敌。',
   tactic:'抽取 2 张牌。',surge:'回满资源并重置冲刺。',expand:'手牌上限 +1。',
-  salvage5:'回收率 +5%，移除一张牌。',salvage10:'回收率 +10%，移除一张牌。',salvage20:'回收率 +20%，移除一张牌。',
+  salvage5:'拖到手牌上拆解 · 回收率 +5%。',salvage10:'拖到手牌上拆解 · 回收率 +10%。',salvage20:'拖到手牌上拆解 · 回收率 +20%。',
   sp_kindling:'范围灼烧，引燃附近敌人与树。',sp_frostpatch:'范围冰伤，附加 2 层冰缓。',sp_arcaneneedle:'单体奥术伤害并标记。',
   sp_emberburst:'范围火伤并附加灼烧。',sp_flameimpact:'范围 55 火焰伤害。',sp_flamedetonate:'每层灼烧造成 12 伤害。',
   sp_blizzard:'全屏冰伤并附加冰缓。',sp_frostring:'冻结周围敌人。',sp_magicmissile:'攻击最近 3 个敌人。',

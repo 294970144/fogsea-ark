@@ -1,7 +1,7 @@
 'use strict';
 /* ---------------- 流程 ---------------- */
 let weaponPicker=null;
-const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','removeOv','slotOv','confirmOv'];
+const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','slotOv','confirmOv'];
 function showOv(id,on){$(id).classList.toggle('show',on);}
 function closeOverlays(except){
   OVERLAYS.forEach(id=>{if(id!==except)showOv(id,false);});
@@ -347,7 +347,7 @@ function beginRun(){
 function requestLoadSlot(i){
   const rec=slots.slots[i];
   if(!rec){toast('该存档位为空','warn');return false;}
-  const live=S.stats&&['play','pause','slots','dawn','remove','swap'].includes(S.mode);
+  const live=S.stats&&['play','pause','slots','dawn','swap'].includes(S.mode);
   if(!live){doLoadSlot(i);return true;}
   askConfirm({
     title:'载入存档 '+(i+1)+'？',
