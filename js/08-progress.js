@@ -33,7 +33,7 @@ function renderDawn(){
     t.className='dawnTitle';t.textContent=`第 ${S.day} 日 · 黎明`;
     const fullHand=DECK.hand.length>=DECK.max;
     sub.innerHTML=`选择一张加入牌库 <span class="kb-hint">（1 / 2 / 3）</span> · 手牌 ${DECK.hand.length}/${DECK.max}`+
-      (fullHand?' <i style="color:var(--cyan);font-style:normal">手牌已满 · 新牌入牌库，本日可换牌</i>':'');
+      (fullHand?' <i style="color:var(--danger);font-style:normal">手牌已满 · 新牌直接入手，超限后需回收</i>':'');
     S.dawnCards.forEach((id,i)=>{
       const d=CDEFS[id],own=cardTotal(id);
       const el=document.createElement('button');
@@ -76,9 +76,12 @@ function pickDawn(i){
       S.dawnStep=1;renderDawn();sfx('card');
       return;
     }
-    DECK.discard.push(mkCard(id));
+    // 黎明选牌直接入手：手牌已满时故意造成临时超限，交给右下角回收区处理，不再静默塞进弃牌堆。
+    const picked=mkCard(id);
+    if(picked)DECK.hand.push(picked);
     if(CDEFS[id].elem)P.aff[CDEFS[id].elem]++;
-    toast('获得 '+CDEFS[id].name,'good');sfx('card');
+    S.handDirty=true;syncHand(true);
+    toast('获得 '+CDEFS[id].name+(DECK.hand.length>DECK.max?' · 手牌超限，记得回收':''),'good');sfx('card');
     S.dawnStep=1;renderDawn();
   }else if(S.dawnStep===1){
     const b=S.dawnBless[i];if(!b)return;
@@ -100,14 +103,9 @@ function finishDawn(){
   const cap=Math.min(handCap(),DECK.max+P.bonusDraw);
   const extra=drawN(P.bonusDraw,cap);
   const n=full+extra;
-  const hasCards=DECK.draw.length+DECK.discard.length>0;
-  let blocked=P.bonusDraw-extra;
-  if(before>=DECK.max&&blocked===0&&hasCards)blocked=1;
   S.handDirty=true;
   banner(`第 ${S.day} 日`,'黎明 · 抽 '+n+' 张','');
   if(n)toast('抽入 '+n+' 张牌','good');
-  if(blocked>0&&DECK.hand.length>=DECK.max&&hasCards)
-    offerSwap(Math.min(blocked,DECK.hand.length),'黎明抽牌 · 手牌已满');
   autoSave(); // 黎明选择已落地，此处是干净的第 N 日检查点
 }
 $('dawnSkip').addEventListener('click',skipDawn);

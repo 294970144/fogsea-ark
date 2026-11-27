@@ -224,14 +224,25 @@ testCase('R2_save_validation', () => {
 
 testCase('R3_deck_and_card_text', () => {
   const env = makeEnv();
-  const swap = j(env)(`(()=>{
-    initRun();DECK.max=9;DECK.hand=[];DECK.draw=[];DECK.discard=[];
-    for(let i=0;i<11;i++)DECK.draw.push(mkCard('wall'));
-    while(DECK.hand.length<10&&DECK.draw.length)DECK.hand.push(DECK.draw.pop());
-    doSwap(DECK.hand[0].uid);
-    return JSON.stringify({hand:DECK.hand.length,draw:DECK.draw.length,left:S.swapLeft,mode:S.mode});
+  const over = j(env)(`(()=>{
+    initRun();S.mode='play';DECK.max=8;DECK.recycle=50;res.wood=0;
+    DECK.hand=[];DECK.draw=[];DECK.discard=[];
+    for(let i=0;i<10;i++)DECK.draw.push(mkCard('wall'));
+    while(DECK.hand.length<DECK.max&&DECK.draw.length)DECK.hand.push(DECK.draw.pop());
+    drawN(3);syncHand(true);
+    const before={hand:DECK.hand.length,draw:DECK.draw.length,warn:UI.handWarn.textContent,show:UI.recycleZone.classList.contains('show')};
+    recycleHandCard(DECK.hand[0].uid);
+    const mid={hand:DECK.hand.length,draw:DECK.draw.length,discard:DECK.discard.length,
+      total:cardTotal('wall'),wood:res.wood,mode:S.mode,show:UI.recycleZone.classList.contains('show')};
+    recycleHandCard(DECK.hand[0].uid);syncHand(true);
+    const after={hand:DECK.hand.length,warn:UI.handWarn.textContent,show:UI.recycleZone.classList.contains('show')};
+    return JSON.stringify({before,mid,after,swapFn:typeof offerSwap,swapKey:'swapLeft' in S});
   })()`);
-  assert.deepEqual(swap, { hand: 10, draw: 0, left: 0, mode: 'play' });
+  assert.deepEqual(over.before, { hand: 10, draw: 0, warn: ' · 手牌已达上限', show: true });
+  assert.deepEqual(over.mid, { hand: 9, draw: 0, discard: 0, total: 9, wood: 4, mode: 'play', show: true });
+  assert.deepEqual(over.after, { hand: 8, warn: '', show: false });
+  assert.equal(over.swapFn, 'undefined');
+  assert.equal(over.swapKey, false);
   env.run('initRun()');
   const costs = env.run(`Object.fromEntries(CARD_IDS.map(id=>[id,costStr(CDEFS[id])]))`);
   for (const [id, text] of Object.entries(costs)) assert.ok(!/undefined|\[object Object\]|NaN/.test(text), id);
@@ -264,8 +275,6 @@ testCase('R3_deck_and_card_text', () => {
   assert.ok(derived.ward.includes('7 秒'));
   assert.ok(derived.totem.includes('9 点'));
   assert.ok(derived.totemBrief.includes('9 点'));
-  env.run(`DECK.hand=[mkCard('wall'),mkCard('tower')];DECK.draw=[];DECK.discard=[];renderSwap()`);
-  assert.ok(!/undefined|\[object Object\]|NaN/.test(env.ids.get('swapList').children.map(e => e.innerHTML).join('')));
   env.run(`const sc=mkCard('salvage5');DECK.hand=[sc,mkCard('wall')];DECK.draw=[];DECK.discard=[];beginSalvage(sc)`);
   assert.ok(!/undefined|\[object Object\]|NaN/.test(env.ids.get('rmList').children.map(e => e.innerHTML).join('')));
   const expand = j(env)(`(()=>{
@@ -1417,6 +1426,79 @@ testCase('R26_delayed_spell_hit_and_miss', () => {
     castSpell(CDEFS.sp_fireball,P.x+1,P.y);const at=pendingHits[0].at;spellFxTime=__realSpellFxTime;
     return JSON.stringify({delay:+(at-S.combatT).toFixed(2)});})()`);
   assert.deepEqual(t, { delay: .5 });
+});
+
+testCase('R27_overflow_recycle_zone', () => {
+  const env = makeEnv();
+  const over = j(env)(`(()=>{
+    initRun();S.mode='play';DECK.max=8;DECK.recycle=0;
+    DECK.hand=[];DECK.draw=[];DECK.discard=[];
+    for(let i=0;i<10;i++)DECK.draw.push(mkCard('wall'));
+    while(DECK.hand.length<DECK.max&&DECK.draw.length)DECK.hand.push(DECK.draw.pop());
+    drawN(3);syncHand(true);
+    return JSON.stringify({hand:DECK.hand.length,cap:DECK.max,hard:handCap(),
+      zone:UI.recycleZone.classList.contains('show'),warn:UI.handWarn.textContent,
+      back:UI.recycleBack.textContent,swapFn:typeof offerSwap,swapMode:'swap' in OVERLAYS});
+  })()`);
+  assert.deepEqual(over, { hand: 10, cap: 8, hard: 10, zone: true,
+    warn: ' · 手牌已达上限', back: '0%', swapFn: 'undefined', swapMode: false });
+
+  // 硬上限仍生效：满 10 张时再抽会被挡住。
+  assert.equal(env.run('drawN(2)'), 0);
+  assert.equal(env.run('DECK.hand.length'), 10);
+
+  // 选中一张后点击右下角回收区：永久移除，不进弃牌堆。
+  const uid = env.run('DECK.hand[0].uid');
+  env.run(`S.aimUid=${uid}`);
+  env.ids.get('recycleZone')._listeners.click[0]();
+  const clicked = j(env)(`JSON.stringify({hand:DECK.hand.length,discard:DECK.discard.length,
+    total:cardTotal('wall'),aim:S.aimUid,mode:S.mode})`);
+  assert.deepEqual(clicked, { hand: 9, discard: 0, total: 9, aim: null, mode: 'play' });
+
+  // 拖到回收区：同样的永久回收路径。
+  const uid2 = env.run('DECK.hand[0].uid');
+  const zone = env.ids.get('recycleZone');
+  env.ctx.document.elementFromPoint = () => ({ closest: sel => sel === '#recycleZone' ? zone : null });
+  env.run(`S.dragUid=${uid2};S.dragMoved=true;S.dragPointerId=1;S.aimUid=${uid2}`);
+  env.winL.pointerup[0]({ pointerId: 1, clientX: 100, clientY: 100 });
+  const dragged = j(env)(`JSON.stringify({hand:DECK.hand.length,discard:DECK.discard.length,total:cardTotal('wall')})`);
+  assert.deepEqual(dragged, { hand: 8, discard: 0, total: 8 });
+  assert.equal(env.run(`UI.recycleZone.classList.contains('show')`), false);
+});
+
+testCase('R28_dawn_card_and_overflow_gate', () => {
+  const env = makeEnv();
+  const picked = j(env)(`(()=>{
+    initRun();S.mode='dawn';S.dawnStep=0;DECK.max=8;DECK.hand=[];DECK.draw=[];DECK.discard=[];
+    for(let i=0;i<8;i++)DECK.hand.push(mkCard('wall'));
+    S.dawnCards=['wall'];pickDawn(0);
+    return JSON.stringify({hand:DECK.hand.length,discard:DECK.discard.length,step:S.dawnStep,
+      last:DECK.hand[DECK.hand.length-1].id,warn:UI.handWarn.textContent});
+  })()`);
+  assert.deepEqual(picked, { hand: 9, discard: 0, step: 1, last: 'wall', warn: ' · 手牌已达上限' });
+
+  const night = j(env)(`(()=>{
+    S.mode='play';S.phase='day';S.timeLeft=0;S.overflowWarned=false;
+    startNight();
+    const blocked={phase:S.phase,warned:S.overflowWarned};
+    recycleHandCard(DECK.hand[0].uid);syncHand(true);
+    startNight();
+    return JSON.stringify({blocked,phase:S.phase,warned:S.overflowWarned});
+  })()`);
+  assert.deepEqual(night, { blocked: { phase: 'day', warned: true }, phase: 'night', warned: false });
+
+  const dawn = j(env)(`(()=>{
+    S.mode='play';S.phase='night';S.day=1;S.toSpawn=0;foes.length=0;warns.length=0;
+    DECK.hand=[];DECK.draw=[];DECK.discard=[];DECK.max=8;
+    for(let i=0;i<9;i++)DECK.hand.push(mkCard('wall'));
+    S.overflowWarned=false;dawn();
+    const blocked={day:S.day,mode:S.mode,warned:S.overflowWarned};
+    recycleHandCard(DECK.hand[0].uid);syncHand(true);dawn();
+    return JSON.stringify({blocked,day:S.day,mode:S.mode});
+  })()`);
+  assert.deepEqual(dawn.blocked, { day: 1, mode: 'play', warned: true });
+  assert.equal(dawn.day, 2);
+  assert.equal(dawn.mode, 'dawn');
 });
 
 function main() {

@@ -64,7 +64,7 @@
       <div id="resRow"></div>
       <span class="pileChip draw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="12" height="16" rx="2"/><path d="M8 7h12v14H8"/></svg>牌库 <b id="drawN">0</b></span>
       <span class="pileChip disc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>弃牌 <b id="discN">0</b></span>
-      <span class="pileChip limit">手牌 <b id="handN">0/5</b></span>
+      <span class="pileChip limit">手牌 <b id="handN">0/5</b><em id="handWarn"></em></span>
       <span class="pileChip rec">回收 <b id="recN">0%</b></span>
       <button id="repairBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.7 2.7-3-3 2.7-2.7z"/></svg>修复 <span class="kb kb-hint">F</span></button>
     </div>
@@ -77,6 +77,11 @@
       <div class="bar" id="coreBar"><span></span></div>
     </div>
     <div id="mmWrap" class="panel"><canvas id="mm" width="132" height="132"></canvas></div>
+    <div id="recycleZone" class="recycleZone" role="button" tabindex="0" aria-label="回收超额手牌">
+      <div class="rzHead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg><b>回收卡牌</b></div>
+      <div class="rzBack">返还 <b id="recycleBack">0%</b></div>
+      <div class="rzHint">拖入 · 或选中后点击</div>
+    </div>
   </div>
 </div>
 
@@ -170,18 +175,6 @@
     </div>
     <div id="rmList"></div>
     <div class="rmFoot"><button class="skipBtn" id="rmCancel" style="margin:0">取消</button></div>
-  </div>
-</div>
-
-<div class="overlay" id="swapOv" role="dialog" aria-modal="true">
-  <div class="scrim"></div>
-  <div id="removeBox">
-    <div class="rmHead">
-      <h2 id="swapTitle">手牌已满</h2>
-      <p id="swapSub"></p>
-    </div>
-    <div id="swapList"></div>
-    <div class="rmFoot"><button class="skipBtn" id="swapSkip" style="margin:0">跳过</button></div>
   </div>
 </div>
 

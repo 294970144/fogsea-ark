@@ -6,7 +6,7 @@ const S={mode:'menu',phase:'day',day:1,timeLeft:70,toSpawn:0,nightTotal:0,nightK
   speed:1,hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,stats:null,hints:{},elapsed:0,combatT:0,
   aimUid:null,dragUid:null,dragMoved:false,dragStart:[0,0],dragPointerId:null,
   endless:false,endlessBase:null,settled:null,handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],dawnSigils:[],
-  pendingSalvage:null};
+  pendingSalvage:null,overflowWarned:false};
 const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=80,FOE_CAP=44;
 /* 个人测试作弊码（仅个人测试用，不在页面呈现任何入口或文案）
    暂停时键入 l3131 切换：雾爆伤害 ×10（提升至 1000%）、范围 ×10（提升 1000%）。 */
@@ -71,7 +71,23 @@ function drawOne(cap){
   DECK.hand.push(DECK.draw.pop());S.handDirty=true;return true;
 }
 function drawToFull(){let n=0;while(DECK.hand.length<DECK.max&&drawOne())n++;if(n)sfx('draw');return n;}
-function drawN(n,cap){let c=0;for(let i=0;i<n;i++){if(drawOne(cap))c++;else break;}if(c)sfx('draw');return c;}
+function drawN(n,cap){
+  // 常规抽牌只填到 DECK.max；额外抽牌（黎明奖励/战术/熔铸）允许临时超过软上限，
+  // 但仍受 handCap() 硬上限约束，避免手牌区被撑爆。
+  const lim=cap===undefined?handCap():Math.min(cap,handCap());
+  let c=0;for(let i=0;i<n;i++){if(drawOne(lim))c++;else break;}if(c)sfx('draw');return c;
+}
+// 超限闸门：进入夜晚或黎明前必须先回收到软上限内。warning 只弹一次，回收后立即解锁。
+function overflowBlock(stage){
+  const over=DECK.hand.length-DECK.max;
+  if(over<=0){S.overflowWarned=false;return false;}
+  if(!S.overflowWarned){
+    S.overflowWarned=true;
+    banner('手牌超限',`需回收 ${over} 张 · 拖入右下角回收区，或选中后点击`,'danger');
+    toast(`手牌超出上限 ${over} 张 · 回收后才能${stage}`,'warn');sfx('deny');
+  }
+  return true;
+}
 function afford(def){
   if(def.mana&&P.en<effManaCost(def))return false;
   for(const k in def.cost)if(res[k]<def.cost[k])return false;
@@ -131,7 +147,7 @@ function rollRewards(n){
    const 对象只能原地恢复，禁止对 S/P/DECK/res 重新赋值。 */
 const S_SAVE_FIELDS=['mode','phase','day','timeLeft','toSpawn','nightTotal','nightKilled','spawnT','speed',
   'nightAmt','win','elapsed','combatT','stats','hints','endless','endlessBase','settled',
-  'dawnStep','dawnCards','dawnBless','dawnSigils','pendingSalvage','swapLeft','swapReason'];
+  'dawnStep','dawnCards','dawnBless','dawnSigils','pendingSalvage'];
 function _pickFields(src,keys){const out={};for(const k of keys)if(k in src)out[k]=src[k];return out;}
 function _clone(v){return JSON.parse(JSON.stringify(v));}
 
@@ -170,7 +186,7 @@ function restoreSnapshot(s){
   sd.dawnSigils=Array.isArray(sd.dawnSigils)?sd.dawnSigils.map(id=>SIGILS[id]).filter(Boolean):[];
   if(sd.mode!=='dawn')sd.mode='play';
   Object.assign(sd,{hitstop:0,launchT:0,overT:0,aimUid:null,dragUid:null,dragMoved:false,
-    dragStart:[0,0],dragPointerId:null,handDirty:true,pendingSalvage:null,swapLeft:0,swapReason:''});
+    dragStart:[0,0],dragPointerId:null,    handDirty:true,pendingSalvage:null,overflowWarned:false});
   _putObj(S,sd);
   const pd=d.P;
   pd.weapon=normalizeWeaponId(pd.weapon);

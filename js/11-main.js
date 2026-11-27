@@ -1,7 +1,7 @@
 'use strict';
 /* ---------------- 流程 ---------------- */
 let weaponPicker=null;
-const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','removeOv','swapOv','slotOv','confirmOv'];
+const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','removeOv','slotOv','confirmOv'];
 function showOv(id,on){$(id).classList.toggle('show',on);}
 function closeOverlays(except){
   OVERLAYS.forEach(id=>{if(id!==except)showOv(id,false);});

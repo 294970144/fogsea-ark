@@ -7,10 +7,8 @@ function cardInner(def,hot){
   const badge=(def.q||1)>=2?`<i class="hcQ" style="background:linear-gradient(135deg,${q.c1},${q.c2});color:${q.fg}">${q.name}</i>`:'';
   return `<span class="hcHot kb-hint">${hot||''}</span>
     <div class="hcCost">${cost}${badge}</div>
-    <div class="hcMain">
-      <div class="hcArt" style="color:${def.color}">${svg(def.icon,22)}</div>
-      <div class="hcName">${def.name}${def.sigil?'<i class="hcSigil" title="可装入武器槽位">'+svg('rune',11)+'</i>':''}</div>
-    </div>
+    <div class="hcMark" style="color:${def.color}">${svg(def.icon,96)}</div>
+    <div class="hcName">${def.name}</div>
     <div class="hcDesc">${def.brief||def.desc}</div>`;
 }
 function renderHand(){
@@ -19,6 +17,8 @@ function renderHand(){
     const def=CDEFS[c.id];
     const el=document.createElement('div');
     el.className='hcard';el.dataset.uid=c.uid;
+    el.style.setProperty('--el',def.color||'#8fa9b8');
+    el.style.setProperty('--i',String(i));
     const q=def.q||1;if(q>1)el.dataset.q=q;
     el.innerHTML=cardInner(def,HAND_KEYS[i]||'');
     el.addEventListener('pointerdown',e=>{
@@ -69,7 +69,7 @@ function showDragCard(uid){
     const m=sigilMeta(c.id);
     el.innerHTML=`<div class="dragSigil" style="color:${m?m.color:def.color}">${svg(m?m.icon:def.icon,36)}</div>`;
   }else{
-    el.innerHTML=`<div class="hcard" style="position:relative;left:0;transform:none;width:100%;height:100%">${cardInner(def,'')}</div>`;
+    el.innerHTML=`<div class="hcard" style="position:relative;left:0;transform:none;width:100%;height:100%;--el:${def.color||'#8fa9b8'}">${cardInner(def,'')}</div>`;
   }
   el.style.display='block';
   const h=document.querySelector(`.hcard[data-uid="${uid}"]`);if(h)h.classList.add('drag');
@@ -117,6 +117,7 @@ function endDrag(){
   const uid=S.dragUid;
   S.dragUid=null;S.dragMoved=false;S.dragStart=[0,0];S.dragPointerId=null;dragBuildType=null;
   $('dragCard').style.display='none';
+  if(UI.recycleZone)UI.recycleZone.classList.remove('dragOver');
   if(uid){const h=document.querySelector(`.hcard[data-uid="${uid}"]`);if(h)h.classList.remove('drag');}
   if(typeof clearFuseMarks==='function')clearFuseMarks();
 }
@@ -126,7 +127,7 @@ function selectCard(uid){
 }
 function clearAim(){S.aimUid=null;syncHand(true);}
 function syncHand(force){
-  const night=S.phase==='night';
+  const night=S.phase==='night',over=DECK.hand.length>DECK.max;
   document.querySelectorAll('#handRow .hcard').forEach(el=>{
     const uid=+el.dataset.uid,c=handCard(uid);if(!c)return;
     const def=CDEFS[c.id];
@@ -134,6 +135,7 @@ function syncHand(force){
     const nn=night&&def.kind==='build';
     if(force||el._off!==off){el._off=off;el.classList.toggle('off',off&&!nn);}
     if(force||el._nn!==nn){el._nn=nn;el.classList.toggle('noNight',nn);}
+    if(force||el._overCap!==over){el._overCap=over;el.classList.toggle('overCap',over);}
     const sel=S.aimUid===uid;
     if(force||el._sel!==sel){el._sel=sel;el.classList.toggle('sel',sel);}
     el.querySelectorAll('.hcCost b[data-k]').forEach(b=>{
@@ -147,9 +149,21 @@ function syncHand(force){
   });
   setTxt(UI.drawN,DECK.draw.length);setTxt(UI.discN,DECK.discard.length);
   setTxt(UI.handN,DECK.hand.length+'/'+DECK.max);setTxt(UI.recN,DECK.recycle+'%');
-  const over=DECK.hand.length>DECK.max;
+  setTxt(UI.handWarn,over?' · 手牌已达上限':'');
+  if(!over)S.overflowWarned=false;
   const chip=UI.handN.parentNode;
   if(chip._over!==over){chip._over=over;chip.classList.toggle('over',over);}
+  if(chip._n!==DECK.hand.length){chip._n=DECK.hand.length;chip.classList.remove('pop');void chip.offsetWidth;chip.classList.add('pop');}
+  if(UI.recycleZone){
+    if(UI.recycleZone._over!==over){
+      UI.recycleZone._over=over;
+      UI.recycleZone.classList.toggle('show',over);
+      UI.recycleZone.setAttribute('aria-hidden',over?'false':'true');
+    }
+    setTxt(UI.recycleBack,DECK.recycle+'%');
+    const armed=over&&!!S.aimUid;
+    if(UI.recycleZone._armed!==armed){UI.recycleZone._armed=armed;UI.recycleZone.classList.toggle('armed',armed);}
+  }
 }
 
 /* ---------------- 出牌 ---------------- */
@@ -206,6 +220,7 @@ function engraveCard(uid,targetSlot){
 }
 function unfillSlot(i){
   if(!Number.isInteger(i)||i<0||i>=(P.sigils||[]).length)return false;
+  if(DECK.hand.length>=handCap()){toast('手牌已达硬上限 '+handCap()+' · 请先回收','warn');sfx('deny');return false;}
   const card=P.sigils.splice(i,1)[0],def=CDEFS[card.id];
   DECK.hand.push(card);
   S.handDirty=true;sfx('ui');
@@ -290,8 +305,6 @@ function applyInstant(def,tx,ty,overflow){
   }else if(def.id==='tactic'){
     const n=drawN(def.draw);floater(P.x,P.y,'抽 '+n+' 张','#c9a8ff',true);
     FX.cast('tactic',P.x,P.y);
-    if(n<def.draw&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
-      offerSwap(Math.min(def.draw-n,DECK.hand.length),'战术重整 · 手牌已满');
   }else if(def.id==='surge'){
     gainMana(P.maxEn-P.en);P.dashCd=0;
     FX.cast('surge',P.x,P.y);
@@ -371,8 +384,6 @@ function applyFuse(def,tx,ty){
   if(def.draw>0){
     const n=drawN(def.draw);
     floater(P.x,P.y,'抽 '+n+' 张',q.c1,true);
-    if(n<def.draw&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
-      offerSwap(Math.min(def.draw-n,DECK.hand.length),'熔铸 · 手牌已满');
   }
   if(def.heal){
     healPlayer(def.heal);
@@ -448,46 +459,76 @@ function confirmSalvage(id,rate){
 function cancelSalvage(){S.pendingSalvage=null;S.mode='play';showOv('removeOv',false);}
 $('rmCancel').addEventListener('click',cancelSalvage);
 
-/* 手牌已满：换牌或跳过 */
-function offerSwap(n,reason){
-  if(n<=0||!DECK.hand.length)return;
-  S.swapLeft=n;S.swapReason=reason||'手牌已满';S.mode='swap';renderSwap();showOv('swapOv',true);sfx('page');
-}
-function renderSwap(){
-  $('swapTitle').textContent='手牌已满';
-  $('swapSub').textContent=`${S.swapReason} · 选择一张手牌弃置并补抽 1 张，或跳过（剩余 ${S.swapLeft} 次）`;
-  const list=$('swapList');list.innerHTML='';
-  DECK.hand.forEach(c=>{
-    const d=CDEFS[c.id];
-    const el=document.createElement('button');
-    el.className='rmItem';
-    el.innerHTML=`<span class="ri" style="color:${d.color}">${svg(d.icon,17)}</span>
-      <span class="rt"><b>${d.name}</b><span>${costStr(d)}</span></span>
-      <span class="rf">弃置<br>补抽</span>`;
-    el.addEventListener('click',()=>doSwap(c.uid));
-    list.appendChild(el);
-  });
-}
-function doSwap(uid){
-  const i=DECK.hand.findIndex(c=>c.uid===uid);if(i<0)return;
-  const cap=DECK.hand.length; // 换牌前手牌数：晨读超额手牌也能补满到原数量
-  if(!DECK.draw.length&&!DECK.discard.length){toast('牌库已空，无法补抽','warn');sfx('deny');return;}
-  const old=DECK.hand.splice(i,1)[0];
-  DECK.discard.push(old);
-  if(!drawOne(cap)){
-    DECK.discard.pop();DECK.hand.splice(i,0,old);
-    toast('补抽失败 · 已保留原手牌','warn');sfx('deny');return;
+/* 超限手牌：永久回收，按当前回收率返还造价。没有弹窗，右下角区域只在超限时出现。 */
+function recycleSparkBurst(zone){
+  if(!zone||reduceMotion||typeof document.createElement!=='function')return;
+  for(let i=0;i<8;i++){
+    const s=document.createElement('i');
+    s.className='rzSpark';
+    s.style.setProperty('--a',(i*45)+'deg');
+    s.style.setProperty('--d',(20+(i%3)*10)+'px');
+    zone.appendChild(s);
+    setTimeout(()=>{if(s.remove)s.remove();},600);
   }
-  S.swapLeft--;S.handDirty=true;
-  puff(P.x,P.y,8,'#57e6ff',1.8,.5,2.5);sfx('swap');
-  if(S.swapLeft>0&&DECK.hand.length)renderSwap();
-  else closeSwap(true);
 }
-function closeSwap(playSfx){
-  showOv('swapOv',false);S.mode='play';S.swapLeft=0;
-  if(playSfx)sfx('ui');
+function flyRecycledCard(src,zone){
+  if(!src||!zone||reduceMotion||typeof src.cloneNode!=='function')return;
+  const a=src.getBoundingClientRect(),b=zone.getBoundingClientRect();
+  const ghost=src.cloneNode(true);
+  ghost.removeAttribute&&ghost.removeAttribute('id');
+  ghost.classList.remove('sel','drag','fuseOK','overCap');
+  ghost.classList.add('recycleFly');
+  ghost.style.left=a.left+'px';ghost.style.top=a.top+'px';
+  ghost.style.width=a.width+'px';ghost.style.height=a.height+'px';
+  ghost.style.setProperty('--dx',(b.left+b.width/2-a.left-a.width/2)+'px');
+  ghost.style.setProperty('--dy',(b.top+b.height/2-a.top-a.height/2)+'px');
+  document.body.appendChild(ghost);
+  const launch=()=>{ghost.classList.add('go');};
+  if(typeof requestAnimationFrame==='function')requestAnimationFrame(launch);else launch();
+  setTimeout(()=>{
+    if(ghost.remove)ghost.remove();
+    recycleSparkBurst(zone);
+  },460);
 }
-$('swapSkip').addEventListener('click',()=>closeSwap(true));
+function recycleHandCard(uid){
+  if(DECK.hand.length<=DECK.max)return false;
+  const i=DECK.hand.findIndex(c=>c.uid===uid);if(i<0)return false;
+  const card=DECK.hand[i],def=CDEFS[card.id],rate=Math.min(REC_CAP,DECK.recycle);
+  const src=document.querySelector?document.querySelector(`.hcard[data-uid="${uid}"]`):null;
+  const zone=UI.recycleZone;
+  flyRecycledCard(src,zone);
+  // 永久离场：不进弃牌堆，牌库总数 -1；按当前回收率返还造价。
+  DECK.hand.splice(i,1);
+  const back=[];
+  for(const k in def.cost){
+    const v=Math.floor(def.cost[k]*rate/100);
+    if(v>0){res[k]+=v;back.push('+'+v+RESNAME[k]);floater(P.x,P.y,'+'+v+RESNAME[k],RESCOL[k]);}
+  }
+  refreshRes();
+  S.aimUid=null;S.handDirty=true;renderHand();
+  FX.cast('salvage',P.x,P.y,{tier:rate});
+  sfx('salvage');
+  toast('已回收 '+def.name+(back.length?' · '+back.join(' '):' · 无返还'),'good');
+  return true;
+}
+function recycleSelected(){
+  if(DECK.hand.length<=DECK.max)return;
+  if(!S.aimUid){toast('先选中一张手牌，再点回收区','warn');sfx('deny');return;}
+  recycleHandCard(S.aimUid);
+}
+function markRecycleHover(x,y){
+  const z=UI.recycleZone;if(!z||!z.classList.contains('show'))return;
+  const el=document.elementFromPoint?document.elementFromPoint(x,y):null;
+  z.classList.toggle('dragOver',!!(el&&el.closest&&el.closest('#recycleZone')));
+}
+(function bindRecycleZone(){
+  const z=$('recycleZone');if(!z)return;
+  z.addEventListener('click',recycleSelected);
+  z.addEventListener('keydown',e=>{
+    if(S.mode!=='play')return;
+    if(e.key==='enter'||e.key===' '){e.preventDefault();if(e.stopPropagation)e.stopPropagation();recycleSelected();}
+  });
+})();
 
 /* ---------------- 粒子 ---------------- */
 const partPool=[];

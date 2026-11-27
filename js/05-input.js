@@ -63,11 +63,6 @@ addEventListener('keydown',e=>{
     else if(k>='1'&&k<='9'){const b=$('rmList').children[+k-1];if(b&&b.click)b.click();}
     return;
   }
-  if(S.mode==='swap'){
-    if(k==='escape')closeSwap(true);
-    else if(k>='1'&&k<='9'){const b=$('swapList').children[+k-1];if(b&&b.click)b.click();}
-    return;
-  }
   if(S.mode==='play'){
     const hi=HAND_KEYS.indexOf(k);
     if(hi>=0&&DECK.hand[hi])selectCard(DECK.hand[hi].uid);
@@ -116,7 +111,7 @@ addEventListener('pointermove',e=>{
     if(!S.dragMoved&&Math.hypot(mouseX-S.dragStart[0],mouseY-S.dragStart[1])>7){
       S.dragMoved=true;showDragCard(S.dragUid);
     }
-    if(S.dragMoved)moveDragCard(mouseX,mouseY);
+    if(S.dragMoved){moveDragCard(mouseX,mouseY);markRecycleHover(mouseX,mouseY);}
   }
 },{passive:true});
 cv.addEventListener('pointerdown',e=>{
@@ -148,10 +143,12 @@ addEventListener('pointerup',e=>{
   const overCanvas=hit===cv||(hit&&hit.closest&&!!hit.closest('#weaponHud'));
   const cardEl=hit&&hit.closest?hit.closest('.hcard'):null;
   const overUid=cardEl&&cardEl.dataset&&cardEl.dataset.uid!==undefined?+cardEl.dataset.uid:0;
+  const overRecycle=!!(hit&&hit.closest&&hit.closest('#recycleZone'));
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
   endDrag();
   if(S.mode!=='play')return;
   if(moved){
+    if(overRecycle){recycleHandCard(uid);return;}
     if(overUid&&overUid!==uid){tryFuse(uid,overUid);return;}
     if(overSlots)engraveCard(uid,targetSlot);
     else if(overCanvas){updateMouseWorld();tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}

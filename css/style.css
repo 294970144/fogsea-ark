@@ -181,8 +181,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .pileChip svg{width:12px;height:12px}
 .pileChip.draw{color:var(--mist)} .pileChip.disc{color:var(--dim2)}
 .pileChip.limit{color:var(--amber);border-color:rgba(255,180,84,.4)}
-.pileChip.limit.over{color:#fff;border-color:var(--cyan);background:rgba(87,230,255,.16);box-shadow:0 0 12px rgba(87,230,255,.3)}
-.pileChip.limit.over b{color:var(--cyan)}
+.pileChip.limit b{display:inline-block}
+.pileChip.limit em{font-style:normal;font-size:10px;font-weight:900;color:var(--danger);letter-spacing:.4px}
+.pileChip.limit.over{color:#fff;border-color:rgba(255,77,109,.75);background:rgba(255,77,109,.16);box-shadow:0 0 14px rgba(255,77,109,.32)}
+.pileChip.limit.over b{color:var(--danger)}
+.pileChip.limit.pop b{animation:numPop .36s cubic-bezier(.2,.8,.2,1)}
+@keyframes numPop{0%{transform:scale(.6)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
 .pileChip.rec{color:var(--leaf);border-color:rgba(111,224,138,.35)}
 #repairBtn{display:none;align-items:center;gap:6px;padding:4px 13px;border-radius:14px;font-weight:900;font-size:11.5px;
   background:linear-gradient(135deg,rgba(255,180,84,.2),rgba(255,138,61,.2));border:1px solid var(--amber);color:var(--amber);
@@ -190,14 +194,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 #repairBtn.show{display:flex}
 @keyframes repairGlow{to{box-shadow:0 0 16px rgba(255,180,84,.5)}}
 #handRow{position:relative;width:100%;height:calc(var(--ch) + 12px);margin-top:22px;pointer-events:none}
-.hcard{position:absolute;bottom:0;width:var(--cw);height:var(--ch);border-radius:10px;pointer-events:auto;
-  background:linear-gradient(168deg,rgba(17,40,55,.97),rgba(8,20,29,.97));
-  border:1.5px solid var(--line2);padding:7px 8px 6px;display:flex;flex-direction:column;align-items:stretch;
+.hcard{position:absolute;bottom:0;width:var(--cw);height:var(--ch);border-radius:12px;pointer-events:auto;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--el,#8fa9b8) 20%,#0b1a28),#07141f 66%);
+  border:1.5px solid color-mix(in srgb,var(--el,#8fa9b8) 34%,var(--line2));
   transform:translateY(var(--ty,0px)) rotate(var(--rot,0deg));transform-origin:bottom center;
   transition:transform .16s cubic-bezier(.2,.8,.2,1),box-shadow .16s,border-color .16s,opacity .16s;
   z-index:var(--z,1);overflow:hidden;text-align:left;box-shadow:0 6px 18px rgba(0,0,0,.5)}
-.hcard::after{content:'';position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(160deg,rgba(255,255,255,.07),transparent 42%)}
 /* 档位描边放在 :hover 之前，保证悬停时仍是抬起的阴影（同特异度，后到者胜） */
 .hcard[data-q="2"]{border-color:rgba(87,230,255,.66);
   box-shadow:0 0 0 1px rgba(180,140,255,.30),0 6px 18px rgba(0,0,0,.5)}
@@ -209,25 +211,35 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .hcard.drag{opacity:.28}
 .hcard.off{filter:grayscale(.65) brightness(.62)}
 .hcard.noNight{filter:grayscale(.8) brightness(.5)}
-.hcMain{display:flex;flex:1;align-items:center;gap:5px;min-width:0}
-.hcCost{display:flex;gap:2px;align-items:center;justify-content:flex-end;min-height:18px;white-space:nowrap}
+.hcard.overCap::after{content:'';position:absolute;inset:-2px;border-radius:13px;pointer-events:none;z-index:8;
+  border:2px solid rgba(255,77,109,.95);box-shadow:0 0 16px rgba(255,77,109,.55),inset 0 0 12px rgba(255,77,109,.3);
+  animation:capBreath 1.25s ease-in-out infinite alternate}
+@keyframes capBreath{from{opacity:.45;transform:scale(.995)}to{opacity:1;transform:scale(1.012)}}
+.hcard:not(.drag){animation:handIn .22s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i,0)*24ms)}
+@keyframes handIn{from{opacity:0;transform:translateY(22px) rotate(var(--rot,0deg)) scale(.9)}to{opacity:1}}
+.recycleFly{position:fixed!important;z-index:120;pointer-events:none;margin:0!important;animation:none!important;
+  transform-origin:center center;transition:transform .42s cubic-bezier(.2,.8,.2,1),opacity .42s ease,filter .42s ease;
+  filter:drop-shadow(0 12px 26px rgba(0,0,0,.75))}
+.recycleFly.go{transform:translate(var(--dx),var(--dy)) scale(.06) rotate(28deg);opacity:0;filter:brightness(2.4) blur(5px)}
+.hcCost{position:absolute;top:9px;right:8px;display:flex;gap:2px;align-items:center;justify-content:flex-end;
+  min-height:18px;white-space:nowrap;z-index:2}
 .hcCost b{display:flex;align-items:center;gap:2px;font-size:12px;font-weight:900;padding:1px 3px;border-radius:7px;
   background:rgba(7,15,22,.8);border:1px solid var(--line)}
 .hcCost b svg{width:12px;height:12px;flex:none}
 .hcCost b.no{color:var(--danger);border-color:rgba(255,77,109,.55)}
 .hcCost b.mana{background:rgba(95,107,255,.16);border-color:rgba(120,150,255,.5)}
 .hcCost b.free{color:var(--leaf);border-color:rgba(111,224,138,.4)}
-.hcArt{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;flex:none;
-  border:1px solid currentColor;background:rgba(255,255,255,.05)}
-.hcArt svg{width:22px;height:22px}
-.hcName{flex:1;min-width:0;font-size:14px;font-weight:900;color:var(--text);line-height:1.2;white-space:nowrap;
-  display:flex;align-items:center;gap:3px}
-.hcSigil{display:inline-flex;flex:none;color:var(--amber);opacity:.85}
-.hcSigil svg{width:11px;height:11px}
-.hcDesc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;flex:none;overflow:hidden;
-  font-size:12px;color:var(--dim);line-height:1.4;margin-top:6px}
-.hcHot{position:absolute;top:3px;left:3px;min-width:14px;padding:1px 3px;border-radius:4px;text-align:center;
-  font-size:10px;font-weight:900;line-height:1.2;color:var(--dim2);background:rgba(7,15,22,.82);border:1px solid var(--line)}
+.hcMark{position:absolute;top:38px;left:50%;transform:translateX(-50%);
+  width:104px;height:104px;display:grid;place-items:center;opacity:.24;pointer-events:none;z-index:1}
+.hcMark svg{width:96px;height:96px}
+.hcName{position:absolute;top:94px;left:11px;right:9px;font-size:13px;font-weight:900;color:var(--text);
+  line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:3;
+  text-shadow:0 2px 8px rgba(4,10,16,.95),0 0 3px rgba(4,10,16,.9)}
+.hcDesc{position:absolute;left:11px;right:10px;bottom:11px;display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden;font-size:11px;color:var(--dim);line-height:1.4;
+  border-left:2px solid var(--el,#8fa9b8);padding-left:7px;z-index:2}
+.hcHot{position:absolute;top:4px;left:5px;min-width:14px;padding:1px 3px;border-radius:4px;text-align:center;
+  font-size:10px;font-weight:900;line-height:1.2;color:var(--dim2);background:rgba(7,15,22,.82);border:1px solid var(--line);z-index:3}
 /* ---- 卡牌品质：3 档双色（普通白绿 / 稀有蓝紫 / 史诗橙红），渐变底色由 cardInner 内联注入 ---- */
 .hcQ{font-style:normal;display:inline-flex;align-items:center;margin-right:auto;
   font-size:10px;font-weight:900;line-height:1.3;letter-spacing:.6px;padding:1px 5px;border-radius:6px}
@@ -257,6 +269,27 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 @keyframes coreCrit{to{border-color:var(--danger);box-shadow:0 0 18px rgba(255,77,109,.5)}}
 #mmWrap{padding:6px;border-radius:12px}
 #mm{display:block;width:124px;height:124px;border-radius:8px}
+#recycleZone{position:absolute;inset:-8px;z-index:12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  border:2px dashed rgba(255,77,109,.85);border-radius:18px;text-align:center;
+  background:radial-gradient(circle at 50% 48%,rgba(255,77,109,.16),rgba(7,15,22,.94) 72%);
+  box-shadow:0 0 22px rgba(255,77,109,.22),inset 0 0 26px rgba(255,77,109,.12);
+  opacity:0;visibility:hidden;pointer-events:none;transform:translateY(12px) scale(.96);
+  transition:opacity .22s,transform .32s cubic-bezier(.2,.8,.2,1);overflow:hidden}
+#recycleZone.show{opacity:1;visibility:visible;pointer-events:auto;transform:none;animation:zoneIn .34s cubic-bezier(.2,.8,.2,1)}
+#recycleZone:not(.show){visibility:hidden;pointer-events:none}
+#recycleZone.dragOver,#recycleZone.armed{border-color:var(--amber);box-shadow:0 0 28px rgba(255,180,84,.45),inset 0 0 24px rgba(255,180,84,.18)}
+#recycleZone.dragOver{transform:scale(1.04)}
+@keyframes zoneIn{from{opacity:0;transform:translateY(18px) scale(.92)}65%{opacity:1;transform:translateY(-2px) scale(1.02)}to{opacity:1;transform:none}}
+.recycleZone .rzHead{display:flex;align-items:center;gap:8px;font-family:var(--disp);letter-spacing:3px;color:#fff}
+.recycleZone .rzHead svg{width:18px;height:18px;color:var(--danger);animation:rzIcon 1.4s ease-in-out infinite alternate}
+.recycleZone .rzBack{font-size:11px;font-weight:900;color:var(--amber);letter-spacing:1px}
+.recycleZone .rzHint{font-size:9.5px;font-weight:700;color:var(--dim2);letter-spacing:.5px}
+#recycleZone.armed .rzHint{color:var(--amber)}
+@keyframes rzIcon{to{transform:rotate(-12deg) scale(1.12);filter:drop-shadow(0 0 8px rgba(255,77,109,.8))}}
+.rzSpark{position:absolute;left:50%;top:50%;width:4px;height:4px;border-radius:50%;background:var(--danger);
+  box-shadow:0 0 8px var(--danger);pointer-events:none;animation:rzSpark .5s ease-out forwards}
+@keyframes rzSpark{from{transform:rotate(var(--a)) translateX(6px) scale(1);opacity:1}
+  to{transform:rotate(var(--a)) translateX(var(--d)) scale(.2);opacity:0}}
 
 .overlay{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;visibility:hidden;transition:opacity .3s,visibility 0s .3s}
 .overlay.show{opacity:1;pointer-events:auto;visibility:visible;transition:opacity .3s}
@@ -416,9 +449,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .rmHead{padding:15px 20px;border-bottom:1px solid var(--line);text-align:center}
 .rmHead h2{font-family:var(--disp);font-size:28px;letter-spacing:4px;color:var(--leaf)}
 .rmHead p{font-size:12px;color:var(--dim);margin-top:3px}
-#rmList,#swapList{flex:1;overflow-y:auto;padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:9px}
-#swapList .rmItem:hover{border-color:var(--cyan);box-shadow:0 8px 20px rgba(87,230,255,.2)}
-#swapList .rmItem .rf{color:var(--cyan)}
+#rmList{flex:1;overflow-y:auto;padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:9px}
 .rmItem{display:flex;gap:9px;align-items:center;padding:9px 10px;border-radius:11px;text-align:left;
   background:rgba(7,15,22,.62);border:1px solid var(--line);transition:.15s}
 .rmItem:hover{border-color:var(--danger);transform:translateY(-2px);box-shadow:0 8px 20px rgba(255,77,109,.2)}
@@ -716,7 +747,8 @@ body.touch .kb-hint{display:none}
   #cxList{border-right:none;border-bottom:1px solid var(--line)}
   #cxDetail{padding:13px}.cxVis{width:112px;height:112px}
   #cxName{font-size:24px}#cxStats{grid-template-columns:1fr 1fr}
-  #rmList,#swapList{grid-template-columns:1fr 1fr;padding:10px}
+  #rmList{grid-template-columns:1fr 1fr;padding:10px}
+  #recycleZone .rzHead svg{width:14px;height:14px}
 }
 @media (max-width:640px){
   .weaponDrop{padding:8px}

@@ -18,7 +18,8 @@ function cacheUI(){
   UI.coreBar=$('coreBar');UI.coreFill=UI.coreBar.firstElementChild;UI.coreTxt=$('coreTxt');UI.coreWrap=$('coreWrap');
   UI.repair=$('repairBtn');UI.toasts=$('toasts');UI.banner=$('banner');
   UI.bannerH=UI.banner.querySelector('h2');UI.bannerP=UI.banner.querySelector('p');
-  UI.drawN=$('drawN');UI.discN=$('discN');UI.handN=$('handN');UI.recN=$('recN');
+  UI.drawN=$('drawN');UI.discN=$('discN');UI.handN=$('handN');UI.handWarn=$('handWarn');
+  UI.recN=$('recN');UI.recycleZone=$('recycleZone');UI.recycleBack=$('recycleBack');
 }
 function setTxt(el,v){if(el&&el._t!==v){el._t=v;el.textContent=v;}}
 function setBar(el,fill,r){const v=clamp(r,0,1).toFixed(3);if(el._v!==v){el._v=v;fill.style.transform=`scaleX(${v})`;}}
@@ -125,7 +126,7 @@ function refreshRes(bump){
 }
 function toast(msg,cls=''){
   const wrap=UI.toasts;
-  while(wrap.children.length>=2)wrap.removeChild(wrap.firstChild);
+  while(wrap.children.length>=2)wrap.removeChild(wrap.firstElementChild);
   const el=document.createElement('div');el.className='toast '+cls;el.textContent=msg;
   wrap.appendChild(el);setTimeout(()=>{if(el.parentNode)el.remove();},2600);
 }

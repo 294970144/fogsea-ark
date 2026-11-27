@@ -346,6 +346,7 @@ function pickFoeType(){
   return 'crawler';
 }
 function startNight(){
+  if(overflowBlock('入夜')){S.timeLeft=0;return;}
   S.phase='night';S.nightKilled=0;S.spawnT=1.4;
   const mult=DIFFS[save.diff],isBossNight=S.day%MAX_NIGHT===0;
   S.nightTotal=Math.round((6+4.2*effDay(S.day))*mult.count);
@@ -379,6 +380,7 @@ function enterNextDay(){
 function dawn(){
   if(S.mode!=='play')return;
   if(core.hp<=0){loseRun();return;}
+  if(overflowBlock('进入黎明'))return;
   S.stats.nights=S.day;
   if(!S.endless&&S.day>=MAX_NIGHT){winRun();return;}
   enterNextDay();
