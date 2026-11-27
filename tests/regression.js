@@ -1632,6 +1632,35 @@ testCase('R35_formation_sigil_scoped_to_left_neighbour', () => {
   assert.ok(out.desc.includes('左侧相邻'), '阵型文案要写明只修饰左侧相邻法术');
 });
 
+testCase('R36_sigils_apply_to_resource_nodes', () => {
+  const env = makeEnv();
+  const out = j(env)(`(()=>{
+    save.weapon='flame';initRun();S.mode='play';spellFxTime=__realSpellFxTime;
+    const w=weaponDef(P.weapon);
+    P.sigils=Array.from({length:w.slots},()=>null);
+    P.sigils[0]=mkCard('sig_flame');P.sigils[1]=mkCard('scatter');
+    P.crit=0;P.atkSpd=1;P.cls='mage';P.maxEn=200;P.en=200;
+    foes.length=0;nodes.length=0;spellShots.length=0;weaponRepeats.length=0;
+    const tree={type:'tree',x:P.x+2,y:P.y,hp:99,max:99,alive:true,shake:0,sway:0,s:1};
+    nodes.push(tree);
+    const angs=()=>spellShots.map(s=>+(Math.atan2(s.vy,s.vx)*180/Math.PI).toFixed(1));
+    P.atkCd=0;autoAttack();
+    const scatter={shots:spellShots.length,angs:angs(),onNode:spellShots.every(s=>s.ctx&&s.ctx.node===tree)};
+    // 二重：打节点同样入队，且补发时仍然锁定资源
+    P.sigils[1]=mkCard('burst');spellShots.length=0;weaponRepeats.length=0;P.atkCd=0;
+    autoAttack();
+    const rep={shots:spellShots.length,queued:weaponRepeats.length,res:!!(weaponRepeats[0]&&weaponRepeats[0].resource)};
+    S.combatT+=.2;updateWeaponRepeats();
+    const after={queued:weaponRepeats.length,shots:spellShots.length,onNode:spellShots.every(s=>s.ctx&&s.ctx.node===tree)};
+    return JSON.stringify({scatter,rep,after});
+  })()`);
+  // 打资源节点也分裂：2 条弹道、±45°，且都瞄准这棵树
+  assert.deepEqual(out.scatter, { shots: 2, angs: [-45, 45], onNode: true });
+  // 二重同样入队，补发仍是资源目标
+  assert.deepEqual(out.rep, { shots: 1, queued: 1, res: true });
+  assert.deepEqual(out.after, { queued: 0, shots: 2, onNode: true });
+});
+
 testCase('R33_starter_deck_scale', () => {
   const env = makeEnv();
   const out = j(env)(`(()=>{

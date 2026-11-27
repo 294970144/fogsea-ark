@@ -127,13 +127,19 @@ function nextWeaponSpell(){
   return c?c.def:null;
 }
 let sigilEchoing=false;
-function sigilEcho(w,tgt,cast){
+function sigilEcho(w,tgt,cast,opts){
   if(sigilEchoing)return;
   const m=sigilMods();
   if(m.echo<=0||Math.random()>=m.echo)return;
   sigilEchoing=true;
+  const resource=opts&&opts.resource;
   const echo={def:cast&&cast.def,slot:cast&&cast.slot!=null?cast.slot:-1,last:true,n:1};
   try{
+    if(resource){
+      const node=tgt&&tgt.alive?tgt:nearestWeaponNode(w);
+      if(node)autoCastWeapon(w,node,echo,{echo:true,resource:node});
+      return;
+    }
     if(tgt&&!tgt.dead){if(w.attack==='spell')autoCastWeapon(w,tgt,echo,{echo:true});else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x),{echo:true});return;}
     let near=null,bd=1e9;
     forFoes(P.x,P.y,weaponAttackRange(w)+1.2,f=>{
@@ -172,16 +178,9 @@ function autoAttack(){
   if(w.attack==='melee')swing(ang);
   else {
     const cast=nextWeaponCast();if(!cast)return;
-    const def=cast.def;
-    setWeaponCd(w,cast);P.face=ang;
-    const tx=tgt.x,ty=tgt.y;
-    const shot=queueSpellHit(def,tx,ty,{mode:'weapon',node:tgt,resolve:(d,x,y)=>{
-      const node=nodes.find(n=>n===tgt&&n.alive);
-      if(!node)return; // 树已倒下即打空
-      if(d.spreadFire&&node.type==='tree')spreadFire(x,y,d.radius,[]);
-      hitNode(node);
-    }});
-    spellFx(def,tx,ty,def.elem,[],shot);
+    // 打资源节点与打敌人走同一条施放通路，阵型/二重/回响一律生效
+    P.face=ang;
+    autoCastWeapon(w,tgt,cast,{resource:tgt});
   }
 }
 /* 二重补发的错峰队列：瞬态，不入存档；原目标已死就换最近的敌人，换不到就丢弃这一发。 */
@@ -195,31 +194,53 @@ function nearestWeaponFoe(w){
   });
   return tgt;
 }
+function nearestWeaponNode(w){
+  const range=weaponAttackRange(w);let tgt=null,bd=1e9;
+  for(const n of nodes){
+    if(!n.alive)continue;
+    const d=dist(P.x,P.y,n.x,n.y);
+    if(d<=range+.4&&d<bd){bd=d;tgt=n;}
+  }
+  return tgt;
+}
 function updateWeaponRepeats(){
   if(!weaponRepeats.length)return;
   for(let i=weaponRepeats.length-1;i>=0;i--){
     const r=weaponRepeats[i];
     if(r.at>S.combatT)continue;
     weaponRepeats.splice(i,1);
-    const tgt=r.tgt&&!r.tgt.dead?r.tgt:nearestWeaponFoe(r.w);
-    if(tgt)fireWeaponCast(r.w,tgt,r.cast,r.mul);
+    const tgt=r.resource
+      ?(r.tgt&&r.tgt.alive?r.tgt:nearestWeaponNode(r.w))
+      :(r.tgt&&!r.tgt.dead?r.tgt:nearestWeaponFoe(r.w));
+    if(tgt)fireWeaponCast(r.w,tgt,r.cast,r.mul,r.resource?tgt:null);
   }
 }
 function autoCastWeapon(w,tgt,cast,opts){
   cast=cast||nextWeaponCast();if(!cast)return;
-  const echo=!!(opts&&opts.echo);
+  const echo=!!(opts&&opts.echo),resource=(opts&&opts.resource)||null;
   P.face=Math.atan2(tgt.y-P.y,tgt.x-P.x);
-  if(echo){fireWeaponCast(w,tgt,cast,1);return;}
+  if(echo){fireWeaponCast(w,tgt,cast,1,resource);return;}
   setWeaponCd(w,cast);
-  fireWeaponCast(w,tgt,cast,1);
+  fireWeaponCast(w,tgt,cast,1,resource);
   // 二重：只把刚施放的这个法术错峰再打一遍，不跨槽取下一个法术
   const rp=repeatOf(cast.slot);
   if(rp)for(let i=1;i<rp.n;i++)
-    weaponRepeats.push({w,cast,tgt,mul:rp.dmgB,at:S.combatT+(TUNE.weapon.repeatDelay||0)*i});
-  sigilEcho(w,tgt,cast);
+    weaponRepeats.push({w,cast,tgt,mul:rp.dmgB,at:S.combatT+(TUNE.weapon.repeatDelay||0)*i,resource});
+  sigilEcho(w,tgt,cast,{resource});
 }
-/* 单次法术出手：阵型刻印让同一发分裂多路，复制体按 dmgB 衰减；每路各自走弹道与结算。 */
-function fireWeaponCast(w,tgt,cast,mul){
+/* 落点附近的资源节点：阵型把弹道散开后，各发优先打自己方向上的树/矿。 */
+function nodeNear(x,y){
+  let best=null,bd=1e9;
+  for(const n of nodes){
+    if(!n.alive)continue;
+    const d=dist(x,y,n.x,n.y);
+    if(d<=.9&&d<bd){bd=d;best=n;}
+  }
+  return best;
+}
+/* 单次法术出手：阵型刻印让同一发分裂多路，复制体按 dmgB 衰减；每路各自走弹道与结算。
+   resource 非空时打的是资源节点：每发按落点找最近的存活节点，找不到就落回原节点。 */
+function fireWeaponCast(w,tgt,cast,mul,resource){
   const def=cast.def,f=formationOf(cast.slot);
   const base=Math.atan2(tgt.y-P.y,tgt.x-P.x);
   const d=Math.max(.6,dist(P.x,P.y,tgt.x,tgt.y));
@@ -228,6 +249,16 @@ function fireWeaponCast(w,tgt,cast,mul){
     const off=(i-(copies-1)/2)*(f?f.spread:0)*Math.PI/180;
     const tx=P.x+Math.cos(base+off)*d,ty=P.y+Math.sin(base+off)*d;
     const k=(i===0?1:(f?f.dmgB:1))*mul;
+    if(resource){
+      const node=nodeNear(tx,ty)||resource;
+      const shot=queueSpellHit(def,tx,ty,{mode:'weapon',node,resolve:(dd,x,y)=>{
+        if(!node.alive)return;                       // 树/矿已采完即打空
+        if(dd.spreadFire&&node.type==='tree')spreadFire(x,y,dd.radius,[]);
+        hitNode(node);
+      }});
+      spellFx(def,tx,ty,def.elem,[],shot);
+      continue;
+    }
     const targets=def.shape==='single'?[tgt]:spellTargets(def,tx,ty);
     // 投掷物有真实弹道，命中位置才是结算点；非投掷物仍按落点重新索敌（目标死了或跑出范围即打空）。
     const shot=queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(dd,x,y,foe)=>weaponSpellHit(dd,x,y,foe,tgt,k)});
