@@ -124,6 +124,7 @@ addEventListener('pointerup',e=>{
   if(!S.dragUid||e.pointerId!==S.dragPointerId)return;
   const uid=S.dragUid,moved=S.dragMoved;
   const hit=document.elementFromPoint(e.clientX,e.clientY);
+  const overSlots=!!(hit&&hit.closest&&hit.closest('#weaponSlots'));
   const overCanvas=hit===cv||(hit&&hit.closest&&!!hit.closest('#weaponHud'));
   const cardEl=hit&&hit.closest?hit.closest('.hcard'):null;
   const overUid=cardEl&&cardEl.dataset&&cardEl.dataset.uid!==undefined?+cardEl.dataset.uid:0;
@@ -132,7 +133,8 @@ addEventListener('pointerup',e=>{
   if(S.mode!=='play')return;
   if(moved){
     if(overUid&&overUid!==uid){tryFuse(uid,overUid);return;}
-    if(overCanvas){updateMouseWorld();tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}
+    if(overSlots)engraveCard(uid);
+    else if(overCanvas){updateMouseWorld();tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}
     else selectCard(uid);
   }else{
     if(S.aimUid===uid)clearAim();else selectCard(uid);

@@ -100,6 +100,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wslot.filled .wslotName{color:currentColor;opacity:.9}
 .wslot:hover .wslotBox{transform:translateY(-2px) scale(1.05)}
+#weaponSlotsRow.noSpell .wslot.empty .wslotBox{border-color:rgba(255,77,109,.5);background:rgba(255,77,109,.07)}
+.wslot.filled{cursor:pointer}
 
 #topRight{position:absolute;top:14px;right:14px;display:flex;gap:8px;pointer-events:auto}
 .iconBtn{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;

@@ -94,7 +94,7 @@ function endDrag(){
   S.dragUid=null;S.dragMoved=false;S.dragStart=[0,0];S.dragPointerId=null;dragBuildType=null;
   $('dragCard').style.display='none';
   if(uid){const h=document.querySelector(`.hcard[data-uid="${uid}"]`);if(h)h.classList.remove('drag');}
-  clearFuseMarks();
+  if(typeof clearFuseMarks==='function')clearFuseMarks();
 }
 function selectCard(uid){
   const c=handCard(uid);if(!c)return;
@@ -160,9 +160,34 @@ function placeCheck(def,tx,ty){
   }
   return{ok:true,msg:''};
 }
+/* 拖到武器槽面板：带刻印标签的卡从手牌消耗进弃牌堆，写入槽位。
+   法术刻印决定自动攻击，数值刻印提供加成；剑也能装但不触发法术轮发。 */
+function engraveCard(uid){
+  const idx=DECK.hand.findIndex(c=>c.uid===uid);if(idx<0)return false;
+  const card=DECK.hand[idx],def=CDEFS[card.id];
+  if(!def||!def.sigil){toast('此卡没有刻印标签','warn');sfx('deny');return false;}
+  const w=weaponDef(P.weapon),cap=w.slots||0;
+  if((P.sigils||[]).length>=cap){toast('武器槽位已满','warn');sfx('deny');return false;}
+  DECK.hand.splice(idx,1);DECK.discard.push(card);
+  P.sigils.push(card.id);
+  if(S.aimUid===uid)S.aimUid=null;
+  S.handDirty=true;bumpSeen('sigil',card.id);
+  toast('已刻印 '+def.name,'good');sfx('level');
+  return true;
+}
+function unfillSlot(i){
+  if(!Number.isInteger(i)||i<0||i>=(P.sigils||[]).length)return false;
+  const id=P.sigils[i],def=CDEFS[id];
+  P.sigils.splice(i,1);
+  if(def)DECK.discard.push(mkCard(id));
+  S.handDirty=true;sfx('ui');
+  toast('卸下 '+(def?def.name:id),'good');
+  return true;
+}
 function tryPlayAt(uid,wx,wy){
   const c=handCard(uid);if(!c)return false;
   const def=CDEFS[c.id];if(!def||def.weaponAttack)return false;
+  if(def.sigilOnly){toast('数值刻印只能装入武器槽位','warn');sfx('deny');return false;}
   if(def.target==='self'||def.target==='pick')return playCard(uid,wx,wy);
   const tx=def.kind==='build'?Math.floor(wx)+.5:wx;
   const ty=def.kind==='build'?Math.floor(wy)+.5:wy;
@@ -171,7 +196,7 @@ function tryPlayAt(uid,wx,wy){
 function playCard(uid,tx,ty){
   const idx=DECK.hand.findIndex(c=>c.uid===uid);if(idx<0)return false;
   const card=DECK.hand[idx],def=CDEFS[card.id];
-  if(!def||def.weaponAttack)return false;
+  if(!def||def.weaponAttack||def.sigilOnly)return false;
   if(def.target==='pick'){beginSalvage(card);return false;}
   const chk=placeCheck(def,tx,ty);
   if(!chk.ok){toast(chk.msg,'warn');sfx('deny');return false;}

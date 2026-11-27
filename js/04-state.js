@@ -18,14 +18,14 @@ const effDay=day=>day<=MAX_NIGHT?day:MAX_NIGHT+5*(1-Math.exp(-(day-MAX_NIGHT)/14
 const dayScale=day=>1+.13*(effDay(day)-1);
 
 function resetPlayer(){
-  const b=save.bless;
+  const b=save.bless,w=weaponDef(save.weapon);
   Object.assign(P,{x:CEN+2.2,y:CEN+.5,hp:100+15*b.iron,maxHp:100+15*b.iron,en:100,maxEn:100,
     lvl:1,xp:0,next:24,dmg:TUNE.player.baseDmg*(1+.08*b.blade),atkCd:0,atkSpd:1,range:TUNE.player.baseRange,spd:4.3,face:0,moving:false,
     weapon:normalizeWeaponId(save.weapon),
     dashT:0,dashCd:0,dashCdMax:1.6,dashDx:0,dashDy:0,ifr:0,downed:false,respT:0,
     crit:0,ls:0,thorns:0,wave:0,magnet:2.3,gather:1,towerMult:1,novaMult:1,regen:1,bonusDraw:0,
     cls:null,shield:0,regenAcc:0,enRegenFlat:14,spellCd:0,charge:0,chargeAcc:0,arcCharge:0,arcDiscount:false,
-    sigils:[],
+    sigils:(w.startSigils||[]).slice(),sigCast:0,
     resoElem:null,resoN:0,stormCount:0,empowerN:0,empowerT:0,nirvanaUsed:false,
     aff:{fire:0,frost:0,arcane:0,lightning:0},
     stacks:{},anim:0,hurtT:0,swingT:0});
@@ -45,10 +45,14 @@ function initRun(){
   DECK.draw=[];DECK.hand=[];DECK.discard=[];DECK.max=5;DECK.recycle=0;DECK.uid=1;
   const starter=['wall','wall','wall','tower','tower','totem','rain','spring','tactic'];
   starter.forEach(id=>DECK.draw.push(mkCard(id)));
+  // 法杖路线：牌库额外放 2 张本武器法术刻印，开局保底 1 张入手（槽里那枚是预装，独立于牌库）
+  const startSigils=P.sigils||[];
+  startSigils.forEach(id=>{for(let i=0;i<2;i++)DECK.draw.push(mkCard(id));});
   shuffle(DECK.draw);
-  // 开局保底：手中必有木墙与箭塔
+  // 开局保底：手中必有木墙与箭塔，法杖路线再保底 1 张法术刻印
   const take=id=>{const i=DECK.draw.findIndex(c=>c.id===id);if(i>=0)DECK.hand.push(DECK.draw.splice(i,1)[0]);};
   take('wall');take('tower');
+  startSigils.forEach(take);
   while(DECK.hand.length<DECK.max&&DECK.draw.length)DECK.hand.push(DECK.draw.pop());
   cam.x=P.x;cam.y=P.y;cam.shake=0;
   UI.toasts.innerHTML='';
@@ -141,7 +145,7 @@ function captureSnapshot(){
   if(!Array.isArray(sd.dawnCards))sd.dawnCards=[];
   if(!sd.stats)sd.stats=S.stats?_clone(S.stats):{};
   const pd=_pickFields(P,Object.keys(P));
-  pd.sigils=Array.isArray(pd.sigils)?pd.sigils.filter(id=>SIGILS[id]):[];
+  pd.sigils=Array.isArray(pd.sigils)?pd.sigils.filter(id=>isSigilId(id)):[];
   const cards=a=>a.map(c=>({uid:c.uid,id:c.id})).slice(0,240);
   const plain=(a,cap)=>a.map(o=>_clone(o)).slice(0,cap);
   return _clone({

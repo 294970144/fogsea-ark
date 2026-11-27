@@ -465,7 +465,11 @@ cacheUI();resize();setMuted(save.muted);
 $('btnSpeed').textContent='1×';
 $('btnNight').addEventListener('click',()=>{auInit();skipToNight();});
 $('weaponHud').addEventListener('click',()=>{if(S.mode==='play')toggleWeaponSlots();});
-$('weaponSlots').addEventListener('click',e=>e.stopPropagation());
+$('weaponSlots').addEventListener('click',e=>{
+  e.stopPropagation();
+  const slot=e.target.closest&&e.target.closest('.wslot.filled');
+  if(slot&&S.mode==='play'&&unfillSlot(+slot.dataset.slot))toggleWeaponSlots();
+});
 $('btnPause').addEventListener('click',()=>{auInit();S.mode==='play'?pauseGame():(S.mode==='pause'&&!codexOpen&&resumeGame());});
 $('btnMute').addEventListener('click',()=>{auInit();setMuted(!save.muted);sfx('ui');});
 $('btnSpeed').addEventListener('click',()=>{

@@ -31,12 +31,16 @@ function renderWeaponSlots(){
   const list=P.sigils||[];
   let html='';
   for(let i=0;i<cap;i++){
-    const id=list[i],s=id&&SIGILS[id];
-    html+=s?`<span class="wslot filled" style="color:${s.color}" title="${s.n} · ${sigilDesc(id)}">
-        <span class="wslotBox">${svg(s.icon,20)}</span><span class="wslotName">${s.short}</span></span>`
+    const id=list[i],m=id&&sigilMeta(id);
+    html+=m?`<span class="wslot filled" data-slot="${i}" style="color:${m.color}" title="${m.n} · ${sigilDesc(id)} · 点击卸下">
+        <span class="wslotBox">${svg(m.icon,20)}</span><span class="wslotName">${m.short}</span></span>`
            :'<span class="wslot empty"><span class="wslotBox"></span></span>';
   }
   box.innerHTML=html;
+  const spellCount=weaponSpells().length;
+  const warn=weaponDef(P.weapon).attack==='spell'&&!spellCount;
+  box.classList.toggle('noSpell',warn);
+  box.title=warn?'法杖缺少法术刻印 · 拖入法术牌后可攻击':'';
   // 52px 槽 + 6px 沟槽；面板宽 = 行宽 + 左右内边距 32 + 边框 2 + 余量 10（防子像素舍入换行）
   const rowW=cap*52+(cap>0?(cap-1)*6:0);
   UI.weaponHud.style.setProperty('--slotW',Math.max(260,rowW+44)+'px');
@@ -138,7 +142,7 @@ const CX_CATS=[{id:'all',name:'全部'},{id:'role',name:'角色'},{id:'res',name
   {id:'foe',name:'雾裔'},{id:'bless',name:'祝福'},{id:'legacy',name:'传承'},{id:'term',name:'术语'}];
 const foeNow=t=>Math.round(FOES[t].hp*DIFFS[save.diff].hp*dayScale(Math.max(1,S.day)));
 // 刻印摘要：图鉴多处引用同一份持有情况
-const sigilList=()=>{const l=(P.sigils||[]).map(id=>SIGILS[id]?SIGILS[id].short:id);return l.length?l.join(' / '):'无';};
+const sigilList=()=>{const l=(P.sigils||[]).map(id=>{const m=sigilMeta(id);return m?m.short:id;});return l.length?l.join(' / '):'无';};
 const sigilCap=()=>weaponDef(P.weapon).slots||0;
 const CODEX=[
   {id:'keeper',cat:'role',name:'守灯人',icon:'lantern',color:'#ffb454',sprite:'player',
@@ -254,7 +258,7 @@ const CODEX=[
     rel:['dawn','keeper','hand']})),
   ...SIGIL_IDS.map(id=>{const s=SIGILS[id];
     return {id:'s_'+id,cat:'role',name:s.n,icon:s.icon,color:s.color,
-      desc:sigilDesc(id)+'。黎明第三步「铭刻」三选一装入武器槽位，同种最多叠装 '+SIGIL_COPIES+' 份；只强化武器自动攻击，不影响法术牌。',
+      desc:sigilDesc(id)+'。已改为卡牌，从牌库抽到后拖入武器槽位，同种最多叠装 '+SIGIL_COPIES+' 份；纯数值刻印不能拖地释放。',
       tags:sigilTags(s),badge:()=>{const n=(save.seen.sigil||{})[id]||0;return n?'×'+n:'';},
       stats:()=>[['效果',sigilDesc(id)],['叠加上限',SIGIL_COPIES+' 份'],
         ['本局持有',(P.sigils||[]).filter(x=>x===id).length+' 份'],
@@ -280,9 +284,9 @@ const CODEX=[
      ['拆解存世',cardTotal('salvage5')+cardTotal('salvage10')+cardTotal('salvage20')+' 张']],
    rel:['c_salvage5','c_salvage10','c_salvage20']},
   {id:'dawn',cat:'term',name:'黎明回合',icon:'sun',color:'#ffb454',
-   desc:'每次天亮进入三步选择：拾获卡牌、灯芯祝福、武器刻印，各 3 选 1，均可跳过；随后抽满手牌。',
+   desc:'每次天亮进入两步选择：拾获卡牌、灯芯祝福，各 3 选 1，均可跳过；随后抽满手牌。刻印已改为卡牌，从牌库抽到后拖入武器槽位。',
    stats:()=>[['白昼时长',DAY_LEN+' 秒'],['当前日数',S.day],['额外抽牌',P.bonusDraw+' 张'],
-     ['核心自愈',TUNE.core.regen+' /秒'],['刻印池',SIGIL_IDS.length+' 种'],
+     ['核心自愈',TUNE.core.regen+' /秒'],['刻印卡',SIGIL_IDS.length+SIGIL_SPELL_IDS.length+' 种'],
      ['刻印槽位',(P.sigils||[]).length+' / '+sigilCap()]],rel:['hand','deck','b_blade']},
   {id:'tide',cat:'term',name:'雾潮',icon:'fog',color:'#a06bff',
    desc:'夜间敌潮，自岛缘分批刷新。夜晚构筑牌封存，只能打瞬发牌——白天没铺好，晚上就得靠操作。',

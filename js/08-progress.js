@@ -14,21 +14,8 @@ function rollDawnBless(){
     const b=bag[irand(0,bag.length-1)];if(!S.dawnBless.includes(b))S.dawnBless.push(b);
   }
 }
-function rollDawnSigils(){
-  const w=weaponDef(P.weapon),cap=w.slots||0;
-  const owned={};
-  (P.sigils||[]).forEach(id=>owned[id]=(owned[id]||0)+1);
-  const pool=SIGIL_IDS.filter(id=>(owned[id]||0)<SIGIL_COPIES);
-  S.dawnSigils=[];
-  if(!pool.length||(P.sigils||[]).length>=cap)return;
-  const bag=[];
-  pool.forEach(id=>{for(let i=0;i<10;i++)bag.push(SIGILS[id]);});
-  let guard=0;
-  while(S.dawnSigils.length<Math.min(3,pool.length)&&bag.length&&guard++<200){
-    const s=bag[irand(0,bag.length-1)];
-    if(!S.dawnSigils.some(x=>x.id===s.id))S.dawnSigils.push(s);
-  }
-}
+/* 刻印已改为卡牌，走牌库抽牌；黎明不再赠送，保留空数组兼容存档形状。 */
+function rollDawnSigils(){S.dawnSigils=[];}
 function openDawn(){
   S.mode='dawn';S.dawnStep=0;
   S.dawnCards=rollRewards(3);
@@ -42,7 +29,7 @@ function renderDawn(){
   const row=$('dawnRow');row.innerHTML='';
   const t=$('dawnTitle'),sub=$('dawnSub');
   if(S.dawnStep===0){
-    $('dawnStep').textContent='1 / 3 · 拾获卡牌';
+    $('dawnStep').textContent='1 / 2 · 拾获卡牌';
     t.className='dawnTitle';t.textContent=`第 ${S.day} 日 · 黎明`;
     const fullHand=DECK.hand.length>=DECK.max;
     sub.innerHTML=`选择一张加入牌库 <span class="kb-hint">（1 / 2 / 3）</span> · 手牌 ${DECK.hand.length}/${DECK.max}`+
@@ -61,7 +48,7 @@ function renderDawn(){
     });
     $('dawnSkip').textContent='跳过 · 保持精简';
   }else if(S.dawnStep===1){
-    $('dawnStep').textContent='2 / 3 · 灯芯祝福';
+    $('dawnStep').textContent='2 / 2 · 灯芯祝福';
     t.className='dawnTitle vio';t.textContent='灯芯升华';
     sub.innerHTML=`选择一项永久祝福 <span class="kb-hint">（1 / 2 / 3）</span> · 当前 Lv.${P.lvl}`;
     S.dawnBless.forEach((b,i)=>{
@@ -76,23 +63,6 @@ function renderDawn(){
       row.appendChild(el);
     });
     $('dawnSkip').textContent='跳过祝福';
-  }else{
-    $('dawnStep').textContent='3 / 3 · 武器刻印';
-    t.className='dawnTitle';t.textContent='铭刻';
-    const w=weaponDef(P.weapon),cap=w.slots||0,used=(P.sigils||[]).length;
-    sub.innerHTML=`为武器铭刻一枚刻印 <span class="kb-hint">（1 / 2 / 3）</span> · 槽位 ${used}/${cap}`;
-    S.dawnSigils.forEach((s,i)=>{
-      const own=(P.sigils||[]).filter(x=>x===s.id).length;
-      const el=document.createElement('button');
-      el.className='pcard';el.style.borderColor=s.color+'99';
-      el.innerHTML=`<span class="pcHk kb kb-hint">${i+1}</span>${own?`<span class="pcOwn">×${own}</span>`:''}
-        <div class="pcArt" style="color:${s.color}">${svg(s.icon,34)}</div>
-        <b>${s.n}</b><div class="pcKind" style="color:${s.color}">武器刻印</div>
-        <p>${sigilDesc(s.id)}</p><div class="pcCost"><b style="color:${s.color}">装入槽位</b></div>`;
-      el.addEventListener('click',()=>pickDawn(i));
-      row.appendChild(el);
-    });
-    $('dawnSkip').textContent='跳过刻印';
   }
 }
 function pickDawn(i){
@@ -115,23 +85,12 @@ function pickDawn(i){
     if(b.f)b.f();P.stacks[b.id]=(P.stacks[b.id]||0)+1;
     bumpSeen('card',b.id);refreshStacks();
     toast('祝福 '+b.n,'good');sfx('level');
-    if(S.dawnSigils.length){S.dawnStep=2;renderDawn();}
-    else finishDawn();
-  }else{
-    const s=S.dawnSigils[i];if(!s)return;
-    P.sigils.push(s.id);
-    bumpSeen('sigil',s.id);
-    toast('铭刻 '+s.n,'good');sfx('level');
     finishDawn();
   }
 }
 function skipDawn(){
   if(S.mode!=='dawn')return;
   if(S.dawnStep===0){S.dawnStep=1;renderDawn();sfx('ui');}
-  else if(S.dawnStep===1){
-    if(S.dawnSigils.length){S.dawnStep=2;renderDawn();sfx('ui');}
-    else finishDawn();
-  }
   else finishDawn();
 }
 function finishDawn(){

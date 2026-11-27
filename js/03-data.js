@@ -161,10 +161,38 @@ const CDEFS={
     desc:'指定区域 2.9 格内 78 点伤害并强力击退。一击清场的陨石风暴。',w:0},
   fuse_spring:{id:'fuse_spring',kind:'instant',target:'self',fuseOut:true,q:3,fx:'spring',
     name:'生生不息',icon:'heal',color:'#6fe08a',cost:{wood:10,stone:4,crys:3},heal:45,coreHeal:120,buildHeal:60,
-    desc:'恢复 45 点生命，方舟核心 +120，全部建筑 +60 耐久。守住方舟的根基。',w:0}
+    desc:'恢复 45 点生命，方舟核心 +120，全部建筑 +60 耐久。守住方舟的根基。',w:0},
+  /* 数值刻印卡：只有 sigil 标记，无 target —— 只能装入槽位，不可拖地释放。
+     数值源仍是下方 SIGILS，卡面文案由 sigilDesc 同步注入。 */
+  keen:{id:'keen',kind:'utility',sigil:true,sigilOnly:true,name:'锋锐刻印',icon:'crit',color:'#ffb454',cost:{},desc:'',brief:'',w:6,wNonMage:6},
+  swift:{id:'swift',kind:'utility',sigil:true,sigilOnly:true,name:'迅捷刻印',icon:'bolt',color:'#8fe3d0',cost:{},desc:'',brief:'',w:6,wNonMage:6},
+  echo:{id:'echo',kind:'utility',sigil:true,sigilOnly:true,name:'回响刻印',icon:'wave',color:'#c9a8ff',cost:{},desc:'',brief:'',w:6,wNonMage:6}
 };
+/* 法术刻印：带 sigil 标记的卡 —— 既能装入法杖槽自动施放，也能当瞬发牌拖地释放。
+   效果数值从武器攻击模板派生，避免同一份数值写两处。 */
+const SIGIL_SPELLS=[
+  {id:'sig_flame',from:'sp_fireball',name:'火焰法术刻印',icon:'flame',color:ELEMCOL.fire,mana:15,w:8,wNonMage:6},
+  {id:'sig_frost',from:'sp_frostbolt',name:'冰霜法术刻印',icon:'snow',color:ELEMCOL.frost,mana:15,w:8,wNonMage:6},
+  {id:'sig_arcane',from:'sp_arcbolt',name:'奥术法术刻印',icon:'rune',color:ELEMCOL.arcane,mana:15,w:8,wNonMage:6}
+];
+for(const s of SIGIL_SPELLS){
+  const src=CDEFS[s.from];
+  CDEFS[s.id]={id:s.id,kind:'instant',target:'point',sigil:true,
+    fx:src.fx||src.id,
+    shape:src.shape,elem:src.elem,radius:src.radius,dmg:src.dmg,spreadFire:src.spreadFire,status:src.status,
+    name:s.name,icon:s.icon,color:s.color,cost:{},mana:s.mana,
+    desc:`装入法杖槽位后成为自动攻击，也可作为瞬发法术打出：${src.dmg} 点${ELEMNAME[src.elem]}伤害。`,
+    brief:`${src.dmg} ${ELEMNAME[src.elem]}伤害 · 可装槽或瞬发`,w:s.w,wNonMage:s.wNonMage};
+}
+const SIGIL_SPELL_IDS=SIGIL_SPELLS.map(s=>s.id);
 const CIDS=Object.keys(CDEFS);
 const CARD_IDS=CIDS.filter(id=>!CDEFS[id].weaponAttack);
+/* 法术卡天然带刻印标签：只要是可打出的元素瞬发牌，就能装进法杖槽。
+   数值刻印卡由 sigilOnly 挡住，不能拖地释放。 */
+for(const id of CARD_IDS){
+  const d=CDEFS[id];
+  if(d.kind==='instant'&&d.elem&&!d.sigilOnly)d.sigil=true;
+}
 /* 品质默认「普通」：q 为档位号，1 普通 / 2 稀有 / 3 史诗 */
 for(const id in CDEFS)if(CDEFS[id].q==null)CDEFS[id].q=1;
 /* ---------------- 卡牌品质 ----------------
@@ -221,11 +249,11 @@ function fusionRecipesOf(id){
 const WEAPONS={
   sword:{id:'sword',name:'剑',route:'近战路线',icon:'sword',color:'#ffb454',art:'assets/weapons/sword.svg',attack:'melee',slots:3,
     desc:'挥砍、剑气、迅击。'},
-  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',interval:.60,slots:6,
+  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',interval:.60,slots:6,startSigils:['sig_flame'],
     desc:'范围灼烧，火焰蔓延至相邻敌人和树木。'},
-  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',interval:.50,slots:6,
+  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',interval:.50,slots:6,startSigils:['sig_frost'],
     desc:'范围冰缓，叠加减速控制敌群。'},
-  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',interval:.26,slots:6,
+  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',interval:.26,slots:6,startSigils:['sig_arcane'],
     desc:'高频打击单个目标，附加奥术标记。'}
 };
 const WEAPON_IDS=Object.keys(WEAPONS);
@@ -241,11 +269,19 @@ const SIGIL_IDS=Object.keys(SIGILS);
 const SIGIL_COPIES=3;
 // 文案实时派生：改数值即改描述，避免与表漂移
 const sigilDesc=id=>{
-  const s=SIGILS[id];if(!s)return '';
+  const s=SIGILS[id];if(!s)return CDEFS[id]&&CDEFS[id].sigil?`武器攻击：${CDEFS[id].brief}`:'';
   return s.dmg!=null?`武器伤害 +${Math.round(s.dmg*100)}%`
     :s.spd!=null?`武器攻速 +${Math.round(s.spd*100)}%`
     :`武器攻击 ${Math.round(s.echo*100)}% 概率追加一次`;
 };
+/* 槽位条目元信息：数值刻印 SIGILS 与法术刻印 CDEFS.sigil 共用一接口 */
+const sigilMeta=id=>{
+  const s=SIGILS[id];if(s)return{id,n:s.n,short:s.short,icon:s.icon,color:s.color,spell:false};
+  const c=CDEFS[id];if(c&&c.sigil)return{id,n:c.name,short:c.name.replace('法术刻印',''),icon:c.icon,color:c.color,spell:true};
+  return null;
+};
+const isSigilId=id=>!!(SIGILS[id]||(CDEFS[id]&&CDEFS[id].sigil));
+for(const id of SIGIL_IDS){CDEFS[id].desc=sigilDesc(id);CDEFS[id].brief=sigilDesc(id)+' · 仅可装槽';}
 // 手牌短文案：一次性注入到卡牌自身，显示层只读 def.brief，不再依赖独立表
 const CARD_BRIEF={
   wall:'阻挡雾裔，卡牌可循环。',tower:'自动射击附近雾裔。',totem:'持续恢复附近玩家生命。',cannon:'范围爆炸伤害。',
@@ -314,6 +350,7 @@ function cardTags(d){
   const st=d.status&&STATUS_TAG[d.status.kind];if(st)t.push(st);
   const st2=d.status2&&STATUS_TAG[d.status2.kind];if(st2&&!t.includes(st2))t.push(st2);
   if(d.shape==='consume')t.push('dot');
+  if(d.sigil)t.push('sigil');
   return t;
 }
 function weaponTags(w){

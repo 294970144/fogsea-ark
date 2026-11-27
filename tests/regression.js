@@ -717,7 +717,9 @@ testCase('R16_weapon_auto_attacks', () => {
   const expected = { sword: [12, 12, .42], flame: [20, 20, .60], frost: [11, 11, .50], arcane: [10, 0, .26] };
   const weaponIds = env.run('WEAPON_IDS');
   for (const id of weaponIds) {
-    env.run(`initRun();S.mode='play';P.weapon='${id}';P.dmg=TUNE.player.baseDmg;P.range=TUNE.player.baseRange;
+    env.run(`initRun();S.mode='play';P.weapon='${id}';
+      P.sigils=(weaponDef(P.weapon).startSigils||[]).slice();P.sigCast=0;
+      P.dmg=TUNE.player.baseDmg;P.range=TUNE.player.baseRange;
       P.crit=0;P.atkCd=0;P.wave=0;P.cls='mage';P.maxEn=200;P.en=137;P.spellCd=.4;
       P.stacks={t_resonance:1,t_arccharge:1,t_storm:1};P.resoElem='fire';P.resoN=2;P.arcCharge=3;P.stormCount=4;P.charge=5;P.shield=6;
       res.wood=31;res.stone=17;res.crys=9;DECK.hand=[mkCard('wall')];DECK.draw=[mkCard('tower')];DECK.discard=[mkCard('rain')];
@@ -763,10 +765,15 @@ testCase('R16_weapon_auto_attacks', () => {
   env.run('autoAttack()');
   assert.ok(env.run(`shots.some(s=>s.type==='wave')`));
 
-  env.run(`initRun();P.weapon='flame';P.atkCd=0;P.range=TUNE.player.baseRange*1.18;foes.length=0;nodes.length=0;`);
+  env.run(`initRun();P.weapon='flame';P.sigils=['sig_flame'];P.atkCd=0;P.range=TUNE.player.baseRange*1.18;foes.length=0;nodes.length=0;`);
   seedFoe(env, 8, 0);
   env.run('autoAttack()');
   assert.ok(env.run('10000-foes[0].hp') > 0);
+
+  // 法杖空槽停火：无法术刻印时不造成伤害也不进入冷却
+  env.run(`initRun();S.mode='play';P.weapon='flame';P.sigils=[];P.atkCd=0;foes.length=0;nodes.length=0;`);
+  seedFoe(env, 1, 0);
+  assert.equal(j(env)(`(()=>{const hp=foes[0].hp;autoAttack();return foes[0].hp===hp&&P.atkCd===0;})()`), true);
 });
 
 testCase('R17_weapon_snapshot_picker_and_hud', () => {
@@ -1046,7 +1053,7 @@ testCase('R22_weapon_slots_and_sigils', () => {
     const setup=(w,sigils)=>{
       save.weapon=w;initRun();S.mode='play';
       P.dmg=TUNE.player.baseDmg;P.atkCd=0;P.crit=0;P.wave=0;P.cls='mage';P.maxEn=200;P.en=137;P.spellCd=.4;
-      P.stacks={};P.sigils=sigils;
+      P.stacks={};P.sigils=sigils;P.sigCast=0;
       foes.length=0;nodes.length=0;shots.length=0;slashes.length=0;
     };
     const foe=()=>{foes.push({type:'crawler',x:P.x+1.1,y:P.y,hp:10000,max:10000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
@@ -1056,8 +1063,8 @@ testCase('R22_weapon_slots_and_sigils', () => {
     const r0=Math.random;
     setup('sword',[]);foe();Math.random=()=>0;autoAttack();const swordPlain=10000-foes[0].hp;
     setup('sword',['keen','keen']);foe();Math.random=()=>0;autoAttack();const swordKeen=10000-foes[0].hp;
-    setup('flame',[]);foe();Math.random=()=>0;autoAttack();const flamePlain=10000-foes[0].hp;
-    setup('flame',['keen','keen']);foe();Math.random=()=>0;autoAttack();const flameKeen=10000-foes[0].hp;
+    setup('flame',['sig_flame']);foe();Math.random=()=>0;autoAttack();const flamePlain=10000-foes[0].hp;
+    setup('flame',['sig_flame','keen','keen']);foe();Math.random=()=>0;autoAttack();const flameKeen=10000-foes[0].hp;
     setup('sword',['echo']);foe();Math.random=()=>0;autoAttack();const echoDmg=10000-foes[0].hp;const echoSlashes=slashes.length;
     setup('sword',['swift','swift']);const cdSwift=weaponAttackInterval();
     setup('sword',[]);const cdPlain=weaponAttackInterval();
@@ -1073,37 +1080,33 @@ testCase('R22_weapon_slots_and_sigils', () => {
   assert.ok(Math.abs(combat.cdPlain - .42) < 1e-9);
   assert.ok(combat.cdSwift < combat.cdPlain);
 
-  // 4) 黎明第三步发放刻印，槽满后不再提供
-  const dawn = j(env)(`(()=>{
-    save.weapon='sword';initRun();S.mode='dawn';
-    S.dawnStep=1;S.dawnBless=[BLESSINGS.find(b=>b.id==='blade')];
-    rollDawnSigils();
-    const cand=S.dawnSigils.map(s=>s.id);
-    pickDawn(0);
-    const step=S.dawnStep;
-    pickDawn(0);
-    const sigils=P.sigils.slice();
-    P.sigils=['keen','keen','keen'];
-    rollDawnSigils();
-    return JSON.stringify({cand,step,sigils,full:S.dawnSigils.length});
+  // 4) 刻印牌链路：开局预装并保底入手 → 卸下回弃牌堆 → 装槽消耗 → 按槽轮发（数值刻印跳过）
+  const cycle = j(env)(`(()=>{
+    save.weapon='flame';initRun();S.mode='play';UI.toasts.innerHTML='';
+    const start=P.sigils[0]==='sig_flame'&&DECK.hand.some(c=>c.id==='sig_flame');
+    DECK.discard=[];
+    const off=unfillSlot(0),back=DECK.discard.some(c=>c.id==='sig_flame');
+    DECK.hand=[mkCard('sig_flame')];DECK.discard=[];UI.toasts.innerHTML='';
+    const on=engraveCard(DECK.hand[0].uid);
+    const consumed=!DECK.hand.length&&DECK.discard.some(c=>c.id==='sig_flame')&&P.sigils.includes('sig_flame');
+    P.sigils=['keen','sig_flame','sig_frost'];P.sigCast=0;
+    const order=[];for(let i=0;i<3;i++)order.push(nextWeaponSpell().id);
+    return JSON.stringify({start,off,back,on,consumed,order});
   })()`);
-  assert.equal(dawn.cand.length, 3);
-  assert.equal(dawn.step, 2);
-  assert.equal(dawn.sigils.length, 1);
-  assert.ok(env.run(`SIGIL_IDS.includes('${dawn.sigils[0]}')`));
-  assert.equal(dawn.full, 0);
+  assert.deepEqual(cycle, {start:true,off:true,back:true,on:true,consumed:true,
+    order:['sig_flame','sig_frost','sig_flame']});
 
-  // 5) 存档往返保留刻印
+  // 5) 存档往返保留刻印（数值刻印 + 法术刻印）
   const roundtrip = j(env)(`(()=>{
     save.weapon='flame';initRun();S.mode='play';
-    P.sigils=['keen','swift'];
+    P.sigils=['keen','sig_flame'];
     const snap=captureSnapshot();
     P.sigils=[];
     restoreSnapshot(JSON.parse(JSON.stringify(snap)));
     return JSON.stringify({sigils:P.sigils,snapIds:snap.P.sigils});
   })()`);
-  assert.deepEqual(roundtrip.sigils, ['keen','swift']);
-  assert.deepEqual(roundtrip.snapIds, ['keen','swift']);
+  assert.deepEqual(roundtrip.sigils, ['keen','sig_flame']);
+  assert.deepEqual(roundtrip.snapIds, ['keen','sig_flame']);
 });
 
 testCase('R23_codex_sigil_and_seen_source', () => {
@@ -1140,12 +1143,12 @@ testCase('R23_codex_sigil_and_seen_source', () => {
   // 2) 黎明条目文案与实际流程一致：三步
   const dawn = j(env)(`(()=>{
     const e=CODEX.find(x=>x.id==='dawn');
-    return JSON.stringify({desc:e.desc,steps:e.desc.includes('三步'),
-      pool:e.stats().find(x=>x[0]==='刻印池')[1]});
+    return JSON.stringify({desc:e.desc,steps:e.desc.includes('两步'),
+      pool:e.stats().find(x=>x[0]==='刻印卡')[1]});
   })()`);
   assert.equal(dawn.steps, true);
-  assert.ok(dawn.desc.includes('刻印'));
-  assert.equal(dawn.pool, '3 种');
+  assert.ok(dawn.desc.includes('牌库'));
+  assert.equal(dawn.pool, '6 种');
 
   // 3) 武器条目带槽位
   const wp = j(env)(`(()=>{
@@ -1196,6 +1199,7 @@ testCase('R24_codex_tag_derivation_and_display', () => {
     const titleOff=document.getElementById('cxTagT').style.display;
     cxSelect('w_flame',false);
     return JSON.stringify({cats,tagIds,cover,untagged,s,deadTag,ownW,ownS,wLen:WEAPON_IDS.length,sLen:SIGIL_IDS.length,
+      sigilCards:CARD_IDS.filter(id=>CDEFS[id].sigil).length,
       tplInCodex,unknown,dup,all,cards,cardsLen:CARD_IDS.length,labelAll,hit,etHtml,titleOn,etNone,titleOff,
       badge:typeof byId('s_keen').badge,catOfSigil:byId('s_keen').cat});
   })()`);
@@ -1210,17 +1214,17 @@ testCase('R24_codex_tag_derivation_and_display', () => {
   // 条目上的标签必须能在字典里查到，且同一标签不重复挂
   assert.deepEqual(out.unknown, []);
   assert.deepEqual(out.dup, []);
-  // 归属标签只命中对应实体
+  // 归属标签：武器只命中武器；sigil 命中所有可装槽的卡与数值刻印
   assert.equal(out.ownW, out.wLen);
-  assert.equal(out.ownS, out.sLen);
+  assert.equal(out.ownS, out.sLen+out.sigilCards);
   // 3) 每张卡牌都挂了 tags；无标签卡牌白名单固化
   assert.equal(out.cover, true);
   assert.deepEqual(out.untagged, ['surge', 'salvage5', 'salvage10', 'salvage20', 'class_mage']);
   // 4) 派生规则：单体优先于范围；元素/法力/范围/状态四条链路
   assert.ok(out.s.arcneedle.includes('single'));
   assert.ok(!out.s.arcneedle.includes('aoe'));
-  assert.deepEqual(out.s.kindling, ['fire', 'spell', 'aoe', 'dot']);
-  assert.deepEqual(out.s.arcneedle, ['arcane', 'spell', 'single', 'amp']);
+  assert.deepEqual(out.s.kindling, ['fire', 'spell', 'aoe', 'dot', 'sigil']);
+  assert.deepEqual(out.s.arcneedle, ['arcane', 'spell', 'single', 'amp', 'sigil']);
   assert.deepEqual(out.s.mine, ['aoe', 'control']);
   assert.deepEqual(out.s.tactic, ['draw']);
   assert.deepEqual(out.s.wall, ['persist', 'guard']);
@@ -1231,7 +1235,7 @@ testCase('R24_codex_tag_derivation_and_display', () => {
   // 6) 武器攻击模板不进图鉴
   assert.equal(out.tplInCodex, false);
   // 7) 标签只做展示，不再参与筛选：分类与搜索仍是唯二过滤条件
-  assert.equal(out.all, 107);
+  assert.equal(out.all, 113);
   assert.equal(out.cards, out.cardsLen);
   assert.ok(!out.labelAll.includes('已选'));
   assert.ok(/已记录 \d+\/\d+/.test(out.labelAll));

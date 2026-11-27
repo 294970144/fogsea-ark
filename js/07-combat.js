@@ -16,6 +16,21 @@ function sigilMods(){
   }
   return m;
 }
+/* 槽位中的法术刻印按从左到右轮发；没有法术刻印时法杖不攻击。 */
+function weaponSpells(){
+  const out=[];
+  for(const id of P.sigils||[]){
+    const d=CDEFS[id];
+    if(d&&d.sigil&&!d.sigilOnly&&!d.weaponAttack)out.push(d);
+  }
+  return out;
+}
+function nextWeaponSpell(){
+  const list=weaponSpells();if(!list.length)return null;
+  const def=list[(P.sigCast||0)%list.length];
+  P.sigCast=((P.sigCast||0)+1)%list.length;
+  return def;
+}
 let sigilEchoing=false;
 function sigilEcho(w,tgt){
   if(sigilEchoing)return;
@@ -45,8 +60,10 @@ function autoAttack(){
     if(d<=range+f.r&&d<bd){bd=d;tgt=f;}
   });
   if(tgt){
-    if(w.attack==='spell')autoCastWeapon(w,tgt);
-    else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));
+    if(w.attack==='spell'){
+      const def=nextWeaponSpell();if(!def)return;
+      autoCastWeapon(w,tgt,def);
+    }else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));
     return;
   }
   for(const n of nodes){
@@ -58,15 +75,15 @@ function autoAttack(){
   const ang=Math.atan2(tgt.y-P.y,tgt.x-P.x);
   if(w.attack==='melee')swing(ang);
   else {
-    const def=CDEFS[w.spell];
+    const def=nextWeaponSpell();if(!def)return;
     P.atkCd=weaponAttackInterval(w);P.face=ang;
     if(def.spreadFire&&tgt.type==='tree')spreadFire(tgt.x,tgt.y,def.radius,[]);
     hitNode(tgt);
     spellFx(def,tgt.x,tgt.y,def.elem,[]);
   }
 }
-function autoCastWeapon(w,tgt){
-  const def=CDEFS[w.spell];
+function autoCastWeapon(w,tgt,def){
+  def=def||nextWeaponSpell();if(!def)return;
   const ang=Math.atan2(tgt.y-P.y,tgt.x-P.x);
   P.atkCd=weaponAttackInterval(w);P.face=ang;
   const targets=def.shape==='single'?[tgt]:spellTargets(def,tgt.x,tgt.y);
