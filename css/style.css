@@ -274,6 +274,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 #menuPanel[data-view="title"] .menuView[data-view="title"],
 #menuPanel[data-view="prep"] .menuView[data-view="prep"],
 #menuPanel[data-view="load"] .menuView[data-view="load"]{opacity:1;transform:translateX(0);pointer-events:auto;visibility:visible;transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1)}
+/* 遮罩关闭后所有子页必须退出命中测试；否则隐藏的「继续」页仍会在左上角截获点击 */
+#menu:not(.show) #menuPanel .menuView{visibility:hidden;pointer-events:none}
 #menuPanel[data-view="prep"] .menuView[data-view="title"],
 #menuPanel[data-view="load"] .menuView[data-view="title"]{transform:translateX(-100%)}
 #menuPanel[data-view="title"] .menuView[data-view="prep"],
