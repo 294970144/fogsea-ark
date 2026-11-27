@@ -102,7 +102,7 @@ addEventListener('pointermove',e=>{
     if(!slotDrag.moved&&Math.hypot(mouseX-slotDrag.start[0],mouseY-slotDrag.start[1])>7){
       slotDrag.moved=true;showSlotDrag(slotDrag.i);
     }
-    if(slotDrag.moved)moveDragCard(mouseX,mouseY);
+    if(slotDrag.moved){moveDragCard(mouseX,mouseY);markSlotHover(mouseX,mouseY);}
     return;
   }
   if(S.dragUid&&e.pointerId!==S.dragPointerId)return;
@@ -111,7 +111,7 @@ addEventListener('pointermove',e=>{
     if(!S.dragMoved&&Math.hypot(mouseX-S.dragStart[0],mouseY-S.dragStart[1])>7){
       S.dragMoved=true;showDragCard(S.dragUid);
     }
-    if(S.dragMoved){moveDragCard(mouseX,mouseY);markRecycleHover(mouseX,mouseY);}
+    if(S.dragMoved){moveDragCard(mouseX,mouseY);markRecycleHover(mouseX,mouseY);markSlotHover(mouseX,mouseY);}
   }
 },{passive:true});
 cv.addEventListener('pointerdown',e=>{
@@ -129,9 +129,14 @@ addEventListener('pointerup',e=>{
     if(e.pointerId!==slotDrag.pid)return;
     const i=slotDrag.i,moved=slotDrag.moved;
     const hit=document.elementFromPoint(e.clientX,e.clientY);
+    const slotEl=hit&&hit.closest?hit.closest('.wslot'):null;
     const overSlots=!!(hit&&hit.closest&&hit.closest('#weaponSlots'));
+    const targetSlot=slotEl&&slotEl.dataset&&slotEl.dataset.slot!==undefined?+slotEl.dataset.slot:undefined;
     endSlotDrag();
-    if(moved&&!overSlots&&S.mode==='play')unfillSlot(i);
+    if(moved&&S.mode==='play'){
+      if(overSlots&&Number.isInteger(targetSlot))moveSlotCard(i,targetSlot);
+      else if(!overSlots)unfillSlot(i);
+    }
     return;
   }
   if(!S.dragUid||e.pointerId!==S.dragPointerId)return;

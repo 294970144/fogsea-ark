@@ -334,7 +334,14 @@ function clearHudCache(){
 }
 function beginRun(){
   if(weaponPicker)return;
-  if(slots.slots.every(Boolean))openSlots('new');else startRun();
+  if(slots.slots.every(Boolean)){openSlots('new');return;}
+  // 新局不得继承上一局的活跃槽：先把活跃指针切到第一个空槽，开局自动存档才会落进去
+  const empty=slots.slots.findIndex(s=>!s);
+  if(empty<0){openSlots('new');return;}
+  if(slots.active!==empty&&!setActiveSlot(empty)){
+    toast('存档写入失败 · 请检查浏览器存储','warn');return;
+  }
+  startRun();
 }
 // 有进行中的局才二次确认，主菜单无活动局时直接载入
 function requestLoadSlot(i){

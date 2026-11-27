@@ -12,34 +12,36 @@ function cardInner(def,hot){
     <div class="hcName">${def.name}</div>
     <div class="hcDesc">${def.brief||def.desc}</div>${slot}`;
 }
+function makeHandCard(c,i){
+  const def=CDEFS[c.id];
+  const el=document.createElement('div');
+  el.className='hcard';el.dataset.uid=c.uid;
+  el.style.setProperty('--el',def.color||'#8fa9b8');
+  el.style.setProperty('--i',String(i));
+  const q=def.q||1;if(q>1)el.dataset.q=q;
+  el.innerHTML=cardInner(def,HAND_KEYS[i]||'');
+  el.addEventListener('pointerdown',e=>{
+    if(S.mode!=='play')return;
+    if(e.button!==0){e.preventDefault();if(e.button===2)clearAim();return;}
+    e.preventDefault();auInit();
+    const pid=e.pointerId,uid=c.uid;
+    S.dragUid=uid;S.dragMoved=false;S.dragStart=[e.clientX,e.clientY];S.dragPointerId=pid;
+    mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
+    clearHold();
+    holdTimer=setTimeout(()=>{
+      holdTimer=null;
+      if(S.dragUid!==uid||S.dragPointerId!==pid||S.dragMoved||S.mode!=='play')return;
+      S.dragMoved=true;showDragCard(uid);moveDragCard(mouseX,mouseY);sfx('card');
+    },HOLD_MS);
+  });
+  return el;
+}
 function renderHand(){
   const row=$('handRow');row.innerHTML='';
-  DECK.hand.forEach((c,i)=>{
-    const def=CDEFS[c.id];
-    const el=document.createElement('div');
-    el.className='hcard';el.dataset.uid=c.uid;
-    el.style.setProperty('--el',def.color||'#8fa9b8');
-    el.style.setProperty('--i',String(i));
-    const q=def.q||1;if(q>1)el.dataset.q=q;
-    el.innerHTML=cardInner(def,HAND_KEYS[i]||'');
-    el.addEventListener('pointerdown',e=>{
-      if(S.mode!=='play')return;
-      if(e.button!==0){e.preventDefault();if(e.button===2)clearAim();return;}
-      e.preventDefault();auInit();
-      const pid=e.pointerId,uid=c.uid;
-      S.dragUid=uid;S.dragMoved=false;S.dragStart=[e.clientX,e.clientY];S.dragPointerId=pid;
-      mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
-      clearHold();
-      holdTimer=setTimeout(()=>{
-        holdTimer=null;
-        if(S.dragUid!==uid||S.dragPointerId!==pid||S.dragMoved||S.mode!=='play')return;
-        S.dragMoved=true;showDragCard(uid);moveDragCard(mouseX,mouseY);sfx('card');
-      },HOLD_MS);
-    });
-    row.appendChild(el);
-  });
+  DECK.hand.forEach((c,i)=>row.appendChild(makeHandCard(c,i)));
   layoutHand();S.handDirty=false;syncHand(true);
 }
+function handCardEl(uid){return $('handRow').querySelector(`.hcard[data-uid="${uid}"]`);}
 function layoutHand(){
   const row=$('handRow');const cards=[...row.children];if(!cards.length)return;
   const avail=row.clientWidth||600,cw=cards[0].offsetWidth||104,n=cards.length;
@@ -51,8 +53,50 @@ function layoutHand(){
     el.style.setProperty('--rot',(off*2.6).toFixed(2)+'deg');
     el.style.setProperty('--ty',(Math.abs(off)*Math.abs(off)*1.9).toFixed(1)+'px');
     el.style.setProperty('--z',String(10+i));
+    el.style.setProperty('--i',String(i));
+    const hot=el.querySelector('.hcHot');if(hot)hot.textContent=HAND_KEYS[i]||'';
   });
 }
+/* 局部增删手牌，避免整手重建导致 handIn 全部重播 */
+function removeHandCard(uid){
+  const el=handCardEl(uid);if(el)el.remove();
+  if(S.aimUid===uid)S.aimUid=null;
+  layoutHand();syncHand(true);
+}
+function addHandCard(card,index,fromRect){
+  const row=$('handRow'),i=Math.max(0,Math.min(index,row.children.length));
+  const el=makeHandCard(card,i);
+  row.insertBefore(el,row.children[i]||null);
+  layoutHand();syncHand(true);
+  if(fromRect&&!reducedMotion()){
+    const to=el.getBoundingClientRect();
+    const def=CDEFS[card.id],m=sigilMeta(card.id);
+    flySigil(fromRect,to,`<div class="dragSigil" style="color:${m?m.color:def.color}">${svg(m?m.icon:def.icon,36)}</div>`,def.color);
+    pulseCard(el);
+  }
+  return el;
+}
+/* 从来源矩形飞到目标矩形；只做视觉补间，不改游戏状态 */
+function flySigil(from,to,html,color){
+  if(reducedMotion()||!from||!to||typeof Element.prototype.animate!=='function')return;
+  const el=document.createElement('div');el.className='sigilFly';
+  el.style.cssText=`left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;--el:${color||'#8fa9b8'}`;
+  el.innerHTML=html;document.body.appendChild(el);
+  const dx=to.left+to.width/2-(from.left+from.width/2);
+  const dy=to.top+to.height/2-(from.top+from.height/2);
+  const scale=Math.max(.35,Math.min(1.8,to.width/Math.max(1,from.width)));
+  const a=el.animate([{transform:'translate(0,0) scale(1)',opacity:1},
+    {transform:`translate(${dx}px,${dy}px) scale(${scale})`,opacity:.15}],
+    {duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
+  a.onfinish=()=>el.remove();a.oncancel=()=>el.remove();
+}
+function pulseCard(el){
+  if(reducedMotion()||!el||typeof el.animate!=='function')return;
+  const a=el.animate([{transform:'scale(.88)',opacity:.5},{transform:'scale(1)',opacity:1}],
+    {duration:300,easing:'cubic-bezier(.34,1.56,.64,1)'});
+  a.onfinish=()=>null;
+}
+function reducedMotion(){return typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;}
 function handCard(uid){return DECK.hand.find(c=>c.uid===uid);}
 let dragBuildType=null;
 function showDragCard(uid){
@@ -89,11 +133,34 @@ function showSlotDrag(i){
 }
 function endSlotDrag(){
   if(slotDrag){
-    const h=UI.weaponSlotsRow&&UI.weaponSlotsRow.querySelector(`.wslot[data-slot="${slotDrag.i}"]`);
+    const h=slotEl(slotDrag.i);
     if(h)h.classList.remove('dragging');
   }
-  slotDrag=null;
+  slotDrag=null;clearSlotHover();
   $('dragCard').style.display='none';
+}
+/* 落点高亮：靠近槽位时吸附放大，离开即还原 */
+let slotHoverEl=null;
+function slotEl(i){return UI.weaponSlotsRow&&UI.weaponSlotsRow.querySelector(`.wslot[data-slot="${i}"]`);}
+function slotBoxRect(i){const el=slotEl(i),b=el&&el.querySelector('.wslotBox');return b&&b.getBoundingClientRect();}
+function markSlotHover(x,y){
+  const hit=typeof document.elementFromPoint==='function'?document.elementFromPoint(x,y):null;
+  const next=hit&&hit.closest?hit.closest('.wslot'):null;
+  if(slotHoverEl===next)return;
+  if(slotHoverEl)slotHoverEl.classList.remove('dropTarget');
+  slotHoverEl=next;
+  if(next)next.classList.add('dropTarget');
+}
+function clearSlotHover(){
+  if(slotHoverEl)slotHoverEl.classList.remove('dropTarget');
+  slotHoverEl=null;
+}
+function pulseSlot(i,filled){
+  const el=slotEl(i);if(!el||reducedMotion())return;
+  const box=el.querySelector('.wslotBox');if(!box||typeof box.animate!=='function')return;
+  box.animate(filled?[{transform:'scale(1)'},{transform:'scale(1.2)'},{transform:'scale(1)'}]
+    :[{transform:'scale(1)',opacity:.8},{transform:'scale(.9)',opacity:.45},{transform:'scale(1)',opacity:1}],
+    {duration:320,easing:'cubic-bezier(.34,1.56,.64,1)'});
 }
 function sizeDragCv(){
   const cv=$('dragBuildCv');if(!cv)return;
@@ -114,7 +181,7 @@ function drawDragBuild(){
 }
 function moveDragCard(x,y){const el=$('dragCard');el.style.left=x+'px';el.style.top=y+'px';}
 function endDrag(){
-  clearHold();
+  clearHold();clearSlotHover();
   const uid=S.dragUid;
   S.dragUid=null;S.dragMoved=false;S.dragStart=[0,0];S.dragPointerId=null;dragBuildType=null;
   $('dragCard').style.display='none';
@@ -199,7 +266,8 @@ function placeCheck(def,tx,ty){
   }
   return{ok:true,msg:''};
 }
-/* 卡是实体，槽位是它的另一个位置：装槽=手牌→槽位，卸下=槽位→手牌，牌库总量不变。 */
+/* 卡是实体，槽位是它的另一个位置：装槽=手牌→指定槽位，卸下=槽位→手牌，牌库总量不变。
+   P.sigils 是定长槽位数组，空位为 null；不能按顺序强塞，也不能覆盖后把后面的卡挤掉。 */
 function engraveCard(uid,targetSlot){
   const idx=DECK.hand.findIndex(c=>c.uid===uid);if(idx<0)return false;
   const card=DECK.hand[idx],def=CDEFS[card.id];
@@ -207,25 +275,54 @@ function engraveCard(uid,targetSlot){
   const w=weaponDef(P.weapon),cap=w.slots||0;
   if(w.attack!=='spell'&&!def.sigilOnly){toast('法术刻印只能装入法杖','warn');sfx('deny');return false;}
   const list=P.sigils||[];
-  let slot=Number.isInteger(targetSlot)&&targetSlot>=0&&targetSlot<cap?targetSlot:list.length;
-  if(slot>list.length)slot=list.length;
+  let slot=Number.isInteger(targetSlot)&&targetSlot>=0&&targetSlot<cap?targetSlot:list.findIndex(c=>!c);
+  if(slot<0)slot=list.findIndex(c=>!c);
+  if(slot<0){toast('刻印槽已满','warn');sfx('deny');return false;}
+  const el=handCardEl(uid),fromRect=el&&el.getBoundingClientRect(),toRect=slotBoxRect(slot);
+  const displaced=list[slot]||null;
   DECK.hand.splice(idx,1);
-  const displaced=slot<list.length?list[slot]:null;
-  if(displaced)list[slot]=card;else list.push(card);
+  list[slot]=card;
   if(displaced)DECK.hand.splice(idx,0,displaced);
   if(S.aimUid===uid)S.aimUid=null;
-  S.handDirty=true;
+  if(fromRect&&toRect)flySigil(fromRect,toRect,el.outerHTML,def.color);
+  removeHandCard(uid);
+  if(displaced)addHandCard(displaced,idx,toRect);
+  if(typeof syncSlotEls==='function')syncSlotEls();
+  pulseSlot(slot,true);
   if(def.sigilOnly)bumpSeen('sigil',card.id);else bumpSeen('play',card.id);
   toast(displaced?'替换 '+def.name:'已刻印 '+def.name,'good');sfx('level');
   return true;
 }
 function unfillSlot(i){
-  if(!Number.isInteger(i)||i<0||i>=(P.sigils||[]).length)return false;
+  const list=P.sigils||[],cap=weaponDef(P.weapon).slots||0;
+  if(!Number.isInteger(i)||i<0||i>=cap||!list[i])return false;
   if(DECK.hand.length>=handCap()){toast('手牌已达硬上限 '+handCap()+' · 请先回收','warn');sfx('deny');return false;}
-  const card=P.sigils.splice(i,1)[0],def=CDEFS[card.id];
-  DECK.hand.push(card);
-  S.handDirty=true;sfx('ui');
+  const card=list[i],def=CDEFS[card.id],fromRect=slotBoxRect(i);
+  list[i]=null;DECK.hand.push(card);
+  addHandCard(card,DECK.hand.length-1,fromRect);
+  if(typeof syncSlotEls==='function')syncSlotEls();
+  pulseSlot(i,false);sfx('ui');
   toast('卸下 '+def.name+' 到手牌','good');
+  return true;
+}
+/* 槽内刻印可以直接拖到另一个槽：空槽移动，占用槽交换 */
+function moveSlotCard(from,to){
+  const list=P.sigils||[],cap=weaponDef(P.weapon).slots||0;
+  if(!Number.isInteger(from)||!Number.isInteger(to)||from===to)return false;
+  if(from<0||from>=cap||to<0||to>=cap||!list[from])return false;
+  const a=slotEl(from),b=slotEl(to);
+  if(a&&b&&!reducedMotion()){
+    const ax=a.querySelector('.wslotBox'),bx=b.querySelector('.wslotBox');
+    if(ax&&bx&&typeof ax.animate==='function'){
+      const ra=ax.getBoundingClientRect(),rb=bx.getBoundingClientRect();
+      const dx=rb.left-ra.left,dy=rb.top-ra.top;
+      ax.animate([{transform:'translate(0,0)'},{transform:`translate(${dx}px,${dy}px)`}],{duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
+      bx.animate([{transform:'translate(0,0)'},{transform:`translate(${-dx}px,${-dy}px)`}],{duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
+    }
+  }
+  const tmp=list[to];list[to]=list[from];list[from]=tmp;
+  if(typeof syncSlotEls==='function')syncSlotEls();
+  sfx('card');toast(tmp?'交换刻印位置':'移动刻印到槽位 '+(to+1),'good');
   return true;
 }
 function tryPlayAt(uid,wx,wy){

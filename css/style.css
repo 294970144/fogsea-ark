@@ -198,7 +198,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   background:linear-gradient(160deg,color-mix(in srgb,var(--el,#8fa9b8) 20%,#0b1a28),#07141f 66%);
   border:1.5px solid color-mix(in srgb,var(--el,#8fa9b8) 34%,var(--line2));
   transform:translateY(var(--ty,0px)) rotate(var(--rot,0deg));transform-origin:bottom center;
-  transition:transform .16s cubic-bezier(.2,.8,.2,1),box-shadow .16s,border-color .16s,opacity .16s;
+  transition:transform .16s cubic-bezier(.2,.8,.2,1),left .3s cubic-bezier(.22,1,.36,1),box-shadow .16s,border-color .16s,opacity .16s;
   z-index:var(--z,1);overflow:hidden;text-align:left;box-shadow:0 6px 18px rgba(0,0,0,.5)}
 /* 档位描边放在 :hover 之前，保证悬停时仍是抬起的阴影（同特异度，后到者胜） */
 .hcard[data-q="2"]{border-color:rgba(87,230,255,.66);
@@ -221,6 +221,17 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   transform-origin:center center;transition:transform .42s cubic-bezier(.2,.8,.2,1),opacity .42s ease,filter .42s ease;
   filter:drop-shadow(0 12px 26px rgba(0,0,0,.75))}
 .recycleFly.go{transform:translate(var(--dx),var(--dy)) scale(.06) rotate(28deg);opacity:0;filter:brightness(2.4) blur(5px)}
+/* 刻印装/卸的飞行补间：借 web-motion-showcase 的布局坐标过渡 + 弹簧曲线，仅视觉层 */
+.sigilFly{position:fixed!important;z-index:120;pointer-events:none;margin:0!important;animation:none!important;
+  border-radius:12px;overflow:hidden;filter:drop-shadow(0 12px 24px rgba(0,0,0,.8))}
+.sigilFly .hcard,.sigilFly .dragSigil{animation:none!important;position:static;width:100%;height:100%;transform:none}
+.wslot.dropTarget .wslotBox{transform:translateY(-3px) scale(1.14);
+  border-color:color-mix(in srgb,var(--mist,#8fe3d0) 85%,transparent);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--mist,#8fe3d0) 30%,transparent),0 8px 22px rgba(0,0,0,.45)}
+@media (prefers-reduced-motion:reduce){
+  .hcard{transition:none}.sigilFly{display:none}
+  .wslot.dropTarget .wslotBox{transform:none}
+}
 .hcCost{position:absolute;top:9px;right:8px;display:flex;gap:2px;align-items:center;justify-content:flex-end;
   min-height:18px;white-space:nowrap;z-index:2}
 .hcCost b{display:flex;align-items:center;gap:2px;font-size:12px;font-weight:900;padding:1px 3px;border-radius:7px;

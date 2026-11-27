@@ -117,7 +117,8 @@ function validateSlot(s){
   if(![n.P.hp,n.P.maxHp,n.P.en,n.P.maxEn,n.S.timeLeft,n.S.day].every(Number.isFinite))return false;
   const d=n.DECK;
   if(!d||typeof d!=='object'||!['draw','hand','discard'].every(k=>Array.isArray(d[k])&&d[k].every(_slotCardOK)))return false;
-  if(!Array.isArray(n.P.sigils)||!n.P.sigils.every(_slotCardOK))return false;
+  // 槽位是定长数组，空位用 null 表示；允许稀疏放置
+  if(!Array.isArray(n.P.sigils)||n.P.sigils.length>weaponDef(n.P.weapon).slots||!n.P.sigils.every(c=>c===null||_slotCardOK(c)))return false;
   if(!Number.isInteger(d.max)||!Number.isInteger(d.uid))return false;
   if(!['nodes','fogBlobs','builds','foes','warns','shots'].every(k=>Array.isArray(n[k])))return false;
   if(n.foes.length>SLOT_FOE_CAP||n.shots.length>240||n.warns.length>80||n.nodes.length>240)return false;

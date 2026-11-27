@@ -25,7 +25,8 @@ function resetPlayer(){
     dashT:0,dashCd:0,dashCdMax:1.6,dashDx:0,dashDy:0,ifr:0,downed:false,respT:0,
     crit:0,ls:0,thorns:0,wave:0,magnet:2.3,gather:1,towerMult:1,novaMult:1,regen:1,bonusDraw:0,
     cls:null,shield:0,regenAcc:0,enRegenFlat:14,spellCd:0,charge:0,chargeAcc:0,arcCharge:0,arcDiscount:false,
-    sigils:[],sigCast:0,
+    // 定长槽位：空位为 null，刻印可放任意位置
+    sigils:new Array(weaponDef(save.weapon).slots||0).fill(null),sigCast:0,
     resoElem:null,resoN:0,stormCount:0,empowerN:0,empowerT:0,nirvanaUsed:false,
     aff:{fire:0,frost:0,arcane:0,lightning:0},
     stacks:{},anim:0,hurtT:0,swingT:0});
@@ -43,8 +44,8 @@ function initRun(){
     handDirty:true,dawnStep:0,dawnSigils:[],pendingSalvage:null,
     stats:{kills:0,gathered:0,dmg:0,nights:0,level:1,played:0}});
   DECK.draw=[];DECK.hand=[];DECK.discard=[];DECK.max=5;DECK.recycle=0;DECK.uid=1;
-  // 法杖开局：一张实体法术刻印卡直接进槽位，牌库不再生成同款
-  (weaponDef(P.weapon).startSigils||[]).forEach(id=>P.sigils.push(mkCard(id)));
+  // 法杖开局：一张实体法术刻印卡直接进首槽，牌库不再生成同款
+  (weaponDef(P.weapon).startSigils||[]).forEach((id,i)=>{P.sigils[i]=mkCard(id);});
   const starter=['wall','wall','wall','tower','tower','totem','rain','spring','tactic'];
   starter.forEach(id=>DECK.draw.push(mkCard(id)));
   shuffle(DECK.draw);
@@ -159,7 +160,8 @@ function captureSnapshot(){
   if(!Array.isArray(sd.dawnCards))sd.dawnCards=[];
   if(!sd.stats)sd.stats=S.stats?_clone(S.stats):{};
   const pd=_pickFields(P,Object.keys(P));
-  pd.sigils=Array.isArray(pd.sigils)?pd.sigils.filter(c=>c&&isSigilId(c.id)).map(c=>({uid:c.uid,id:c.id})):[];
+  // 保留空位，读档后刻印必须回到原来的槽位
+  pd.sigils=Array.isArray(pd.sigils)?pd.sigils.map(c=>c&&isSigilId(c.id)?{uid:c.uid,id:c.id}:null):[];
   const cards=a=>a.map(c=>({uid:c.uid,id:c.id})).slice(0,240);
   const plain=(a,cap)=>a.map(o=>_clone(o)).slice(0,cap);
   return _clone({
@@ -192,6 +194,12 @@ function restoreSnapshot(s){
   pd.weapon=normalizeWeaponId(pd.weapon);
   Object.assign(pd,{anim:0,hurtT:0,swingT:0,moving:false});
   _putObj(P,pd);
+  // 槽位数随武器固定；短数组（旧存档）补 null，保证稀疏索引可用
+  const sigCap=weaponDef(P.weapon).slots||0;
+  const sigSrc=Array.isArray(pd.sigils)?pd.sigils:[];
+  P.sigils=Array.from({length:sigCap},(_,i)=>{
+    const c=sigSrc[i];return c&&isSigilId(c.id)?{uid:c.uid,id:c.id}:null;
+  });
   _putObj(res,d.res);
   _putObj(DECK,d.DECK);
   core.hp=d.core.hp;core.max=d.core.max;core.flash=0;core.beam=0;

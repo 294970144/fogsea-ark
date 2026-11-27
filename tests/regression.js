@@ -105,6 +105,8 @@ function makeEnv(opts = {}) {
     waveShot: noop, slash: noop, activeCount: () => 0 };
   const sandbox = {
     console, document, localStorage, FX: FXStub,
+    // 浏览器全局 Element：动画特性检测用；沙箱不提供 animate，动画自然跳过
+    Element: function Element(){},
     innerWidth: 1280, innerHeight: 800, devicePixelRatio: 1,
     performance: { now: () => 0 },
     matchMedia: () => ({ matches: false, addEventListener: noop }),
@@ -1091,36 +1093,42 @@ testCase('R22_weapon_slots_and_sigils', () => {
   assert.ok(Math.abs(combat.cdPlain - .42) < 1e-9);
   assert.ok(combat.cdSwift < combat.cdPlain);
 
-  // 4) 刻印链路：开局实体卡直接入槽且不重复 → 卸下回手牌 → 装槽到指定位 → 牌库守恒 → 轮发
+  // 4) 刻印链路：开局实体卡直接入槽 → 卸下回手牌 → 放入任意槽位 → 槽间移动/交换 → 守恒 → 轮发
   const cycle = j(env)(`(()=>{
     save.weapon='flame';initRun();S.mode='play';UI.toasts.innerHTML='';
+    const cap=weaponDef(P.weapon).slots;
     const start=P.sigils[0]&&P.sigils[0].id==='sig_flame';
     const noDup=!DECK.hand.some(c=>c.id==='sig_flame')&&!DECK.draw.some(c=>c.id==='sig_flame');
-    const total=()=>DECK.hand.length+DECK.draw.length+DECK.discard.length+P.sigils.length;
+    const total=()=>DECK.hand.length+DECK.draw.length+DECK.discard.length+P.sigils.filter(Boolean).length;
     const before=total();
     const off=unfillSlot(0),back=DECK.hand.some(c=>c.id==='sig_flame');
     const uid=DECK.hand.find(c=>c.id==='sig_flame').uid;
-    const on=engraveCard(uid,0);
-    const slot=P.sigils.length===1&&P.sigils[0].id==='sig_flame';
+    const on=engraveCard(uid,4);
+    const slot=!!P.sigils[4]&&P.sigils[4].id==='sig_flame'&&!P.sigils[0];
     const conserved=total()===before&&!DECK.hand.some(c=>c.id==='sig_flame');
-    P.sigils=['keen','sig_flame','sig_frost'].map(mkCard);P.sigCast=0;
+    const moved=moveSlotCard(4,1),afterMove=!P.sigils[4]&&P.sigils[1].id==='sig_flame';
+    const swapped=moveSlotCard(1,0),afterSwap=P.sigils[0].id==='sig_flame'&&!P.sigils[1];
+    const ids=['keen','sig_flame','sig_frost'];
+    P.sigils=Array.from({length:cap},(_,i)=>ids[i]?mkCard(ids[i]):null);P.sigCast=0;
     const order=[];for(let i=0;i<3;i++)order.push(nextWeaponSpell().id);
-    return JSON.stringify({start,noDup,off,back,on,slot,conserved,order});
+    return JSON.stringify({start,noDup,off,back,on,slot,conserved,moved,afterMove,swapped,afterSwap,order});
   })()`);
   assert.deepEqual(cycle, {start:true,noDup:true,off:true,back:true,on:true,slot:true,conserved:true,
+    moved:true,afterMove:true,swapped:true,afterSwap:true,
     order:['sig_flame','sig_frost','sig_flame']});
 
-  // 5) 存档往返保留卡对象（uid + id）
+  // 5) 存档往返保留卡对象与空位（uid + id + 槽位索引）
   const roundtrip = j(env)(`(()=>{
     save.weapon='flame';initRun();S.mode='play';
-    P.sigils=['keen','sig_flame'].map(mkCard);
+    const ids=['keen','sig_flame'];
+    P.sigils=Array.from({length:weaponDef(P.weapon).slots},(_,i)=>ids[i]?mkCard(ids[i]):null);
     const snap=captureSnapshot();
     P.sigils=[];
     restoreSnapshot(JSON.parse(JSON.stringify(snap)));
-    return JSON.stringify({sigils:P.sigils.map(c=>c.id),snapIds:snap.P.sigils.map(c=>c.id)});
+    return JSON.stringify({sigils:P.sigils.map(c=>c?c.id:null),snapIds:snap.P.sigils.map(c=>c?c.id:null)});
   })()`);
-  assert.deepEqual(roundtrip.sigils, ['keen','sig_flame']);
-  assert.deepEqual(roundtrip.snapIds, ['keen','sig_flame']);
+  assert.deepEqual(roundtrip.sigils, ['keen','sig_flame',null,null,null,null]);
+  assert.deepEqual(roundtrip.snapIds, ['keen','sig_flame',null,null,null,null]);
 });
 
 testCase('R23_codex_sigil_and_seen_source', () => {
@@ -1499,6 +1507,42 @@ testCase('R28_dawn_card_and_overflow_gate', () => {
   assert.deepEqual(dawn.blocked, { day: 1, mode: 'play', warned: true });
   assert.equal(dawn.day, 2);
   assert.equal(dawn.mode, 'dawn');
+});
+
+testCase('R29_new_run_uses_empty_slot', () => {
+  const env = makeEnv();
+  const grown = j(env)(`(()=>{
+    initRun();S.mode='play';S.day=3;S.stats.nights=2;doSaveSlot(0);
+    const old=JSON.stringify(slots.slots[0]);
+    // 模拟上次玩的槽 1 仍是 active，返回标题后开新局
+    initRun();S.mode='menu';slots.active=0;
+    beginRun();
+    const raw=localStorage.getItem(SLOT_KEY)||'';
+    return JSON.stringify({active:slots.active,oldSame:JSON.stringify(slots.slots[0])===old,
+      s0:!!slots.slots[0],s1:!!slots.slots[1],s2:!!slots.slots[2],
+      slotDay:slots.slots[1]&&slots.slots[1].day,rawHasOld:raw.indexOf('"nights":2')>=0});
+  })()`);
+  assert.deepEqual(grown, { active: 1, oldSame: true, s0: true, s1: true, s2: false, slotDay: 1, rawHasOld: true });
+
+  // 切换活跃槽写盘失败时中止开局，绝不回退到旧 active 覆盖老档
+  const failed = makeEnv();
+  const warn = console.warn; console.warn = noop;
+  try {
+    failed.run(`initRun();S.mode='play';S.day=3;S.stats.nights=2;doSaveSlot(0);
+      var __old=JSON.stringify(slots.slots[0]);UI.toasts.innerHTML='';
+      localStorage.setItem=()=>{throw new Error('quota')};
+      slots.active=0;S.mode='menu';beginRun();`);
+  } finally { console.warn = warn; }
+  assert.deepEqual(j(failed)(`JSON.stringify({active:slots.active,oldSame:JSON.stringify(slots.slots[0])===__old,s1:!!slots.slots[1],mode:S.mode})`),
+    { active: 0, oldSame: true, s1: false, mode: 'menu' });
+
+  // 三槽全满仍走显式选槽，不自动覆盖任何旧档
+  const full = makeEnv();
+  full.run(`initRun();S.mode='play';for(const i of [0,1,2]){UI.toasts.innerHTML='';doSaveSlot(i);}
+    slots.active=0;var __raw=localStorage.getItem(SLOT_KEY);S.mode='menu';beginRun();`);
+  assert.equal(full.run(`slotUi`), 'new');
+  assert.equal(full.ids.get('slotOv').classList.contains('show'), true);
+  assert.equal(full.run(`localStorage.getItem(SLOT_KEY)===__raw`), true);
 });
 
 function main() {

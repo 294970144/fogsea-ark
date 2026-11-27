@@ -25,26 +25,50 @@ function setTxt(el,v){if(el&&el._t!==v){el._t=v;el.textContent=v;}}
 function setBar(el,fill,r){const v=clamp(r,0,1).toFixed(3);if(el._v!==v){el._v=v;fill.style.transform=`scaleX(${v})`;}}
 /* ---------------- 武器槽位 ---------------- */
 let weaponSlotsOpen=false;
-function renderWeaponSlots(){
-  const box=UI.weaponSlotsRow;
-  if(!box)return;
-  const w=weaponDef(P.weapon),cap=w.slots||0;
-  const list=P.sigils||[];
+/* 槽位 DOM 只在换武器时重建；装/卸/移动只原地改状态，避免 slotIn 全部重播 */
+function buildSlotEls(){
+  const box=UI.weaponSlotsRow;if(!box)return;
+  const cap=weaponDef(P.weapon).slots||0;
   let html='';
   for(let i=0;i<cap;i++){
-    const c=list[i],m=c&&sigilMeta(c.id);
-    html+=m?`<span class="wslot filled" data-slot="${i}" style="color:${m.color}" title="${m.n} · ${sigilDesc(c.id)} · 拖出卸下">
-        <span class="wslotBox">${svg(m.icon,28)}</span><span class="wslotName">${m.short}</span></span>`
-           :`<span class="wslot empty" data-slot="${i}"><span class="wslotBox"></span></span>`;
+    html+=`<span class="wslot empty" data-slot="${i}"><span class="wslotBox"></span><span class="wslotName"></span></span>`;
   }
   box.innerHTML=html;
-  const spellCount=weaponSpells().length;
-  const warn=weaponDef(P.weapon).attack==='spell'&&!spellCount;
+  box._weapon=P.weapon;
+  if(typeof clearSlotHover==='function')clearSlotHover();
+}
+function syncSlotEls(){
+  const box=UI.weaponSlotsRow;if(!box)return;
+  if(!box._weapon||box._weapon!==P.weapon)buildSlotEls();
+  const cap=weaponDef(P.weapon).slots||0,list=P.sigils||[];
+  [...box.children].forEach((el,i)=>{
+    const c=list[i],m=c&&sigilMeta(c.id),filled=!!m;
+    if(el.classList.contains('filled')!==filled){
+      el.classList.toggle('filled',filled);el.classList.toggle('empty',!filled);
+    }
+    if(m){
+      el.style.color=m.color;
+      el.title=m.n+' · '+sigilDesc(c.id)+' · 拖出卸下';
+    }else{
+      el.style.color='';el.title='';
+    }
+    const icon=m?svg(m.icon,28):'';
+    const body=el.querySelector('.wslotBox');
+    if(body&&body._icon!==icon){body._icon=icon;body.innerHTML=icon;}
+    const name=el.querySelector('.wslotName'),txt=m?m.short:'';
+    if(name&&name.textContent!==txt)name.textContent=txt;
+  });
+  const warn=weaponDef(P.weapon).attack==='spell'&&!weaponSpells().length;
   box.classList.toggle('noSpell',warn);
   box.title=warn?'法杖缺少法术刻印 · 拖入法术牌后可攻击':'';
   // 68px 槽 + 8px 沟槽；面板宽 = 行宽 + 左右内边距 32 + 边框 2 + 余量 10（防子像素舍入换行）
   const rowW=cap*68+(cap>0?(cap-1)*8:0);
   UI.weaponHud.style.setProperty('--slotW',Math.max(260,rowW+44)+'px');
+}
+function renderWeaponSlots(){
+  const box=UI.weaponSlotsRow;
+  if(!box||!box._weapon||box._weapon!==P.weapon)buildSlotEls();
+  syncSlotEls();
 }
 function toggleWeaponSlots(){
   weaponSlotsOpen=!weaponSlotsOpen;
@@ -67,7 +91,7 @@ function syncHUD(){
   setTxt(UI.weaponLv,'Lv.'+P.lvl);
   setBar(UI.weaponXpWrap,UI.weaponXp,P.xp/P.next);
   const sigKey=(P.weapon||'')+'|'+(P.sigils||[]).map(c=>c&&c.uid).join(',');
-  if(UI.weaponSlots._k!==sigKey){UI.weaponSlots._k=sigKey;renderWeaponSlots();}
+  if(UI.weaponSlots._k!==sigKey){UI.weaponSlots._k=sigKey;syncSlotEls();}
   const night=S.phase==='night';
   const showNight=S.mode==='play'&&!night;
   if(UI.nightBtn._s!==showNight){UI.nightBtn._s=showNight;UI.nightBtn.style.display=showNight?'':'none';}
@@ -143,7 +167,7 @@ const CX_CATS=[{id:'all',name:'全部'},{id:'role',name:'角色'},{id:'res',name
   {id:'foe',name:'雾裔'},{id:'bless',name:'祝福'},{id:'legacy',name:'传承'},{id:'term',name:'术语'}];
 const foeNow=t=>Math.round(FOES[t].hp*DIFFS[save.diff].hp*dayScale(Math.max(1,S.day)));
 // 刻印摘要：图鉴多处引用同一份持有情况
-const sigilList=()=>{const l=(P.sigils||[]).map(c=>{const m=sigilMeta(c&&c.id);return m?m.short:'?';});return l.length?l.join(' / '):'无';};
+const sigilList=()=>{const l=(P.sigils||[]).filter(Boolean).map(c=>{const m=sigilMeta(c.id);return m?m.short:'?';});return l.length?l.join(' / '):'无';};
 const sigilCap=()=>weaponDef(P.weapon).slots||0;
 const CODEX=[
   {id:'keeper',cat:'role',name:'守灯人',icon:'lantern',color:'#ffb454',sprite:'player',
@@ -151,7 +175,7 @@ const CODEX=[
    stats:()=>[['当前生命',`${Math.ceil(P.hp)} / ${P.maxHp}`],['当前武器',weaponDef(P.weapon).name],['通用伤害',P.dmg.toFixed(1)],
      ['攻击间隔',weaponAttackInterval().toFixed(2)+' 秒'],['攻击范围',weaponAttackRange().toFixed(2)+' 格'],
      ['移动速度',P.spd.toFixed(2)+' 格/秒'],['暴击率',Math.round(P.crit*100)+'%'],['等级','Lv.'+P.lvl],
-     ['刻印槽位',(P.sigils||[]).length+' / '+sigilCap()],['已刻刻印',sigilList()]],
+     ['刻印槽位',(P.sigils||[]).filter(Boolean).length+' / '+sigilCap()],['已刻刻印',sigilList()]],
    rel:['core','dash','nova','hand','w_sword']},
   ...WEAPON_IDS.map(id=>{
     const w=WEAPONS[id],a=w.spell?CDEFS[w.spell]:null;
@@ -288,7 +312,7 @@ const CODEX=[
    desc:'每次天亮进入两步选择：拾获卡牌、灯芯祝福，各 3 选 1，均可跳过；随后抽满手牌。刻印已改为卡牌，从牌库抽到后拖入武器槽位。',
    stats:()=>[['白昼时长',DAY_LEN+' 秒'],['当前日数',S.day],['额外抽牌',P.bonusDraw+' 张'],
      ['核心自愈',TUNE.core.regen+' /秒'],['刻印卡',SIGIL_IDS.length+SIGIL_SPELL_IDS.length+' 种'],
-     ['刻印槽位',(P.sigils||[]).length+' / '+sigilCap()]],rel:['hand','deck','b_blade']},
+     ['刻印槽位',(P.sigils||[]).filter(Boolean).length+' / '+sigilCap()]],rel:['hand','deck','b_blade']},
   {id:'tide',cat:'term',name:'雾潮',icon:'fog',color:'#a06bff',
    desc:'夜间敌潮，自岛缘分批刷新。夜晚构筑牌封存，只能打瞬发牌——白天没铺好，晚上就得靠操作。',
    stats:()=>[['本夜波次',S.nightTotal||'—'],['已消灭',S.nightKilled],['同屏上限',FOE_CAP],['每夜成长',S.endless?'缓增封顶':'+13% 生命']],
