@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>雾海方舟 · 刻印牌轮廓方案 · 第二版</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --page:#08121c;--line:#1d3648;--txt:#e8f1f5;--dim:#8fa9b8;--amber:#ffb454;
+  --ice:#7dd3fc;--fire:#fb923c;--arc:#c084fc;--nature:#86efac;--gold:#fcd34d;
+}
+body{background:var(--page);color:var(--txt);font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;padding:32px 28px 80px;line-height:1.5}
+h1{font-size:22px;font-weight:900;letter-spacing:.5px;margin-bottom:4px}
+.sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+.sub b{color:var(--amber)}
+.row{display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start}
+.item{width:180px}
+.label{font-size:13px;font-weight:900;color:var(--txt);margin-bottom:2px}
+.label span{color:var(--amber)}
+.note{font-size:11px;color:var(--dim);margin-bottom:10px;min-height:32px}
+
+/* 卡面基准：平直透光 + 半透明水印压卡名；无角标、无规则说明 */
+.card{position:relative;width:180px;height:252px;border-radius:14px;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--el) 20%,#0b1a28),#07141f 66%);
+  border:1.5px solid color-mix(in srgb,var(--el) 45%,transparent);
+  box-shadow:0 12px 28px rgba(0,0,0,.5);overflow:visible}
+.card .light{position:absolute;inset:0 0 auto 0;height:96px;border-radius:14px 14px 0 0;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--el) 30%,transparent),transparent);pointer-events:none}
+.card .mark{position:absolute;top:32px;left:50%;transform:translateX(-50%);
+  width:124px;height:124px;color:var(--el);opacity:.22;pointer-events:none}
+.card .mark svg{width:100%;height:100%}
+.card .name{position:absolute;top:128px;left:14px;right:14px;font-size:15px;font-weight:900;z-index:3;
+  text-shadow:0 2px 8px rgba(4,10,16,.95),0 0 3px rgba(4,10,16,.9)}
+.card .desc{position:absolute;left:14px;right:14px;bottom:14px;font-size:11px;color:var(--dim);
+  border-left:2px solid var(--el);padding-left:8px;z-index:2}
+.card .cost{position:absolute;top:9px;right:11px;font-size:19px;font-weight:900;color:var(--el);z-index:4}
+.card .hot{position:absolute;top:6px;left:7px;font-size:11px;color:var(--dim);
+  background:rgba(7,15,22,.82);border:1px solid var(--line);border-radius:5px;padding:0 5px;z-index:4}
+.card.ice{--el:var(--ice)}.card.fire{--el:var(--fire)}.card.arc{--el:var(--arc)}
+.card.nature{--el:var(--nature)}.card.gold{--el:var(--gold)}
+
+/* A · 票根侧缺口：左右对称的小半圆咬口 */
+.n-stub::before,.n-stub::after{content:'';position:absolute;top:50%;transform:translateY(-50%);
+  width:16px;height:28px;background:var(--page);border:1.5px solid color-mix(in srgb,var(--el) 60%,transparent);z-index:6}
+.n-stub::before{left:-9px;border-radius:14px 0 0 14px;border-left:0}
+.n-stub::after{right:-9px;border-radius:0 14px 14px 0;border-right:0}
+
+/* B · 顶部胶囊凹槽：细长像卡槽，不破坏矩形感 */
+.n-capsule::before{content:'';position:absolute;top:9px;left:50%;transform:translateX(-50%);
+  width:38px;height:9px;background:var(--page);border:1.5px solid color-mix(in srgb,var(--el) 65%,transparent);
+  border-radius:5px;z-index:6}
+.n-capsule::after{content:'';position:absolute;top:13px;left:50%;transform:translateX(-50%);
+  width:16px;height:1px;background:color-mix(in srgb,var(--el) 50%,transparent);z-index:7}
+
+/* C · 右下椭圆槽：单个细长椭圆，无内芯 */
+.n-railslot::before{content:'';position:absolute;right:16px;bottom:52px;
+  width:10px;height:48px;background:rgba(4,12,19,.9);border:1px solid color-mix(in srgb,var(--el) 60%,transparent);
+  border-radius:5px;z-index:6}
+
+/* D · 顶部双小耳：对称芯片脚，小而不抢戏 */
+.n-pins::before,.n-pins::after{content:'';position:absolute;top:-8px;width:14px;height:10px;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--el) 20%,#0b1a28),#07141f 66%);
+  border:1.5px solid color-mix(in srgb,var(--el) 60%,transparent);border-bottom:0;border-radius:4px 4px 0 0;z-index:-1}
+.n-pins::before{left:46px}.n-pins::after{right:46px}
+
+/* E · 底部小凹口：窄而浅，只在下缘留一个功能扣 */
+.n-notch::before{content:'';position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);
+  width:26px;height:9px;background:var(--page);border:1.5px solid color-mix(in srgb,var(--el) 60%,transparent);
+  border-bottom:0;border-radius:6px 6px 0 0;z-index:6}
+
+/* F · 四角打孔：完全不动外轮廓，像穿孔卡 */
+.n-punch{background:
+  radial-gradient(circle at 13px 13px,var(--page) 3px,color-mix(in srgb,var(--el) 65%,transparent) 3.8px,transparent 4.3px),
+  radial-gradient(circle at 167px 13px,var(--page) 3px,color-mix(in srgb,var(--el) 65%,transparent) 3.8px,transparent 4.3px),
+  radial-gradient(circle at 13px 239px,var(--page) 3px,color-mix(in srgb,var(--el) 65%,transparent) 3.8px,transparent 4.3px),
+  radial-gradient(circle at 167px 239px,var(--page) 3px,color-mix(in srgb,var(--el) 65%,transparent) 3.8px,transparent 4.3px),
+  linear-gradient(160deg,color-mix(in srgb,var(--el) 20%,#0b1a28),#07141f 66%)}
+
+.foot{margin-top:36px;font-size:12px;color:var(--dim);max-width:900px}
+.foot b{color:var(--amber)}
+</style>
+</head>
+<body>
+<h1>刻印牌 · 轮廓方案 · 第二版</h1>
+<p class="sub">比例固定 <b>5:7（180×252）</b> · 卡面沿用当前基准 · 六个方案全部<b>小尺寸、对称、带元素色描边</b>，避免上一版「剪坏卡」的观感</p>
+
+<div class="row">
+  <div class="item">
+    <div class="label">A · <span>票根侧缺口</span></div>
+    <p class="note">左右对称半圆咬口，像票根撕口。</p>
+    <div class="card ice n-stub"><span class="hot">1</span><span class="cost">15</span><div class="light"></div>
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/></svg></div>
+      <div class="name">冰霜法术</div><div class="desc">11 冰伤害</div>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="label">B · <span>顶部胶囊凹槽</span></div>
+    <p class="note">细长凹槽居中，保留完整矩形轮廓。</p>
+    <div class="card fire n-capsule"><span class="hot">2</span><span class="cost">12</span><div class="light"></div>
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 22c4 0 7-3 7-7 0-3-2-5-4-8-1 3-3 4-5 6 0-3-1-5-2-7-2 3-3 6-3 9 0 4 3 7 7 7z"/></svg></div>
+      <div class="name">火焰法术</div><div class="desc">20 火伤害 · 蔓延灼烧</div>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="label">C · <span>右下胶囊槽</span></div>
+    <p class="note">右下角单个细长胶囊形凹槽。</p>
+    <div class="card arc n-railslot"><span class="hot">3</span><span class="cost">15</span><div class="light"></div>
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="8"/><path d="M12 6l5 9H7z"/></svg></div>
+      <div class="name">奥术法术</div><div class="desc">10 奥术伤害 · 附加标记</div>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="label">D · <span>顶部双小耳</span></div>
+    <p class="note">对称芯片脚，比大凸耳克制。</p>
+    <div class="card nature n-pins"><span class="hot">4</span><span class="cost">8</span><div class="light"></div>
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M20 4C10 4 4 10 4 20c10 0 16-6 16-16z"/></svg></div>
+      <div class="name">愈灵之泉</div><div class="desc">治疗 45 · 核心 +120</div>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="label">E · <span>底部小凹口</span></div>
+    <p class="note">下缘窄浅的功能扣，不抢视觉。</p>
+    <div class="card gold n-notch"><span class="hot">5</span><span class="cost">6</span><div class="light"></div>
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 2l2.4 6.6L21 9l-5 4.4L17.5 21 12 17l-5.5 4L8 13.4 3 9l6.6-.4L12 2z"/></svg></div>
+      <div class="name">锋锐刻印</div><div class="desc">武器伤害 +20%</div>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="label">F · <span>四角打孔</span></div>
+    <p class="note">不动外轮廓，穿孔卡式识别。</p>
+    <div class="card ice n-punch"><span class="hot">1</span><span class="cost">15</span><div class="light"></div>
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/></svg></div>
+      <div class="name">冰霜法术</div><div class="desc">11 冰伤害</div>
+    </div>
+  </div>
+</div>
+
+<div class="foot"><b>判断</b>：A 和 D 是真正的轮廓变化，识别力最强；B/C/E 是内凹槽，更精致但远看弱；F 完全不动轮廓，最安全也最不显眼。<b>我推荐 A</b>——对称、尺寸克制、语义像钥匙口，且和「装进槽位」的动作直接对应。B 可以作为备选，如果担心扇形叠放遮住侧边。</div>
+</body>
+</html>
