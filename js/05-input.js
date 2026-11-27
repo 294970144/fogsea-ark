@@ -26,7 +26,7 @@ addEventListener('keydown',e=>{
     if(k==='escape'){
       e.preventDefault();cancelWeaponPicker();
     }else if(['1','2','3','4'].includes(k)){
-      e.preventDefault();selectWeaponDraft(WEAPON_IDS[+k-1],true);
+      e.preventDefault();chooseWeapon(WEAPON_IDS[+k-1]);
     }else if(['arrowleft','arrowup','arrowright','arrowdown'].includes(k)){
       e.preventDefault();
       const step=(k==='arrowleft'||k==='arrowup')?-1:1;
@@ -125,10 +125,13 @@ addEventListener('pointerup',e=>{
   const uid=S.dragUid,moved=S.dragMoved;
   const hit=document.elementFromPoint(e.clientX,e.clientY);
   const overCanvas=hit===cv||(hit&&hit.closest&&!!hit.closest('#weaponHud'));
+  const cardEl=hit&&hit.closest?hit.closest('.hcard'):null;
+  const overUid=cardEl&&cardEl.dataset&&cardEl.dataset.uid!==undefined?+cardEl.dataset.uid:0;
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
   endDrag();
   if(S.mode!=='play')return;
   if(moved){
+    if(overUid&&overUid!==uid){tryFuse(uid,overUid);return;}
     if(overCanvas){updateMouseWorld();tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}
     else selectCard(uid);
   }else{

@@ -417,15 +417,6 @@ function render(){
     }
   }
   drawGhost();
-  for(const s of slashes){
-    const t=s.t/.18,c0=proj(s.x,s.y);
-    ctx.globalAlpha=(1-t)*.8;
-    const g=ctx.createRadialGradient(c0[0],c0[1],4,c0[0],c0[1],Math.max(6,s.R*TW/2));
-    g.addColorStop(0,'rgba(255,220,160,0)');g.addColorStop(.7,'rgba(255,200,120,.5)');g.addColorStop(1,'rgba(255,180,84,.9)');
-    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(c0[0],c0[1]-10);
-    for(let i=0;i<=10;i++){const a=s.ang-1.1+i/10*2.2,p=proj(s.x+Math.cos(a)*s.R,s.y+Math.sin(a)*s.R);ctx.lineTo(p[0],p[1]-10);}
-    ctx.closePath();ctx.fill();ctx.globalAlpha=1;
-  }
   for(const s of shots){
     const p=proj(s.x,s.y),px=p[0],py=p[1],z=s.z||10;
     if(s.type==='arrow'){
@@ -436,9 +427,6 @@ function render(){
       ctx.fillStyle='#dffaff';ctx.beginPath();ctx.arc(px,py-z,3,0,TAU);ctx.fill();}
     else if(s.type==='fog'){ctx.drawImage(GLOW.violet,px-9,py-21,18,18);
       ctx.fillStyle='#e0ccff';ctx.beginPath();ctx.arc(px,py-12,2.6,0,TAU);ctx.fill();}
-    else{const sp=proj(s.vx,s.vy),m=Math.hypot(sp[0],sp[1])||1;
-      ctx.strokeStyle='rgba(143,227,208,.9)';ctx.lineWidth=3;
-      ctx.beginPath();ctx.moveTo(px-sp[1]/m*12,py-12+sp[0]/m*6);ctx.lineTo(px+sp[1]/m*12,py-12-sp[0]/m*6);ctx.stroke();}
   }
   for(const p of parts){
     const pr=proj(p.x,p.y),px=pr[0],py=pr[1],t=p.life/p.max;

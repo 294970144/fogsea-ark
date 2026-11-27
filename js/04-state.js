@@ -98,6 +98,7 @@ function purgeCard(id){
 function poolIds(){
   return CARD_IDS.filter(id=>{
     const d=CDEFS[id];
+    if(d.fuseOut)return false;
     if(d.cls==='class')return false;
     if(d.core)return false;
     if(d.cls==='mage'&&!isMage()&&!d.basic)return false;

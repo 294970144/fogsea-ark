@@ -100,8 +100,11 @@ function makeEnv(opts = {}) {
   };
   let seed = 987654321;
   const rng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const FXStub = { on: false, calls: [], clear: noop, frame: noop, cast: noop, spell: noop,
+    detonate: noop, reaction: noop, storm: noop, becomeMage: noop, sword: noop, swordHit: noop,
+    waveShot: noop, slash: noop, activeCount: () => 0 };
   const sandbox = {
-    console, document, localStorage,
+    console, document, localStorage, FX: FXStub,
     innerWidth: 1280, innerHeight: 800, devicePixelRatio: 1,
     performance: { now: () => 0 },
     matchMedia: () => ({ matches: false, addEventListener: noop }),
@@ -784,14 +787,20 @@ testCase('R17_weapon_snapshot_picker_and_hud', () => {
   assert.equal(env.run("$('weaponDrop').classList.contains('show')"), true);
   env.run("selectWeaponDraft('frost')");
   assert.equal(env.run('localStorage.getItem(SAVE_KEY)'), before);
-  env.run('cancelWeaponPicker()');
   assert.equal(env.run('save.weapon'), 'sword');
+  env.run('openWeaponPicker()'); // 再点「收起」取消，不落定
   assert.equal(env.run('weaponPicker'), null);
+  assert.equal(env.run('save.weapon'), 'sword');
 
-  env.run("openWeaponPicker();selectWeaponDraft('flame');confirmWeaponPicker();");
+  // 点击武器卡直接落定：写档、刷新准备页、收起面板
+  env.run('openWeaponPicker()');
+  let cards = env.ids.get('weaponGrid').children;
+  cards[1]._listeners.click[0]();
   assert.equal(env.run('save.weapon'), 'flame');
   assert.equal(JSON.parse(env.run('localStorage.getItem(SAVE_KEY)')).weapon, 'flame');
   assert.equal(env.ids.get('prepWeaponName').textContent, '火焰法杖');
+  assert.equal(env.run('weaponPicker'), null);
+  assert.equal(env.run("$('weaponDrop').classList.contains('show')"), false);
 
   env.run('openWeaponPicker()');
   const press = (key, shiftKey = false) => {
@@ -800,32 +809,28 @@ testCase('R17_weapon_snapshot_picker_and_hud', () => {
     return prevented;
   };
   assert.equal(press('1'), true);
-  assert.equal(env.run('weaponPicker.draft'), 'sword');
+  assert.equal(env.run('save.weapon'), 'sword'); // 数字键与点击一致，直接落定
+  assert.equal(env.run('weaponPicker'), null);
+
+  env.run('openWeaponPicker()');
   assert.equal(press('ArrowRight'), true);
   assert.equal(env.run('weaponPicker.draft'), 'flame');
+  assert.equal(env.run('save.weapon'), 'sword'); // 方向键只预览，Enter/点击才落定
 
   const document = env.ctx.document;
-  const cards = env.ids.get('weaponGrid').children;
-  const cancel = env.ids.get('weaponCancel');
-  const confirm = env.ids.get('weaponConfirm');
-  env.ids.get('weaponDrop').querySelectorAll = () => [...cards, cancel, confirm];
-  cards[0].focus = () => { document.activeElement = cards[0]; };
-  confirm.focus = () => { document.activeElement = confirm; };
+  cards = env.ids.get('weaponGrid').children; // 预览后卡片已重建
+  env.ids.get('weaponDrop').querySelectorAll = () => cards;
+  cards.forEach(c => { c.focus = () => { document.activeElement = c; }; });
   document.activeElement = cards[1];
   assert.equal(press('Tab'), false);
   assert.equal(press('Tab', true), false);
-  assert.equal(press('Enter'), false);
   document.activeElement = cards[0];
   assert.equal(press('Tab', true), true);
-  assert.equal(document.activeElement, confirm);
+  assert.equal(document.activeElement, cards[3]);
   assert.equal(press('Tab'), true);
   assert.equal(document.activeElement, cards[0]);
 
   assert.equal(press('3'), true);
-  document.activeElement = confirm;
-  assert.equal(press('Enter'), false);
-  assert.equal(press(' '), false);
-  confirm._listeners.click[0](); // The test DOM cannot generate the native keyboard click.
   assert.equal(env.run('save.weapon'), 'frost');
   assert.equal(env.run('weaponPicker'), null);
   env.run('openWeaponPicker()');
@@ -860,8 +865,8 @@ testCase('R18_spell_weapons_skip_mage_transform', () => {
         regen:P.enRegenFlat,deckMax:DECK.max,cap:handCap()},core:coreCards.some(x=>CDEFS[x]&&CDEFS[x].core),
         classInPool:pool.includes('class_mage'),wellInPool:pool.includes('manawell'),mageBless:S.dawnBless.some(b=>b.cls==='mage')});
     }
-    save.weapon='sword';initRun();refreshPrep();const swordNote=$('prepMageNote').style.display;
-    save.weapon='flame';refreshPrep();const spellNote=$('prepMageNote').style.display;
+    save.weapon='sword';initRun();refreshPrep();const swordNote=$('prepMageNote').textContent;
+    save.weapon='flame';refreshPrep();const spellNote=$('prepMageNote').textContent;
     const reaction=id=>{
       save.weapon=id;initRun();foes.length=0;
       const f={x:P.x,y:P.y,r:.3,hp:10000,max:10000,dead:false,flash:0,kx:0,ky:0,burnStacks:0,burnT:0,burnTick:0,
@@ -881,8 +886,9 @@ testCase('R18_spell_weapons_skip_mage_transform', () => {
     assert.equal(row.wellInPool, false, row.id);
     assert.equal(row.mageBless, false, row.id);
   }
-  assert.equal(out.swordNote, '');
-  assert.equal(out.spellNote, 'none');
+  assert.match(out.swordNote, /转职/);
+  assert.match(out.spellNote, /无需转职/);
+  assert.notEqual(out.swordNote, out.spellNote);
   assert.equal(out.staffReaction, 1.5);
   assert.equal(out.swordReaction, 0);
 
@@ -941,11 +947,14 @@ testCase('R19_fx_degradation_contract', () => {
     `reaction(x,y,k){this.calls.push('reaction:'+k)},storm(){this.calls.push('storm')},becomeMage(){this.calls.push('mage')}}`;
   const run = on => { const env = makeEnv(); if (on !== undefined) env.run(stub(on)); return j(env)(scenario); };
   const none = run(undefined), off = run(false), on = run(true);
-  assert.deepEqual(none.calls, []);
-  assert.deepEqual(off.calls, ['clear', 'frame']);
+  // 特效只走 FX 层：无论后端是否就绪，调用一律发出，由 FX 内部保护决定是否渲染。
+  // 旧契约「FX 关闭时不调用、改走 Canvas 2D 回退」已随回退路径一并移除。
   const need = ['clear','cast:wall','cast:expand','cast:rain','cast:spring','cast:mend','cast:ward','cast:tactic',
     'cast:surge','cast:salvage','mage','spell','detonate','storm','reaction:steam','reaction:reso','frame'];
-  for (const k of need) assert.ok(on.calls.includes(k), k);
+  for (const k of need) {
+    assert.ok(off.calls.includes(k), 'off:' + k);
+    assert.ok(on.calls.includes(k), 'on:' + k);
+  }
   assert.deepEqual(none.state, off.state);
   assert.deepEqual(none.state, on.state);
 });
@@ -1222,7 +1231,7 @@ testCase('R24_codex_tag_derivation_and_display', () => {
   // 6) 武器攻击模板不进图鉴
   assert.equal(out.tplInCodex, false);
   // 7) 标签只做展示，不再参与筛选：分类与搜索仍是唯二过滤条件
-  assert.equal(out.all, 101);
+  assert.equal(out.all, 107);
   assert.equal(out.cards, out.cardsLen);
   assert.ok(!out.labelAll.includes('已选'));
   assert.ok(/已记录 \d+\/\d+/.test(out.labelAll));
@@ -1233,6 +1242,131 @@ testCase('R24_codex_tag_derivation_and_display', () => {
   assert.equal(out.titleOn, '');
   assert.equal(out.etNone, '');
   assert.equal(out.titleOff, 'none');
+});
+
+testCase('R25_card_fusion_recipe_and_drag', () => {
+  const env = makeEnv();
+  // 1) 配方表完整性：产物卡存在、标 fuseOut、不进奖励池、不可再熔、查找对称
+  const table = j(env)(`(()=>{
+    const outs=FUSION_RECIPES.map(r=>r.out);
+    const pairs=FUSION_RECIPES.map(r=>{
+      const a=r.a||CARD_IDS.find(i=>CDEFS[i].elem===r.ea&&!CDEFS[i].fuseOut);
+      const b=r.b||CARD_IDS.find(i=>CDEFS[i].elem===r.eb&&!CDEFS[i].fuseOut);
+      return {a,b,ok:fusionOf(a,b)===r.out,back:fusionOf(b,a)===r.out};
+    });
+    return JSON.stringify({
+      n:FUSION_RECIPES.length,
+      missing:outs.filter(o=>!CDEFS[o]),
+      notFuseOut:outs.filter(o=>!CDEFS[o].fuseOut),
+      inPool:outs.filter(o=>poolIds().includes(o)),
+      asym:pairs.filter(p=>!p.ok||!p.back).map(p=>p.a+'|'+p.b),
+      chain:outs.filter(o=>CARD_IDS.some(i=>fusionOf(o,i)||fusionOf(i,o))),
+      q:outs.map(o=>CDEFS[o].q),
+      partner:fusionRecipesOf('ward').map(r=>r.name).sort()
+    });
+  })()`);
+  assert.equal(table.n, 6);
+  assert.deepEqual(table.missing, []);
+  assert.deepEqual(table.notFuseOut, []);
+  assert.deepEqual(table.inPool, []);
+  assert.deepEqual(table.asym, []);
+  assert.deepEqual(table.chain, []);
+  assert.deepEqual(table.q, [2, 2, 2, 2, 3, 3]);
+  assert.deepEqual(table.partner, ['凝神']);
+
+  // 2) 熔铸执行：扣雾晶、两张源牌按 uid 永久离场、产物进当前手牌、同名牌其他副本不动
+  const exec = j(env)(`(()=>{
+    initRun();S.mode='play';
+    const a=mkCard('ward'),b=mkCard('tactic'),spare=mkCard('tactic');
+    DECK.hand=[a,b,spare];res.crys=TUNE.fusion.crys+2;
+    const before=res.crys,draw0=DECK.draw.length,disc0=DECK.discard.length;
+    const ok=tryFuse(a.uid,b.uid);
+    const fused=DECK.hand.filter(c=>c.id==='fuse_focus');
+    return JSON.stringify({ok,fee:before-res.crys,feeDef:TUNE.fusion.crys,
+      hand:DECK.hand.map(c=>c.id),spareKept:DECK.hand.some(c=>c.uid===spare.uid),
+      srcGone:!DECK.hand.some(c=>c.uid===a.uid||c.uid===b.uid),
+      pilesSame:DECK.discard.length===disc0&&DECK.draw.length===draw0,
+      q:CDEFS[fused[0].id].q,handDirty:S.handDirty});
+  })()`);
+  assert.equal(exec.ok, true);
+  assert.equal(exec.feeDef, 5);
+  assert.equal(exec.fee, 5);
+  assert.deepEqual(exec.hand, ['tactic', 'fuse_focus']);
+  assert.equal(exec.spareKept, true);
+  assert.equal(exec.srcGone, true);
+  assert.equal(exec.pilesSame, true);
+  assert.equal(exec.q, 2);
+  assert.equal(exec.handDirty, true);
+
+  // 3) 失败路径一律不改状态：非法配方 / 雾晶不足 / 拖到自己身上
+  const bad = j(env)(`(()=>{
+    initRun();S.mode='play';
+    const a=mkCard('wall'),b=mkCard('wall');DECK.hand=[a,b];res.crys=99;
+    const r1=tryFuse(a.uid,b.uid);
+    const after1=[DECK.hand.length,res.crys];
+    const c=mkCard('ward'),d=mkCard('tactic');DECK.hand=[c,d];res.crys=1;
+    const r2=tryFuse(c.uid,d.uid);
+    return JSON.stringify({r1,after1,r2,crys:res.crys,hand:DECK.hand.map(x=>x.id),self:tryFuse(c.uid,c.uid)});
+  })()`);
+  assert.deepEqual(bad, { r1: false, after1: [2, 99], r2: false, crys: 1, hand: ['ward', 'tactic'], self: false });
+
+  // 4) 元素产物：一次施法同时挂两种元素状态（status2 复用 applyElement）
+  const dual = j(env)(`(()=>{
+    initRun();P.cls=null;P.weapon='sword';P.aff={fire:0,frost:0,arcane:0,lightning:0};
+    foes.length=0;
+    const f={type:'crawler',x:P.x+1,y:P.y,hp:10000,max:10000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
+      atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+      burnStacks:0,burnT:0,burnTick:0,chillStacks:0,chillT:0,freezeT:0,markT:0,shockT:0,
+      lastElem:null,lastElemT:-99,reactCd:0};
+    foes.push(f);rebuildFoeGrid();
+    castSpell(CDEFS.fuse_steam,f.x,f.y);
+    return JSON.stringify({dmg:10000-f.hp,burn:f.burnStacks,chill:f.chillStacks});
+  })()`);
+  assert.ok(dual.dmg > 0);
+  assert.equal(dual.burn, 2);
+  assert.equal(dual.chill, 2);
+
+  // 5) 图鉴：品质行 / 第二状态行 / 第二元素 / 熔铸来源
+  const codex = j(env)(`(()=>{
+    const row=(id,k)=>{const r=CODEX.find(x=>x.id===id).stats().find(x=>x[0]===k);return r?r[1]:null;};
+    return JSON.stringify({q:row('c_fuse_steam','品质'),q3:row('c_fuse_meteor','品质'),
+      plain:row('c_wall','品质'),st2:row('c_fuse_steam','附加状态Ⅱ'),
+      elem2:row('c_fuse_steam','第二元素'),src:row('c_fuse_steam','熔铸来源'),
+      fee:row('c_fuse_steam','熔铸手续费'),srcFocus:row('c_fuse_focus','熔铸来源'),
+      noSrc:row('c_wall','熔铸来源')});
+  })()`);
+  assert.deepEqual(codex, {
+    q: '稀有', q3: '史诗', plain: '普通', st2: '冰缓 ×2', elem2: '冰',
+    src: '火元素牌 + 冰元素牌', fee: '雾晶 5', srcFocus: '灯焰护盾 + 战术重整', noSrc: null
+  });
+
+  // 6) 存档往返：熔铸产物留在手牌时能原样读回
+  const round = j(env)(`(()=>{
+    initRun();S.mode='play';
+    const a=mkCard('rain'),b=mkCard('mine');
+    DECK.hand=[a,b];res.crys=10;
+    tryFuse(a.uid,b.uid);
+    const snap=JSON.parse(JSON.stringify(captureSnapshot()));
+    DECK.hand=[];
+    restoreSnapshot(snap);
+    return JSON.stringify({hand:DECK.hand.map(c=>c.id),uidNum:typeof DECK.hand[0].uid==='number'});
+  })()`);
+  assert.deepEqual(round, { hand: ['fuse_meteor'], uidNum: true });
+
+  // 7) 卡面：稀有以上出品质角标（渐变底色），普通卡不出
+  const face = j(env)(`JSON.stringify({rare:cardInner(CDEFS.fuse_steam,'1'),common:cardInner(CDEFS.wall,'1')})`);
+  assert.ok(face.rare.includes('hcQ') && face.rare.includes('稀有'));
+  assert.ok(face.rare.includes('linear-gradient'));
+  assert.ok(!face.common.includes('hcQ'));
+  assert.ok(face.common.includes('木墙'));
+
+  // 8) 卡面短文案：产物卡必须自带 brief，否则卡面退化成被 2 行截断的 desc
+  const brief = j(env)(`JSON.stringify(FUSION_RECIPES.map(r=>{
+    const d=CDEFS[r.out];
+    return {id:r.out,len:(d.brief||'').length,shorter:(d.brief||'').length<d.desc.length};
+  }))`);
+  assert.deepEqual(brief.filter(b => !b.len).map(b => b.id), []);
+  assert.deepEqual(brief.filter(b => !b.shorter).map(b => b.id), []);
 });
 
 function main() {

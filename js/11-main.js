@@ -156,7 +156,9 @@ function toTitle(){
 }
 function refreshPrep(){
   refreshPrepWeapon();
-  $('prepMageNote').style.display=weaponDef(save.weapon).attack==='spell'?'none':'';
+  $('prepMageNote').textContent=weaponDef(save.weapon).attack==='spell'
+    ? '法术武器无需转职：自动开启元素反应，以雾能施放高级法术。'
+    : '第 2 日黎明可转职「法师」：生命上限降低，以法力施法，手牌上限提高。';
   $('emberNum').textContent=save.embers;
   $('bestChip').textContent=save.best.nights>0?`${save.best.nights} 夜 · ${save.best.kills} 击杀`:'尚无记录';
   const dr=$('diffRow');
@@ -198,7 +200,7 @@ function renderWeaponPicker(){
     el.innerHTML=`<span class="weaponHotkey kb kb-hint">${i+1}</span>
       <span class="weaponIcon"><img src="${w.art}" alt=""></span>
       <span class="weaponCardBody"><b>${w.name}</b><p>${w.desc}</p></span>`;
-    el.addEventListener('click',()=>selectWeaponDraft(id,true));
+    el.addEventListener('click',()=>chooseWeapon(id));
     row.appendChild(el);
   });
 }
@@ -232,9 +234,9 @@ function closeWeaponPicker(restoreFocus=false){
   setMenuView('prep',false);
   if(restoreFocus&&opener&&opener.focus)opener.focus({preventScroll:true});
 }
-function confirmWeaponPicker(){
+function chooseWeapon(id){
   if(!weaponPicker)return;
-  save.weapon=normalizeWeaponId(weaponPicker.draft);persist();
+  save.weapon=normalizeWeaponId(id);persist();
   refreshPrep();closeWeaponPicker(true);sfx('card');
 }
 function cancelWeaponPicker(){closeWeaponPicker(true);sfx('ui');}
@@ -491,8 +493,6 @@ $('btnContinue').addEventListener('click',openLoadView);
 $('startBtn').addEventListener('click',openPrep);
 $('launchBtn').addEventListener('click',beginRun);
 $('prepWeaponBtn').addEventListener('click',openWeaponPicker);
-$('weaponConfirm').addEventListener('click',confirmWeaponPicker);
-$('weaponCancel').addEventListener('click',cancelWeaponPicker);
 $('btnPrepBack').addEventListener('click',toTitle);
 $('btnLoadBack').addEventListener('click',()=>{resetLoadUi();setMenuView('title');sfx('ui');});
 $('slotDelete').addEventListener('click',confirmDelete);

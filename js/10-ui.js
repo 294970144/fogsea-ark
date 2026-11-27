@@ -196,7 +196,7 @@ const CODEX=[
       desc:d.desc+(d.kind==='build'?' 建筑永久留场，卡牌回到弃牌堆，洗牌后可再次抽到。':''),
       tags:cardTags(d),badge:()=>{const n=cardTotal(id);return n?'×'+n:'';},
       stats:()=>{
-        const s=[['类型',KINDNAME[d.kind]],['费用',costStr(d)],
+        const s=[['类型',KINDNAME[d.kind]],['品质',cardQ(d).name],['费用',costStr(d)],
           ['牌库中',cardTotal(id)+' 张'],['累计打出',save.seen.play[id]||0]];
         if(d.kind==='build'){
           const b=BUILDS[d.build];
@@ -213,6 +213,19 @@ const CODEX=[
         if(d.status){
           const sn=TUNE.statusNames[d.status.kind]||d.status.kind;
           s.push(['附加状态',sn+' ×'+d.status.n]);
+        }
+        if(d.status2){
+          const sn=TUNE.statusNames[d.status2.kind]||d.status2.kind;
+          s.push(['附加状态Ⅱ',sn+' ×'+d.status2.n]);
+        }
+        if(d.elem2)s.push(['第二元素',ELEMNAME[d.elem2]||'—']);
+        if(d.fuseOut){
+          const r=fusionRecipeOf(d.id);
+          if(r)s.push(['熔铸来源',fusionSideName(r,'a')+' + '+fusionSideName(r,'b')],
+            ['熔铸手续费','雾晶 '+TUNE.fusion.crys]);
+        }else{
+          const rs=fusionRecipesOf(d.id);
+          if(rs.length)s.push(['熔铸配方',rs.map(r=>r.name).join(' / ')]);
         }
         if(d.id==='expand')s.push(['当前上限',DECK.max+' / '+handCap()]);
         if(d.tier)s.push(['回收率增益','+'+d.tier+'%'],['当前回收率',DECK.recycle+'%']);

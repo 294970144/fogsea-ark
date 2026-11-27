@@ -297,12 +297,49 @@ struct Out { @location(0) uv: vec2f };
   } else if (U.mode < 6.5) {
     a = tx.a * env;
     col = mix(U.col.rgb, vec3f(1.0), tx.a * 0.2);
-  } else {
+  } else if (U.mode < 7.5) {
     let hor = pow(1.0 - abs(p.x), 2.0);
     let ver = pow(uv.y, 1.6);
     let flick = 0.8 + 0.2 * sin(U.time * 30.0 + uv.y * 20.0);
     a = hor * ver * flick * env;
     col = mix(U.col.rgb, vec3f(1.0), ver * 0.4);
+  } else {
+    let ang = atan2(p.y, p.x);
+    let rel = atan2(sin(ang - U.p1.x), cos(ang - U.p1.x));
+    let hs = U.p1.y;
+    let lead = mix(-hs, hs, smoothstep(0.0, 0.35, U.t));
+    let inArc = step(-hs, rel) * step(rel, lead);
+    let bh = clamp((lead - rel) / (2.0 * hs), 0.0, 1.0);
+    let inner = mix(U.p1.z, 0.80, pow(bh, 1.25));
+    let band = smoothstep(inner, inner + 0.10, d) * (1.0 - smoothstep(0.965, 1.0, d));
+    let head = 1.0 - smoothstep(0.05, 0.16, bh);
+    let wisp = vnoise(vec2f(rel * 4.0 + U.time * 0.6, d * 9.0));
+    let tailFade = 1.0 - smoothstep(0.7, 1.0, bh);
+    let body = band * tailFade * mix(1.0, smoothstep(0.25, 0.75, wisp), smoothstep(0.55, 0.85, bh));
+    var tex = 0.35;
+    if (U.p1.w < 0.5) {
+      tex = smoothstep(0.35, 0.8, vnoise(vec2f(rel * 3.0, d * 16.0 - U.time * 6.0)));
+    } else if (U.p1.w < 1.5) {
+      let n = fbm(p * 5.0 + vec2f(U.time * 0.4, 0.0));
+      tex = 1.0 - smoothstep(0.0, 0.06, abs(n - 0.5));
+    } else if (U.p1.w < 2.5) {
+      let hq = p * 8.0;
+      let hr = vec2f(1.0, 1.7320508);
+      let ha = hq - hr * floor(hq / hr) - hr * 0.5;
+      let hb = (hq - hr * 0.5) - hr * floor((hq - hr * 0.5) / hr) - hr * 0.5;
+      let gv = select(hb, ha, dot(ha, ha) < dot(hb, hb));
+      let hn = max(abs(gv.x) * 0.8660254 + abs(gv.y) * 0.5, abs(gv.y));
+      tex = smoothstep(0.36, 0.46, hn);
+    }
+    let rim = smoothstep(0.86, 0.97, d) * (1.0 - smoothstep(0.97, 1.0, d));
+    let halo = (1.0 - smoothstep(1.0, 1.38, d)) * smoothstep(0.7, 1.0, d);
+    let fade = 1.0 - smoothstep(0.7, 1.0, U.t);
+    let cBody = mix(U.col.rgb, U.col2.rgb, smoothstep(0.25, 0.9, bh));
+    col = mix(cBody, vec3f(1.0), head * 0.9);
+    col = mix(col, vec3f(1.0), tex * 0.35 * (1.0 - bh * 0.5) + rim * 0.5 * (1.0 - bh * 0.6));
+    col = mix(col, U.col2.rgb, (1.0 - smoothstep(inner, inner + 0.25, d)) * 0.35 * (1.0 - head));
+    col = mix(col, U.col.rgb, halo * 0.5);
+    a = (body * (0.75 + 0.35 * (1.0 - bh)) + head * band * 0.6 + band * rim * 0.6 * (1.0 - bh) + halo * 0.45 * tailFade) * inArc * fade;
   }
   if (a < 0.004) { discard; }
   return vec4f(col, a);
@@ -480,8 +517,8 @@ function spawn(pool,p){
   if(pool.cursor<=i&&pool.hi>=pool.lo)pool.wrap=true;
   const birth=p.birth===undefined?FX.time:p.birth;
   const c=p.col||WHITE,flags=(p.screen?1:0)+(p.hold?2:0),life=p.life||.5;
+  const a=gpu?null:pool.arr;
   if(!gpu){
-    const a=pool.arr;
     a.aWorld[i*2]=p.x;a.aWorld[i*2+1]=p.y;
     a.aVel[i*2]=p.vx||0;a.aVel[i*2+1]=p.vy||0;
     a.aPhys[i*4]=p.z0||0;a.aPhys[i*4+1]=p.vz||0;a.aPhys[i*4+2]=p.grav||0;a.aPhys[i*4+3]=p.drag||0;
@@ -645,11 +682,43 @@ void main(){
     vec2 auv=(vec2(mod(sh,4.0),floor(sh/4.0))+uv)/vec2(4.0,3.0);
     vec4 tx=texture2D(uAtlas,auv);
     a=tx.a*env;col=mix(uCol,vec3(1.0),tx.a*0.2);
-  }else{
+  }else if(uMode<7.5){
     float hor=pow(1.0-abs(p.x),2.0);
     float ver=pow(vUv.y,1.6);
     float flick=0.8+0.2*sin(uTime*30.0+vUv.y*20.0);
     a=hor*ver*flick*env;col=mix(uCol,vec3(1.0),ver*0.4);
+  }else{
+    float ang=atan(p.y,p.x);
+    float rel=atan(sin(ang-uP1.x),cos(ang-uP1.x));
+    float hs=uP1.y;
+    float lead=mix(-hs,hs,smoothstep(0.0,0.35,uT));
+    float inArc=step(-hs,rel)*step(rel,lead);
+    float bh=clamp((lead-rel)/(2.0*hs),0.0,1.0);
+    float inner=mix(uP1.z,0.80,pow(bh,1.25));
+    float band=smoothstep(inner,inner+0.10,d)*(1.0-smoothstep(0.965,1.0,d));
+    float head=1.0-smoothstep(0.05,0.16,bh);
+    float wisp=vnoise(vec2(rel*4.0+uTime*0.6,d*9.0));
+    float tailFade=1.0-smoothstep(0.7,1.0,bh);
+    float body=band*tailFade*mix(1.0,smoothstep(0.25,0.75,wisp),smoothstep(0.55,0.85,bh));
+    float tex=0.35;
+    if(uP1.w<0.5){tex=smoothstep(0.35,0.8,vnoise(vec2(rel*3.0,d*16.0-uTime*6.0)));}
+    else if(uP1.w<1.5){float n=fbm(p*5.0+vec2(uTime*0.4,0.0));tex=1.0-smoothstep(0.0,0.06,abs(n-0.5));}
+    else if(uP1.w<2.5){
+      vec2 hq=p*8.0;vec2 hr=vec2(1.0,1.7320508);
+      vec2 ha=mod(hq,hr)-hr*0.5;vec2 hb=mod(hq-hr*0.5,hr)-hr*0.5;
+      vec2 gv=dot(ha,ha)<dot(hb,hb)?ha:hb;
+      float hn=max(abs(gv.x)*0.8660254+abs(gv.y)*0.5,abs(gv.y));
+      tex=smoothstep(0.36,0.46,hn);
+    }
+    float rim=smoothstep(0.86,0.97,d)*(1.0-smoothstep(0.97,1.0,d));
+    float halo=(1.0-smoothstep(1.0,1.38,d))*smoothstep(0.7,1.0,d);
+    float fade=1.0-smoothstep(0.7,1.0,uT);
+    vec3 cBody=mix(uCol,uCol2,smoothstep(0.25,0.9,bh));
+    col=mix(cBody,vec3(1.0),head*0.9);
+    col=mix(col,vec3(1.0),tex*0.35*(1.0-bh*0.5)+rim*0.5*(1.0-bh*0.6));
+    col=mix(col,uCol2,(1.0-smoothstep(inner,inner+0.25,d))*0.35*(1.0-head));
+    col=mix(col,uCol,halo*0.5);
+    a=(body*(0.75+0.35*(1.0-bh))+head*band*0.6+band*rim*0.6*(1.0-bh)+halo*0.45*tailFade)*inArc*fade;
   }
   if(a<0.004)discard;
   gl_FragColor=vec4(col,a);
@@ -696,6 +765,9 @@ function glyphW(x,y,o){return quad(6,{x,y,life:o.life||.6,col:o.col,shape:o.shap
 function pillarW(x,y,o){const h=o.h||150,w=o.w||26;return quad(7,{x,y,life:o.life||.5,col:o.col,sw:w,sh:h});}
 function beamW(x0,y0,x1,y1,o){return quad(2,{x0,y0,x1,y1,life:o.life||.15,col:o.col,sw:0,sh:o.width||7});}
 function bubbleW(o){return quad(3,{follow:'player',life:o.dur||4,col:o.col||'#8fe3d0',sw:74,sh:74});}
+/* 弧月刀光：p1=屏幕空间中心角(世界角+π/4)，p2=半扫角，p3=头部内缘，p4=纹理种类 */
+function slashW(x,y,ang,r,o){return quad(8,{x,y,life:o.life||.3,col:o.col||'#ffb454',col2:o.col2||o.col||'#ffb454',
+  p1:ang+Math.PI/4,p2:o.half===undefined?1.5:o.half,p3:o.inner===undefined?.3:o.inner,p4:o.tex||0,r0:r});}
 
 function w2s(x,y){
   const z=cam.z,cpx=(cam.x-cam.y)*32,cpy=(cam.x+cam.y)*16;
@@ -729,6 +801,10 @@ function updateQuad(q){
     const r=q.r0+(q.r1-q.r0)*(1-Math.pow(1-t,2));
     m.scale.set(r*64*cam.z,r*32*cam.z,1);
     m.position.set(sx,sy,1);
+  }else if(q.mode===8){
+    const r=q.r0*(1+t*.05)*1.35;
+    m.scale.set(r*64*cam.z,r*32*cam.z,1);
+    m.position.set(sx,sy-10*cam.z,1);
   }else if(q.mode===7){
     m.position.set(sx,sy-q.sh*cam.z/2,1);m.scale.set(q.sw*cam.z,q.sh*cam.z,1);
   }else if(q.mode===3){
@@ -755,7 +831,8 @@ const TRAILS={
   frost:{shape:4,shape2:2,col:'#6fd8ff',col2:'#dffaff',size:6,life:.3},
   arcane:{shape:0,shape2:3,col:'#b48cff',col2:'#e0ccff',size:6,life:.3},
   meteor:{shape:0,shape2:1,col:'#ff7a45',col2:'#ffb454',size:10,life:.4},
-  crystal:{shape:2,col:'#57e6ff',col2:'#dffaff',size:6,life:.3}
+  crystal:{shape:2,col:'#57e6ff',col2:'#dffaff',size:6,life:.3},
+  sword:{shape:2,shape2:1,col:'#8fe3d0',col2:'#dffaff',size:6,life:.26}
 };
 function updateProj(pr){
   if(FX.time<pr.birth)return;
@@ -775,6 +852,11 @@ function updateProj(pr){
   }
   if(pr.trail==='meteor'&&R()<.7)
     spawn(pools.alpha,{x,y,z0:h,vz:8,grav:-6,drag:1,life:.7,size:13,shape:6,col:rgb('#7d8f96')});
+  if(pr.trail==='sword'){
+    const dx=pr.x1-pr.x0,dy=pr.y1-pr.y0;
+    const sa=Math.atan2((dx+dy)*16,(dx-dy)*32);
+    spawn(pools.add,{x,y,z0:h,life:.12,size:17,shape:4,col:rgb('#dffaff'),seed:-sa/TAU2,spin:0,hold:true});
+  }
   spawn(pools.add,{x,y,z0:h,life:.1,size:pr.trail==='meteor'?22:14,shape:7,col});
 }
 
@@ -832,7 +914,7 @@ function screenBurst(sx,sy,o){
 /* ---------------- 逐卡编排 ---------------- */
 const FIRE='#ff7a45',FIRE2='#ffd166',FROST='#6fd8ff',FROST2='#dffaff',
   ARC='#b48cff',ARC2='#e0ccff',CYAN='#57e6ff',MINT='#8fe3d0',LEAF='#6fe08a',
-  AMBER='#ffb454',WOOD='#e0b070',VIOLET='#a06bff',WARN='#ffd166';
+  AMBER='#ffb454',WOOD='#e0b070',VIOLET='#a06bff',WARN='#ffd166',SWORD2='#ffe9c4';
 
 function explodeFire(x,y,big){
   flashW(x,y,{col:FIRE2,size:big?70:44,life:.22});
@@ -858,6 +940,51 @@ function explodeArcane(x,y){
   ringW(x,y,{r0:.15,r1:1.3,col:ARC,life:.35});
   burstW(x,y,{n:40,col:ARC,col2:ARC2,spd:3,life:.55,size:4.5,shape:3,shape2:1,vz:30,grav:50});
 }
+
+/* ---------------- 剑近战 ---------------- */
+/* 刀光风格预设：数据驱动。后续新武器/元素/刻印只需增补条目或传自定义对象，
+   tex: 0=流光纹 1=裂电纹 2=鳞甲纹 3=平滑渐变 */
+const SLASH_STYLES={
+  sword:{col:'#ffb454',col2:'#8a4a12',tex:0,spark:'#ffe9c4'},
+  ember:{col:'#ff7a45',col2:'#8a1e0c',tex:0,spark:'#ffd166'},
+  frost:{col:'#6fd8ff',col2:'#123a6b',tex:1,spark:'#dffaff'},
+  storm:{col:'#3f8cff',col2:'#0c2a6b',tex:1,spark:'#bfe0ff'},
+  steel:{col:'#eef7f2',col2:'#3a4a52',tex:0,spark:'#ffffff'},
+  mint:{col:'#3ce8b0',col2:'#0c4a3a',tex:0,spark:'#dffaff'},
+  gilded:{col:'#ffd166',col2:'#7a5a10',tex:2,spark:'#ffe9c4'},
+  arcane:{col:'#7f6bff',col2:'#241a6b',tex:2,spark:'#e0ccff'}
+};
+FX.slash=function(x,y,ang,r,style,o){
+  o=o||{};
+  const st=typeof style==='string'?(SLASH_STYLES[style]||SLASH_STYLES.sword):(style||SLASH_STYLES.sword);
+  const col=o.col||st.col,col2=o.col2||st.col2,tex=o.tex===undefined?(st.tex||0):o.tex;
+  const half=o.half===undefined?1.5:o.half;
+  const q=slashW(x,y,ang,r,{life:o.life||.3,col,col2,tex,half,inner:o.inner});
+  const n=nq(o.sparks===undefined?12:o.sparks);
+  for(let i=0;i<n;i++){
+    const k=R(),a=ang-half+k*2*half,rr=r*(.9+R()*.15);
+    spawn(pools.add,{x:x+Math.cos(a)*rr,y:y+Math.sin(a)*rr,z0:8+R()*8,
+      vx:Math.cos(a)*(.6+R()),vy:Math.sin(a)*(.6+R()),vz:10+R()*18,grav:60,drag:1.6,
+      birth:FX.time+k*.1,life:.22+R()*.16,size:2.5+R()*2.5,shape:1,
+      col:rgb(R()<.6?(st.spark||col):col),spin:(R()-.5)*6});
+  }
+  return q;
+};
+FX.sword=function(x,y,ang,rad){
+  FX.slash(x,y,ang,rad,'sword');
+  flashW(x+Math.cos(ang)*rad*.92,y+Math.sin(ang)*rad*.92,{col:SWORD2,size:15,life:.13});
+};
+FX.swordHit=function(x,y,ang,crit,node){
+  const col=node?WOOD:(crit?FIRE2:SWORD2);
+  burstW(x,y,{n:crit?20:10,col,col2:node?'#caa060':AMBER,dir:ang,spread:1.4,
+    spd:crit?3.4:2.4,life:.34,size:crit?5:4,shape:1,shape2:2,z0:12,vz:30,grav:90});
+  flashW(x,y,{col,size:crit?26:15,life:.14});
+  if(crit)ringW(x,y,{r0:.12,r1:.8,col:FIRE2,life:.3,width:.08});
+};
+FX.waveShot=function(x,y,ang){
+  projectile({from:[x,y,12],to:[x+Math.cos(ang)*3.4,y+Math.sin(ang)*3.4,12],
+    dur:.34,trail:'sword',col:MINT});
+};
 
 FX.spell=function(def,tx,ty,elem,targets){
   const w=def.weaponAttack?.6:1;
@@ -1181,7 +1308,7 @@ FX.frame=function(){
 };
 FX.init=async function(){
   if(typeof THREE==='undefined')return;
-  const c=$('fxcv');if(!c)return;
+  let c=$('fxcv');if(!c)return;
   scene=new THREE.Scene();
   camera=new THREE.OrthographicCamera(0,innerWidth,0,innerHeight,.1,2000);
   camera.position.z=500;
@@ -1193,6 +1320,8 @@ FX.init=async function(){
       gpu=await initGPU(c);ready=true;FX.backend='webgpu';
     }catch(e){
       gpu=null;console.warn('WebGPU 特效不可用，回退 WebGL:',e);
+      // webgpu 上下文已占用画布，WebGL 无法复用同节点：换新画布再回退
+      const nc=c.cloneNode(false);c.replaceWith(nc);c=nc;
     }
   }
   if(!ready){
@@ -1215,7 +1344,12 @@ FX.init=async function(){
   FX.on=true;
   FX._dbg={get backend(){return FX.backend;},get pools(){return pools;},get renderer(){return renderer;},
     get gpu(){return gpu;},get scene(){return scene;},get projs(){return projs;},
-    get quads(){return quads;},get events(){return events;}};
+    get quads(){return quads;},get events(){return events;},
+    slash:(x,y,a,r,h)=>slashW(x,y,a,r,{life:.6,half:h===undefined?1.1:h})};
 };
-try{FX.init();}catch(e){FX.on=false;console.warn('FX 初始化失败:',e);}
+/* 特效入口统一保护：后端未就绪时静默跳过，不再回退 Canvas 2D。 */
+for(const k of ['cast','spell','becomeMage','detonate','storm','reaction','sword','swordHit','waveShot']){
+  if(typeof FX[k]==='function'){const fn=FX[k];FX[k]=function(...a){if(!FX.on)return;return fn.apply(this,a);};}
+}
+try{FX.init().catch(e=>{FX.on=false;console.warn('FX 初始化失败:',e);});}catch(e){FX.on=false;console.warn('FX 初始化失败:',e);}
 })();

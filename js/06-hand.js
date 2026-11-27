@@ -3,8 +3,10 @@
 const HAND_KEYS='1234567890-=';
 function cardInner(def,hot){
   const cost=def.cls==='class'?'<b style="color:#b48cff">职业</b>':costHtml(def,true);
+  const q=CARD_Q[def.q||1];
+  const badge=(def.q||1)>=2?`<i class="hcQ" style="background:linear-gradient(135deg,${q.c1},${q.c2});color:${q.fg}">${q.name}</i>`:'';
   return `<span class="hcHot kb-hint">${hot||''}</span>
-    <div class="hcCost">${cost}</div>
+    <div class="hcCost">${cost}${badge}</div>
     <div class="hcMain">
       <div class="hcArt" style="color:${def.color}">${svg(def.icon,22)}</div>
       <div class="hcName">${def.name}</div>
@@ -17,6 +19,7 @@ function renderHand(){
     const def=CDEFS[c.id];
     const el=document.createElement('div');
     el.className='hcard';el.dataset.uid=c.uid;
+    const q=def.q||1;if(q>1)el.dataset.q=q;
     el.innerHTML=cardInner(def,HAND_KEYS[i]||'');
     el.addEventListener('pointerdown',e=>{
       if(S.mode!=='play')return;
@@ -65,6 +68,7 @@ function showDragCard(uid){
   }
   el.style.display='block';
   const h=document.querySelector(`.hcard[data-uid="${uid}"]`);if(h)h.classList.add('drag');
+  markFuseTargets(uid);
 }
 function sizeDragCv(){
   const cv=$('dragBuildCv');if(!cv)return;
@@ -90,6 +94,7 @@ function endDrag(){
   S.dragUid=null;S.dragMoved=false;S.dragStart=[0,0];S.dragPointerId=null;dragBuildType=null;
   $('dragCard').style.display='none';
   if(uid){const h=document.querySelector(`.hcard[data-uid="${uid}"]`);if(h)h.classList.remove('drag');}
+  clearFuseMarks();
 }
 function selectCard(uid){
   const c=handCard(uid);if(!c)return;
@@ -180,8 +185,7 @@ function playCard(uid,tx,ty){
     builds.push({type:def.build,x:tx,y:ty,hp:b.hp,max:b.hp,r:b.r,cd:rand(.2,.8),ang:0,flash:0,pulse:0});
     bumpSeen('build',def.build);
     rebuildSolids();rebuildTileCost();fieldDirty=true;
-    if(fxOn())FX.cast(def.build,tx,ty);
-    else{puff(tx,ty,12,'#e0b070',2,.55,3);ring(tx,ty,'rgba(255,255,255,.7)',.2,1.1,.35);}
+    FX.cast(def.build,tx,ty);
     sfx('build');
     DECK.discard.push(card);
   }else{
@@ -191,7 +195,7 @@ function playCard(uid,tx,ty){
   if(def.id==='expand'){
     DECK.max=Math.min(handCap(),DECK.max+1);
     floater(P.x,P.y,'手牌上限 '+DECK.max,'#ffb454',true);
-    if(fxOn())FX.cast('expand',P.x,P.y);
+    FX.cast('expand',P.x,P.y);
     if(DECK.max>=handCap()){purgeCard('expand');toast('手牌已达上限 '+handCap()+' · 扩容牌退场','good');}
     drawN(def.draw);
   }
@@ -200,14 +204,11 @@ function playCard(uid,tx,ty){
 }
 function applyInstant(def,tx,ty,overflow){
   if(def.elem)return castSpell(def,tx,ty,overflow);
+  if(def.fuseOut)return applyFuse(def,tx,ty);
   if(def.kind==='class')return;
   if(def.id==='rain'||def.id==='mine'){
-    const R=def.radius,col=def.id==='rain'?'rgba(255,209,102,.9)':'rgba(87,230,255,.9)';
-    if(fxOn())FX.cast(def.id,tx,ty,{radius:R});
-    if(!fxOn()){
-      ring(tx,ty,col,.2,R,.45);
-      puff(tx,ty,20,def.id==='rain'?'#ffd166':'#57e6ff',4,.6,3.4);
-    }
+    const R=def.radius;
+    FX.cast(def.id,tx,ty,{radius:R});
     for(const f of foes){
       if(f.dead)continue;
       if(dist(tx,ty,f.x,f.y)<R+f.r){
@@ -220,32 +221,119 @@ function applyInstant(def,tx,ty,overflow){
     sfx(def.id==='rain'?'arrow':'boom');shake(def.id==='mine'?7:3);
   }else if(def.id==='spring'){
     healPlayer(def.heal);
-    if(fxOn())FX.cast('spring',P.x,P.y);
-    else{puff(P.x,P.y,16,'#6fe08a',2,.7,3);ring(P.x,P.y,'rgba(111,224,138,.8)',.2,1.5,.4);}
+    FX.cast('spring',P.x,P.y);
     sfx('heal');
   }else if(def.id==='mend'){
     core.hp=Math.min(core.max,core.hp+def.coreHeal);
-    builds.forEach(b=>{b.hp=Math.min(b.max,b.hp+def.buildHeal);if(!fxOn())puff(b.x,b.y,4,'#ffb454',1.5,.4,2);});
+    builds.forEach(b=>{b.hp=Math.min(b.max,b.hp+def.buildHeal);});
     rebuildTileCost();fieldDirty=true;
     floater(core.x,core.y,'+'+def.coreHeal,'#ffb454',true);
-    if(fxOn())FX.cast('mend',core.x,core.y);
-    else puff(core.x,core.y,16,'#ffb454',2,.7,3);
+    FX.cast('mend',core.x,core.y);
     sfx('repair');
   }else if(def.id==='ward'){
     P.ifr=Math.max(P.ifr,def.ifr);
-    if(fxOn())FX.cast('ward',P.x,P.y);
-    else{ring(P.x,P.y,'rgba(143,227,208,.9)',.2,1.8,.5);puff(P.x,P.y,18,'#8fe3d0',2,.7,3);}
+    FX.cast('ward',P.x,P.y);
     floater(P.x,P.y,'无敌 '+def.ifr+'s','#8fe3d0',true);sfx('heal');
   }else if(def.id==='tactic'){
     const n=drawN(def.draw);floater(P.x,P.y,'抽 '+n+' 张','#c9a8ff',true);
-    if(fxOn())FX.cast('tactic',P.x,P.y);
+    FX.cast('tactic',P.x,P.y);
     if(n<def.draw&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
       offerSwap(Math.min(def.draw-n,DECK.hand.length),'战术重整 · 手牌已满');
   }else if(def.id==='surge'){
     gainMana(P.maxEn-P.en);P.dashCd=0;
-    if(fxOn())FX.cast('surge',P.x,P.y);
-    else{ring(P.x,P.y,'rgba(87,230,255,.9)',.2,1.6,.4);puff(P.x,P.y,16,'#57e6ff',2.5,.6,3);}
+    FX.cast('surge',P.x,P.y);
     sfx('nova');
+  }
+}
+/* ---------------- 熔铸 ----------------
+   把一张手牌拖到另一张手牌上：两张源牌永久离场，产物直接进当前手牌。
+   代价 = 两张源牌 + TUNE.fusion.crys 雾晶；手牌净减 1 张，牌库净减 1 张。
+   产物带 fuseOut 标记：不进奖励池，也不能再次作为熔铸源（见 fusionOf）。 */
+const FUSE_SEL='fuseOK';
+/* 拖起某张牌时，把能与它熔铸的手牌标亮 */
+function markFuseTargets(uid){
+  const src=handCard(uid);if(!src)return;
+  document.querySelectorAll('#handRow .hcard').forEach(el=>{
+    const t=+el.dataset.uid;
+    if(!t||t===uid)return;
+    const other=handCard(t);
+    el.classList.toggle(FUSE_SEL,!!(other&&fusionOf(src.id,other.id)));
+  });
+}
+function clearFuseMarks(){
+  document.querySelectorAll('#handRow .hcard.'+FUSE_SEL).forEach(el=>el.classList.remove(FUSE_SEL));
+}
+/* 拖放落点判定：两张手牌合法则熔铸，否则回退到原逻辑（出牌/选中） */
+function tryFuse(uidA,uidB){
+  const a=handCard(uidA),b=handCard(uidB);
+  if(!a||!b||uidA===uidB)return false;
+  const out=fusionOf(a.id,b.id);
+  if(!out){sfx('deny');toast('这两张牌无法熔铸','warn');return false;}
+  const def=CDEFS[out],fee=TUNE.fusion.crys;
+  if(res.crys<fee){sfx('deny');toast('雾晶不足 · 熔铸需 '+fee+' 晶','warn');return false;}
+  /* 先取产物卡再动手：mkCard 失败时不能留下「源牌已删、产物没进」的中间态 */
+  const card=mkCard(out);
+  if(!card)return false;
+  res.crys-=fee;
+  /* 按 uid 精确移除两张源牌：只消耗手上这两张，不触碰同名牌的其他副本 */
+  for(let i=DECK.hand.length-1;i>=0;i--){
+    const u=DECK.hand[i].uid;
+    if(u===uidA||u===uidB)DECK.hand.splice(i,1);
+  }
+  DECK.hand.push(card);
+  if(S.aimUid===uidA||S.aimUid===uidB)S.aimUid=card.uid;
+  S.handDirty=true;
+  const q=CARD_Q[def.q||1];
+  floater(P.x,P.y,'熔铸 · '+def.name,q.c1,true);
+  puff(P.x,P.y,26,q.c1,3,.75,3.6);
+  ring(P.x,P.y,q.c2,.2,2.2,.5);
+  shake(2);sfx('card');
+  refreshRes('crys');syncHand(true);
+  return true;
+}
+/* 熔铸产物（非元素牌）的声明式执行器：只读卡面字段，不按 id 硬编码。
+   元素产物走 castSpell（elem/elem2/status/status2），不到这里。 */
+function applyFuse(def,tx,ty){
+  const q=CARD_Q[def.q||1];
+  if(def.dmg>0&&def.radius>0){
+    const R=def.radius;
+    if(def.fx)FX.cast(def.fx,tx,ty,{radius:R});
+    ring(tx,ty,q.c1,.2,R,.45);
+    puff(tx,ty,24,q.c2,4,.65,3.4);
+    for(const f of foes){
+      if(f.dead)continue;
+      if(dist(tx,ty,f.x,f.y)<R+f.r){
+        const a=Math.atan2(f.y-ty,f.x-tx);
+        if(def.knock){f.kx+=Math.cos(a)*7*def.knock;f.ky+=Math.sin(a)*7*def.knock;}
+        damageFoe(f,def.dmg*(1+(P.towerMult-1)*.5),a,false);
+      }
+    }
+    shake(6);sfx('boom');
+  }
+  if(def.ifr){
+    P.ifr=Math.max(P.ifr,def.ifr);
+    ring(P.x,P.y,q.c1,.2,1.8,.5);puff(P.x,P.y,18,q.c2,2,.7,3);
+    floater(P.x,P.y,'无敌 '+def.ifr+'s',q.c1,true);sfx('heal');
+  }
+  if(def.draw>0){
+    const n=drawN(def.draw);
+    floater(P.x,P.y,'抽 '+n+' 张',q.c1,true);
+    if(n<def.draw&&DECK.hand.length>=DECK.max&&DECK.draw.length+DECK.discard.length>0)
+      offerSwap(Math.min(def.draw-n,DECK.hand.length),'熔铸 · 手牌已满');
+  }
+  if(def.heal){
+    healPlayer(def.heal);
+    if(def.fx)FX.cast(def.fx,P.x,P.y);
+  }
+  if(def.coreHeal||def.buildHeal){
+    if(def.coreHeal){
+      core.hp=Math.min(core.max,core.hp+def.coreHeal);
+      floater(core.x,core.y,'+'+def.coreHeal,q.c1,true);
+    }
+    if(def.buildHeal)builds.forEach(b=>{b.hp=Math.min(b.max,b.hp+def.buildHeal);});
+    rebuildTileCost();fieldDirty=true;
+    FX.cast('mend',core.x,core.y);
+    sfx('repair');
   }
 }
 /* 拆解 */
@@ -301,8 +389,7 @@ function confirmSalvage(id,rate){
   S.stats.played++;bumpSeen('play',sc.id);
   S.pendingSalvage=null;S.mode='play';S.handDirty=true;S.aimUid=null;
   showOv('removeOv',false);
-  if(fxOn())FX.cast('salvage',P.x,P.y,{tier:CDEFS[sc.id].tier||5});
-  else puff(P.x,P.y,14,'#6fe08a',2.5,.6,3);
+  FX.cast('salvage',P.x,P.y,{tier:CDEFS[sc.id].tier||5});
   sfx('salvage');
 }
 function cancelSalvage(){S.pendingSalvage=null;S.mode='play';showOv('removeOv',false);}

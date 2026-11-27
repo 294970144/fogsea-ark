@@ -94,17 +94,19 @@ function swing(ang){
     let da=Math.abs(a-ang);da=Math.min(da,TAU-da);
     return da<=1.15;
   };
-  let hit=false;
+  let hit=false;const fxHits=[];
   const dm=sigilMods().dmg;
   forFoes(P.x,P.y,P.range+1.2,f=>{
     if(f.dead||!inArc(f,f.r))return;
     let dmg=P.dmg*TUNE.dmgMul.melee*dm;const crit=Math.random()<P.crit;if(crit)dmg*=2;
-    damageFoe(f,dmg,ang,crit);hit=true;
+    damageFoe(f,dmg,ang,crit);hit=true;fxHits.push({x:f.x,y:f.y,crit});
   });
-  for(const n of nodes){if(!n.alive||!inArc(n,.4))continue;hitNode(n);hit=true;}
-  if(P.wave>0)shots.push({x:P.x+Math.cos(ang)*.5,y:P.y+Math.sin(ang)*.5,vx:Math.cos(ang)*10,vy:Math.sin(ang)*10,
+  for(const n of nodes){if(!n.alive||!inArc(n,.4))continue;hitNode(n);hit=true;fxHits.push({x:n.x,y:n.y,node:true});}
+  if(P.wave>0){shots.push({x:P.x+Math.cos(ang)*.5,y:P.y+Math.sin(ang)*.5,vx:Math.cos(ang)*10,vy:Math.sin(ang)*10,
     type:'wave',dmg:P.dmg*(.5+.2*P.wave)*TUNE.dmgMul.melee*dm,life:.34,pierce:2,z:12});
+    FX.waveShot(P.x+Math.cos(ang)*.5,P.y+Math.sin(ang)*.5,ang);}
   if(hit)S.hitstop=Math.max(S.hitstop,.02);
+  FX.sword(P.x,P.y,ang,P.range);for(const h of fxHits)FX.swordHit(h.x,h.y,ang,h.crit,h.node);
   if(hit)sigilEcho(WEAPONS.sword,{x:P.x+Math.cos(ang)*.6,y:P.y+Math.sin(ang)*.6});
 }
 function damageFoe(f,dmg,ang,crit,opts){
@@ -499,6 +501,7 @@ function shotStepHit(s){
           s.hitSet.add(f);
         }
         damageFoe(f,s.dmg,Math.atan2(s.vy,s.vx),false);
+        if(s.type==='wave')FX.swordHit(f.x,f.y,Math.atan2(s.vy,s.vx),false);
         if(s.type==='wave'){s.pierce--;if(s.pierce<=0)dead=true;}else dead=true;
       }
     });

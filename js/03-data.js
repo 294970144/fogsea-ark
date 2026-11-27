@@ -16,6 +16,7 @@ const TUNE={
   fireSpread:{radius:1.35,treeTick:.6,treeHits:3},
   ember:{perNight:3,killsDiv:8,winBonus:12},
   resourceDrop:{tree:'wood',rock:'stone',crys:'crys'},
+  fusion:{crys:5}, // 熔铸手续费：两张源牌永久消耗外，额外支付雾晶
   statusNames:{burn:'灼烧',chill:'冰缓',freeze:'冻结',mark:'奥术标记',shock:'感电'}
 };
 /* ---------------- 建筑 & 敌人定义 ---------------- */
@@ -138,10 +139,84 @@ const CDEFS={
     name:'法力之井',icon:'well',color:'#57e6ff',cost:{wood:10,crys:6},
     desc:'范围内每秒为守灯人回复 3 点法力，场上最多 3 座。',w:10},
   class_mage:{id:'class_mage',kind:'class',target:'self',cls:'class',name:'法师',icon:'mage',color:'#b48cff',cost:{},mana:0,
-    desc:'职业启动器：转职为法师，以法力施法。生命上限降低，手牌上限提高。',w:0}
+    desc:'职业启动器：转职为法师，以法力施法。生命上限降低，手牌上限提高。',w:0},
+  /* ---- 熔铸产物：只能由熔铸获得，不进奖励池，也不能再次作为熔铸源 ---- */
+  fuse_steam:{id:'fuse_steam',kind:'instant',target:'point',shape:'point',elem:'fire',elem2:'frost',fuseOut:true,q:2,fx:'sp_emberburst',
+    name:'霜火交攻',icon:'steam',color:'#9ad7e8',cost:{},mana:30,radius:2.0,dmg:34,
+    status:{kind:'burn',n:2},status2:{kind:'chill',n:2},
+    desc:'指定区域 2 格内 34 点火焰伤害，附加 2 层灼烧与 2 层冰缓。霜火相激，可引爆蒸汽爆炸。',w:0},
+  fuse_ember:{id:'fuse_ember',kind:'instant',target:'point',shape:'point',elem:'fire',elem2:'arcane',fuseOut:true,q:2,fx:'sp_emberburst',
+    name:'烬纹',icon:'emberburst',color:'#ff9d5c',cost:{},mana:30,radius:1.8,dmg:30,
+    status:{kind:'burn',n:2},status2:{kind:'mark',n:1},
+    desc:'指定区域 1.8 格内 30 点火焰伤害，附加 2 层灼烧与 1 层奥术标记。火与奥术共鸣，可引发共鸣扩散。',w:0},
+  fuse_frostarc:{id:'fuse_frostarc',kind:'instant',target:'point',shape:'point',elem:'frost',elem2:'arcane',fuseOut:true,q:2,fx:'sp_frostbolt',
+    name:'霜纹',icon:'snow',color:'#9ecbff',cost:{},mana:30,radius:1.8,dmg:28,
+    status:{kind:'chill',n:2},status2:{kind:'mark',n:1},
+    desc:'指定区域 1.8 格内 28 点冰霜伤害，附加 2 层冰缓与 1 层奥术标记。冰与奥术共鸣，可引发共鸣扩散。',w:0},
+  fuse_focus:{id:'fuse_focus',kind:'instant',target:'self',fuseOut:true,q:2,
+    name:'凝神',icon:'tactic',color:'#c9a8ff',cost:{crys:6,wood:3},ifr:3,draw:2,
+    desc:'立刻获得 3 秒无敌，并抽 2 张牌。攻守兼备的一瞬。',w:0},
+  fuse_meteor:{id:'fuse_meteor',kind:'instant',target:'point',fuseOut:true,q:3,fx:'mine',
+    name:'陨星雨',icon:'rain',color:'#ffb454',cost:{wood:8,stone:5,crys:4},radius:2.9,dmg:78,knock:1.2,
+    desc:'指定区域 2.9 格内 78 点伤害并强力击退。一击清场的陨石风暴。',w:0},
+  fuse_spring:{id:'fuse_spring',kind:'instant',target:'self',fuseOut:true,q:3,fx:'spring',
+    name:'生生不息',icon:'heal',color:'#6fe08a',cost:{wood:10,stone:4,crys:3},heal:45,coreHeal:120,buildHeal:60,
+    desc:'恢复 45 点生命，方舟核心 +120，全部建筑 +60 耐久。守住方舟的根基。',w:0}
 };
 const CIDS=Object.keys(CDEFS);
 const CARD_IDS=CIDS.filter(id=>!CDEFS[id].weaponAttack);
+/* 品质默认「普通」：q 为档位号，1 普通 / 2 稀有 / 3 史诗 */
+for(const id in CDEFS)if(CDEFS[id].q==null)CDEFS[id].q=1;
+/* ---------------- 卡牌品质 ----------------
+   3 档，每档 2 色成对：普通(白+绿) / 稀有(蓝+紫) / 史诗(橙+红)。
+   卡面用该档两色渐变角标显示档位名，图鉴详情显示「品质」行。 */
+const CARD_Q={
+  1:{name:'普通',c1:'#e8eef2',c2:'#8fd6a0',fg:'#0d1f16'},
+  2:{name:'稀有',c1:'#57e6ff',c2:'#b48cff',fg:'#07131f'},
+  3:{name:'史诗',c1:'#ffb454',c2:'#ff4d6d',fg:'#2a0a06'}
+};
+const cardQ=d=>CARD_Q[(d&&d.q)||1];
+/* ---------------- 熔铸配方 ----------------
+   两张基础牌熔成一张高级牌：产物直接进手牌，源牌永久离场。
+   a/b 指定固定牌；ea/eb 表示元素组（该元素的任意牌均可）。
+   产物卡带 fuseOut 标记：不进奖励池，也不能再次作为熔铸源。 */
+const FUSION_RECIPES=[
+  {ea:'fire',eb:'frost',out:'fuse_steam',name:'霜火交攻'},
+  {ea:'fire',eb:'arcane',out:'fuse_ember',name:'烬纹'},
+  {ea:'frost',eb:'arcane',out:'fuse_frostarc',name:'霜纹'},
+  {a:'ward',b:'tactic',out:'fuse_focus',name:'凝神'},
+  {a:'rain',b:'mine',out:'fuse_meteor',name:'陨星雨'},
+  {a:'spring',b:'mend',out:'fuse_spring',name:'生生不息'}
+];
+/* 一侧是否命中：固定牌看 id，元素组看 elem */
+function fusionSide(r,side,id){
+  const def=CDEFS[id];if(!def)return false;
+  return r[side]?r[side]===id:(r[side==='a'?'ea':'eb']&&def.elem===r[side==='a'?'ea':'eb']);
+}
+/* 对称查找：两张牌的先后顺序不影响结果；产物牌不可再熔 */
+function fusionOf(idA,idB){
+  const a=CDEFS[idA],b=CDEFS[idB];
+  if(!a||!b||a.fuseOut||b.fuseOut)return null;
+  for(const r of FUSION_RECIPES){
+    if(fusionSide(r,'a',idA)&&fusionSide(r,'b',idB))return r.out;
+    if(fusionSide(r,'a',idB)&&fusionSide(r,'b',idA))return r.out;
+  }
+  return null;
+}
+/* 反查：某张产物由哪张配方熔出 */
+const fusionRecipeOf=out=>FUSION_RECIPES.find(r=>r.out===out)||null;
+/* 配方一侧的可读名：固定牌取卡名，元素组取「火元素牌」 */
+function fusionSideName(r,side){
+  const id=r[side],el=r[side==='a'?'ea':'eb'];
+  if(id&&CDEFS[id])return CDEFS[id].name;
+  return (ELEMNAME[el]||el||'')+'元素牌';
+}
+/* 某张牌能参与的配方（图鉴「熔铸配方」行用它，避免在 UI 里重写配方判断） */
+function fusionRecipesOf(id){
+  const d=CDEFS[id];
+  if(!d||d.fuseOut)return [];
+  return FUSION_RECIPES.filter(r=>fusionSide(r,'a',id)||fusionSide(r,'b',id));
+}
 /* 武器是局前选择、局内固定的基础攻击来源；法杖复用 CDEFS 中的攻击模板。 */
 const WEAPONS={
   sword:{id:'sword',name:'剑',route:'近战路线',icon:'sword',color:'#ffb454',art:'assets/weapons/sword.svg',attack:'melee',slots:3,
@@ -180,7 +255,9 @@ const CARD_BRIEF={
   sp_kindling:'范围灼烧，引燃附近敌人与树。',sp_frostpatch:'范围冰伤，附加 2 层冰缓。',sp_arcaneneedle:'单体奥术伤害并标记。',
   sp_emberburst:'范围火伤并附加灼烧。',sp_flameimpact:'范围 55 火焰伤害。',sp_flamedetonate:'每层灼烧造成 12 伤害。',
   sp_blizzard:'全屏冰伤并附加冰缓。',sp_frostring:'冻结周围敌人。',sp_magicmissile:'攻击最近 3 个敌人。',
-  manawell:'持续回复附近玩家法力。',class_mage:'转职法师，以法力施法。'
+  manawell:'持续回复附近玩家法力。',class_mage:'转职法师，以法力施法。',
+  fuse_steam:'范围火伤，灼烧+冰缓。',fuse_ember:'范围火伤，灼烧+标记。',fuse_frostarc:'范围冰伤，冰缓+标记。',
+  fuse_focus:'3 秒无敌并抽 2 张。',fuse_meteor:'范围重击并击退。',fuse_spring:'治疗并修复核心与建筑。'
 };
 for(const id in CARD_BRIEF)if(CDEFS[id])CDEFS[id].brief=CARD_BRIEF[id];
 /* 文案派生：数值只在字段登记一次，desc/brief 从字段生成，避免多份字面量漂移 */
@@ -225,6 +302,7 @@ const STATUS_TAG={burn:'dot',chill:'control',freeze:'control',mark:'amp'};
 function cardTags(d){
   const t=[];
   if(d.elem)t.push(d.elem);
+  if(d.elem2&&d.elem2!==d.elem)t.push(d.elem2);
   if(d.mana)t.push('spell');
   if(d.kind==='build')t.push('persist');
   if(d.shape==='single'||d.shape==='multi')t.push('single');
@@ -234,6 +312,7 @@ function cardTags(d){
   if(d.ifr||d.coreHeal||d.buildHeal||d.build==='wall')t.push('guard');
   if(d.knock)t.push('control');
   const st=d.status&&STATUS_TAG[d.status.kind];if(st)t.push(st);
+  const st2=d.status2&&STATUS_TAG[d.status2.kind];if(st2&&!t.includes(st2))t.push(st2);
   if(d.shape==='consume')t.push('dot');
   return t;
 }

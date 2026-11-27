@@ -5,3 +5,5 @@ package-lock.json
 shots/
 vibe_images/
 .workbuddy/
+.qoder/
+skills-lock.json
