@@ -542,6 +542,17 @@ testCase('R13_save_slots_roundtrip', () => {
   assert.equal(ver.run('slots.active'), null);
   assert.equal(ver.run('slots.corrupt'), true);
 
+  // v1 存档不迁移：升到 v2 后统一按格式不符处理，避免新旧版本混读
+  const oldFmt = makeEnv();
+  oldFmt.run(`initRun();S.mode='play';const s=makeSlot();s.v=1;localStorage.setItem(SLOT_KEY,JSON.stringify({v:1,active:0,slots:[s,null,null]}));loadSlots()`);
+  assert.equal(oldFmt.run('slots.corruptReason'), 'format');
+  assert.deepEqual(JSON.parse(oldFmt.run('JSON.stringify(slots.slots)')), [null, null, null]);
+
+  const newFmt = makeEnv();
+  newFmt.run(`initRun();S.mode='play';const s=makeSlot();localStorage.setItem(SLOT_KEY,JSON.stringify({v:SLOT_VER,active:0,slots:[s,null,null]}));loadSlots()`);
+  assert.equal(newFmt.run('slots.corrupt'), false);
+  assert.equal(newFmt.run('slots.active'), 0);
+
   const quota = makeEnv();
   quota.run('localStorage.setItem=()=>{throw new Error("quota")}');
   const warn = console.warn; console.warn = noop;

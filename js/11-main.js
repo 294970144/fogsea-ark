@@ -518,6 +518,7 @@ $('confirmNo').addEventListener('click',()=>closeConfirm(false));
 $('confirmOv').addEventListener('pointerdown',e=>{if(e.target.classList.contains('scrim'))closeConfirm(false);});
 $('saveWarnAck').addEventListener('click',()=>{ackCorrupt();refreshContinue();sfx('ui');});
 $('repairBtn').addEventListener('click',tryRepair);
+loadSlots();
 initRun();S.nightAmt=.55;refreshPrep();refreshStacks();setMenuView('title',false);refreshContinue();
 const resizeMenu=()=>{setMenuView($('menuPanel').dataset.view||'title',false);positionWeaponDrop();};
 addEventListener('resize',resizeMenu);

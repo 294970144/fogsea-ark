@@ -77,8 +77,8 @@ function addHandCard(card,index,fromRect){
   return el;
 }
 /* 从来源矩形飞到目标矩形；只做视觉补间，不改游戏状态 */
-function flySigil(from,to,html,color){
-  if(reducedMotion()||!from||!to||typeof Element.prototype.animate!=='function')return;
+function flySigil(from,to,html,color,onDone){
+  if(reducedMotion()||!from||!to||typeof Element.prototype.animate!=='function'){if(onDone)onDone();return;}
   const el=document.createElement('div');el.className='sigilFly';
   el.style.cssText=`left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;--el:${color||'#8fa9b8'}`;
   el.innerHTML=html;document.body.appendChild(el);
@@ -88,7 +88,8 @@ function flySigil(from,to,html,color){
   const a=el.animate([{transform:'translate(0,0) scale(1)',opacity:1},
     {transform:`translate(${dx}px,${dy}px) scale(${scale})`,opacity:.15}],
     {duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
-  a.onfinish=()=>el.remove();a.oncancel=()=>el.remove();
+  const fin=()=>{el.remove();if(onDone)onDone();};
+  a.onfinish=fin;a.oncancel=fin;
 }
 function pulseCard(el){
   if(reducedMotion()||!el||typeof el.animate!=='function')return;
@@ -268,7 +269,7 @@ function placeCheck(def,tx,ty){
 }
 /* 卡是实体，槽位是它的另一个位置：装槽=手牌→指定槽位，卸下=槽位→手牌，牌库总量不变。
    P.sigils 是定长槽位数组，空位为 null；不能按顺序强塞，也不能覆盖后把后面的卡挤掉。 */
-function engraveCard(uid,targetSlot){
+function engraveCard(uid,targetSlot,dragRect){
   const idx=DECK.hand.findIndex(c=>c.uid===uid);if(idx<0)return false;
   const card=DECK.hand[idx],def=CDEFS[card.id];
   if(!def||!def.sigil){toast('此卡没有刻印标签','warn');sfx('deny');return false;}
@@ -278,13 +279,17 @@ function engraveCard(uid,targetSlot){
   let slot=Number.isInteger(targetSlot)&&targetSlot>=0&&targetSlot<cap?targetSlot:list.findIndex(c=>!c);
   if(slot<0)slot=list.findIndex(c=>!c);
   if(slot<0){toast('刻印槽已满','warn');sfx('deny');return false;}
-  const el=handCardEl(uid),fromRect=el&&el.getBoundingClientRect(),toRect=slotBoxRect(slot);
+  const el=handCardEl(uid),fromRect=dragRect||(el&&el.getBoundingClientRect()),toRect=slotBoxRect(slot);
   const displaced=list[slot]||null;
   DECK.hand.splice(idx,1);
   list[slot]=card;
   if(displaced)DECK.hand.splice(idx,0,displaced);
   if(S.aimUid===uid)S.aimUid=null;
-  if(fromRect&&toRect)flySigil(fromRect,toRect,el.outerHTML,def.color);
+  if(fromRect&&toRect){
+    const m=sigilMeta(card.id);
+    const html=dragRect&&m?`<div class="dragSigil" style="color:${m.color}">${svg(m.icon,36)}</div>`:el.outerHTML;
+    flySigil(fromRect,toRect,html,def.color);
+  }
   removeHandCard(uid);
   if(displaced)addHandCard(displaced,idx,toRect);
   if(typeof syncSlotEls==='function')syncSlotEls();
@@ -293,11 +298,11 @@ function engraveCard(uid,targetSlot){
   toast(displaced?'替换 '+def.name:'已刻印 '+def.name,'good');sfx('level');
   return true;
 }
-function unfillSlot(i){
+function unfillSlot(i,dragRect){
   const list=P.sigils||[],cap=weaponDef(P.weapon).slots||0;
   if(!Number.isInteger(i)||i<0||i>=cap||!list[i])return false;
   if(DECK.hand.length>=handCap()){toast('手牌已达硬上限 '+handCap()+' · 请先回收','warn');sfx('deny');return false;}
-  const card=list[i],def=CDEFS[card.id],fromRect=slotBoxRect(i);
+  const card=list[i],def=CDEFS[card.id],fromRect=dragRect||slotBoxRect(i);
   list[i]=null;DECK.hand.push(card);
   addHandCard(card,DECK.hand.length-1,fromRect);
   if(typeof syncSlotEls==='function')syncSlotEls();
@@ -305,24 +310,34 @@ function unfillSlot(i){
   toast('卸下 '+def.name+' 到手牌','good');
   return true;
 }
-/* 槽内刻印可以直接拖到另一个槽：空槽移动，占用槽交换 */
-function moveSlotCard(from,to){
+/* 槽内刻印可以直接拖到另一个槽：空槽移动，占用槽交换。
+   dragRect 是松手瞬间拖影的位置——补间必须从那里出发，否则图标会先跳回源槽再飞，观感割裂。 */
+function moveSlotCard(from,to,dragRect){
   const list=P.sigils||[],cap=weaponDef(P.weapon).slots||0;
   if(!Number.isInteger(from)||!Number.isInteger(to)||from===to)return false;
   if(from<0||from>=cap||to<0||to>=cap||!list[from])return false;
-  const a=slotEl(from),b=slotEl(to);
-  if(a&&b&&!reducedMotion()){
-    const ax=a.querySelector('.wslotBox'),bx=b.querySelector('.wslotBox');
-    if(ax&&bx&&typeof ax.animate==='function'){
-      const ra=ax.getBoundingClientRect(),rb=bx.getBoundingClientRect();
-      const dx=rb.left-ra.left,dy=rb.top-ra.top;
-      ax.animate([{transform:'translate(0,0)'},{transform:`translate(${dx}px,${dy}px)`}],{duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
-      bx.animate([{transform:'translate(0,0)'},{transform:`translate(${-dx}px,${-dy}px)`}],{duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
+  const moving=list[from],displaced=list[to];
+  const targetRect=slotBoxRect(to),sourceRect=slotBoxRect(from);
+  const mm=moving&&sigilMeta(moving.id),mc=mm?mm.color:'#8fa9b8';
+  list[to]=moving;list[from]=displaced;
+  if(typeof syncSlotEls==='function')syncSlotEls();
+  const tEl=slotEl(to),sEl=slotEl(from);
+  if(!reducedMotion()&&targetRect){
+    // 飞行期间隐藏落点图标，避免「瞬时出现在新槽 + 飞行残影」两套画面
+    if(tEl)tEl.classList.add('landing');
+    const start=dragRect||sourceRect;
+    if(mm)flySigil(start,targetRect,`<div class="dragSigil" style="color:${mc}">${svg(mm.icon,36)}</div>`,mc,
+      ()=>{if(tEl)tEl.classList.remove('landing');pulseSlot(to,true);});
+    else if(tEl)tEl.classList.remove('landing');
+    if(displaced){
+      const dm=sigilMeta(displaced.id);
+      if(sEl)sEl.classList.add('landing');
+      if(dm&&sourceRect)flySigil(targetRect,sourceRect,`<div class="dragSigil" style="color:${dm.color}">${svg(dm.icon,36)}</div>`,dm.color,
+        ()=>{if(sEl)sEl.classList.remove('landing');});
+      else if(sEl)sEl.classList.remove('landing');
     }
   }
-  const tmp=list[to];list[to]=list[from];list[from]=tmp;
-  if(typeof syncSlotEls==='function')syncSlotEls();
-  sfx('card');toast(tmp?'交换刻印位置':'移动刻印到槽位 '+(to+1),'good');
+  sfx('card');
   return true;
 }
 function tryPlayAt(uid,wx,wy){

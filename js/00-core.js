@@ -88,7 +88,8 @@ loadSave();
 
 /* ---------------- 单局存档槽（与局外元数据 arkmist_v3 完全隔离） ----------------
    约束：本段不得调用 rand/irand/Math.random，否则会打乱启动期随机序列。 */
-const SLOT_KEY='arkmist_slots_v1',SLOT_BAD_KEY='arkmist_slots_bad_v1',SLOT_VER=1,SLOT_N=3,SLOT_FOE_CAP=44;
+// v2：sigils 改为定长稀疏数组；v1 不迁移，直接判格式不符
+const SLOT_KEY='arkmist_slots_v1',SLOT_BAD_KEY='arkmist_slots_bad_v1',SLOT_VER=2,SLOT_N=3,SLOT_FOE_CAP=44;
 const slots={v:SLOT_VER,active:null,slots:[null,null,null],corrupt:false};
 // 损坏原串单列备份，写回不抹证据
 function stashBadSlots(raw){
@@ -175,8 +176,7 @@ function clearActiveSlot(){
   if(slots.active!==null)arr[slots.active]=null;
   return persistSlots({v:SLOT_VER,active:null,slots:arr});
 }
-loadSlots();
-
+// loadSlots() 移到 11-main.js 启动前：validateSlot 依赖 weaponDef（03-data.js 才定义）
 const ICONS={
 sword:'<path d="M4 20L18 6M18 6l2-2-4 0-2 2M14 4l6 6M6 16l2 2"/>',
 heart:'<path d="M12 21C5 15 2 11 2 7.5A4.5 4.5 0 0112 5a4.5 4.5 0 0110 2.5c0 3.5-3 7.5-10 13.5z"/>',

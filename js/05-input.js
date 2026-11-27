@@ -132,10 +132,12 @@ addEventListener('pointerup',e=>{
     const slotEl=hit&&hit.closest?hit.closest('.wslot'):null;
     const overSlots=!!(hit&&hit.closest&&hit.closest('#weaponSlots'));
     const targetSlot=slotEl&&slotEl.dataset&&slotEl.dataset.slot!==undefined?+slotEl.dataset.slot:undefined;
+    // 松手前留住拖影矩形，补间从鼠标当前位置出发而不是从源槽位置闪现
+    const dragRect=moved?$('dragCard').getBoundingClientRect():null;
     endSlotDrag();
     if(moved&&S.mode==='play'){
-      if(overSlots&&Number.isInteger(targetSlot))moveSlotCard(i,targetSlot);
-      else if(!overSlots)unfillSlot(i);
+      if(overSlots&&Number.isInteger(targetSlot))moveSlotCard(i,targetSlot,dragRect);
+      else if(!overSlots)unfillSlot(i,dragRect);
     }
     return;
   }
@@ -150,12 +152,13 @@ addEventListener('pointerup',e=>{
   const overUid=cardEl&&cardEl.dataset&&cardEl.dataset.uid!==undefined?+cardEl.dataset.uid:0;
   const overRecycle=!!(hit&&hit.closest&&hit.closest('#recycleZone'));
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
+  const dragRect=moved?$('dragCard').getBoundingClientRect():null;
   endDrag();
   if(S.mode!=='play')return;
   if(moved){
     if(overRecycle){recycleHandCard(uid);return;}
     if(overUid&&overUid!==uid){tryFuse(uid,overUid);return;}
-    if(overSlots)engraveCard(uid,targetSlot);
+    if(overSlots)engraveCard(uid,targetSlot,dragRect);
     else if(overCanvas){updateMouseWorld();tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}
     else selectCard(uid);
   }else{
