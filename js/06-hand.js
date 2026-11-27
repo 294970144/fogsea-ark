@@ -9,7 +9,7 @@ function cardInner(def,hot){
     <div class="hcCost">${cost}${badge}</div>
     <div class="hcMain">
       <div class="hcArt" style="color:${def.color}">${svg(def.icon,22)}</div>
-      <div class="hcName">${def.name}</div>
+      <div class="hcName">${def.name}${def.sigil?'<i class="hcSigil" title="可装入武器槽位">'+svg('rune',11)+'</i>':''}</div>
     </div>
     <div class="hcDesc">${def.brief||def.desc}</div>`;
 }
@@ -67,7 +67,7 @@ function showDragCard(uid){
     // 刻印牌拖出只显示图标，与建筑拖出只显示模型一致
     el.classList.add('sigil');
     const m=sigilMeta(c.id);
-    el.innerHTML=`<div class="dragSigil" style="color:${m?m.color:def.color}">${svg(m?m.icon:def.icon,54)}<b>${m?m.short:def.name}</b></div>`;
+    el.innerHTML=`<div class="dragSigil" style="color:${m?m.color:def.color}">${svg(m?m.icon:def.icon,36)}</div>`;
   }else{
     el.innerHTML=`<div class="hcard" style="position:relative;left:0;transform:none;width:100%;height:100%">${cardInner(def,'')}</div>`;
   }
@@ -81,7 +81,7 @@ function showSlotDrag(i){
   const c=(P.sigils||[])[i],m=c&&sigilMeta(c.id);if(!m)return;
   const el=$('dragCard');
   el.classList.remove('build');el.classList.add('sigil');
-  el.innerHTML=`<div class="dragSigil" style="color:${m.color}">${svg(m.icon,54)}<b>${m.short}</b></div>`;
+  el.innerHTML=`<div class="dragSigil" style="color:${m.color}">${svg(m.icon,36)}</div>`;
   el.style.display='block';
   const h=UI.weaponSlotsRow&&UI.weaponSlotsRow.querySelector(`.wslot[data-slot="${i}"]`);
   if(h)h.classList.add('dragging');

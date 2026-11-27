@@ -70,6 +70,13 @@ const RX_DEF={
 };
 // 反应显示名统一取自 RX_DEF，避免图鉴与数据表分叉；多键命中时以「/」并列
 const rxName=(...keys)=>[...new Set(keys.map(k=>RX_DEF[k]&&RX_DEF[k].name).filter(Boolean))].join('/');
+/* 飞行法术：弹道时长（秒）单一数据源。FX 弹道与逻辑延迟命中都读这里，
+   保证「火球到达的同一帧才结算伤害/状态」。非飞行法术不登记，延迟为 0。 */
+const SPELL_FX_TIME={
+  sp_fireball:.16,sp_frostbolt:.15,sp_arcbolt:.06,sp_flameimpact:.2,
+  sp_magicmissile:.28,sp_emberburst:.1
+};
+function spellFxTime(def){return SPELL_FX_TIME[def&&(def.fx||def.id)]||0;}
 const CDEFS={
   wall:{id:'wall',kind:'build',build:'wall',name:'木墙',icon:'wall',color:'#e0b070',cost:{wood:8},
     desc:'筑起木墙阻挡雾裔。打出后卡牌回到弃牌堆，可再次抽到。',w:26},
@@ -171,13 +178,13 @@ const CDEFS={
 /* 法术刻印：带 sigil 标记的卡 —— 既能装入法杖槽自动施放，也能当瞬发牌拖地释放。
    效果数值从武器攻击模板派生，避免同一份数值写两处。 */
 const SIGIL_SPELLS=[
-  {id:'sig_flame',from:'sp_fireball',name:'火焰法术刻印',icon:'flame',color:ELEMCOL.fire,mana:15,w:8,wNonMage:6},
-  {id:'sig_frost',from:'sp_frostbolt',name:'冰霜法术刻印',icon:'snow',color:ELEMCOL.frost,mana:15,w:8,wNonMage:6},
-  {id:'sig_arcane',from:'sp_arcbolt',name:'奥术法术刻印',icon:'rune',color:ELEMCOL.arcane,mana:15,w:8,wNonMage:6}
+  {id:'sig_flame',from:'sp_fireball',name:'火焰法术',short:'火焰',icon:'flame',color:ELEMCOL.fire,mana:15,w:8,wNonMage:6},
+  {id:'sig_frost',from:'sp_frostbolt',name:'冰霜法术',short:'冰霜',icon:'snow',color:ELEMCOL.frost,mana:15,w:8,wNonMage:6},
+  {id:'sig_arcane',from:'sp_arcbolt',name:'奥术法术',short:'奥术',icon:'rune',color:ELEMCOL.arcane,mana:15,w:8,wNonMage:6}
 ];
 for(const s of SIGIL_SPELLS){
   const src=CDEFS[s.from];
-  CDEFS[s.id]={id:s.id,kind:'instant',target:'point',sigil:true,
+  CDEFS[s.id]={id:s.id,kind:'instant',target:'point',sigil:true,short:s.short,
     fx:src.fx||src.id,
     shape:src.shape,elem:src.elem,radius:src.radius,dmg:src.dmg,spreadFire:src.spreadFire,status:src.status,
     name:s.name,icon:s.icon,color:s.color,cost:{},mana:s.mana,
@@ -277,7 +284,7 @@ const sigilDesc=id=>{
 /* 槽位条目元信息：数值刻印 SIGILS 与法术刻印 CDEFS.sigil 共用一接口 */
 const sigilMeta=id=>{
   const s=SIGILS[id];if(s)return{id,n:s.n,short:s.short,icon:s.icon,color:s.color,spell:false};
-  const c=CDEFS[id];if(c&&c.sigil)return{id,n:c.name,short:c.name.replace('法术刻印',''),icon:c.icon,color:c.color,spell:true};
+  const c=CDEFS[id];if(c&&c.sigil)return{id,n:c.name,short:c.short||c.name.replace('法术',''),icon:c.icon,color:c.color,spell:true};
   return null;
 };
 const isSigilId=id=>!!(SIGILS[id]||(CDEFS[id]&&CDEFS[id].sigil));

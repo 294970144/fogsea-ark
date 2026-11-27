@@ -8,6 +8,67 @@ const CORE_CARDS={
   frost:['sp_blizzard','sp_frostring'],
   arcane:['sp_magicmissile']
 };
+/* 飞行法术的延迟命中队列。施法帧只发 FX 与施法副作用；伤害/状态/蔓延在弹道到达帧结算。
+   到达时按落点重新索敌：目标死了或跑出范围即打空。瞬态，不入存档。 */
+const pendingHits=[];
+function queueSpellHit(def,tx,ty,ctx){
+  const delay=spellFxTime(def);
+  if(delay<=0){resolveSpellHit(def,tx,ty,ctx);return;}
+  // 多发飞弹：每发独立落点与错峰到达，各自验证目标是否还在
+  if(def.shape==='multi'){
+    const ts=spellTargets(def,tx,ty);
+    ts.forEach((f,i)=>pendingHits.push({
+      def,tx:f.x,ty:f.y,ctx:{...ctx,locked:f},at:S.combatT+delay+i*.06
+    }));
+    return;
+  }
+  pendingHits.push({def,tx,ty,ctx,at:S.combatT+delay});
+}
+function updatePendingHits(force){
+  if(!pendingHits.length)return;
+  const due=force?pendingHits.slice():pendingHits.filter(h=>h.at<=S.combatT);
+  if(!due.length)return;
+  if(force)pendingHits.length=0;
+  else for(let i=pendingHits.length-1;i>=0;i--)if(pendingHits[i].at<=S.combatT)pendingHits.splice(i,1);
+  for(const h of due)resolveSpellHit(h.def,h.tx,h.ty,h.ctx);
+}
+/* 到达结算：重新索敌（逃脱者自然落空），再逐个应用伤害与状态。 */
+function resolveSpellHit(def,tx,ty,ctx){
+  if(ctx.resolve)return ctx.resolve(def,tx,ty);
+  const {overflow,mode,locked}=ctx;
+  const elem=def.elem;
+  let targets;
+  if(locked){
+    // 飞弹追踪发射时锁定的那枚目标：它还活着且没跑出原落点附近才算命中
+    targets=locked&&!locked.dead&&dist(tx,ty,locked.x,locked.y)<=(locked.r||.3)+.6?[locked]:[];
+  }else targets=spellTargets(def,tx,ty);
+  const hitOne=(f,mult)=>{
+    if(!f||f.dead)return;
+    let dmg=(def.dmg||0)*TUNE.dmgMul.spell*mult;
+    if(def.shape==='consume')dmg=(f.burnStacks||0)*dmg;
+    dmg*=spellMult(elem,f,overflow);
+    const crit=Math.random()<P.crit;
+    if(crit)dmg*=2;
+    if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),crit,{elem});
+    if(def.status&&!f.dead)applyElement(f,elem,def.status.n,def.status.kind);
+    else if(def.id==='sp_flamedetonate'){
+      FX.detonate(f.x,f.y,f.burnStacks||0);
+      triggerElementReaction(f,elem);
+      f.lastElem=elem;f.lastElemT=S.combatT;
+      f.burnStacks=0;f.burnT=0;f.burnTick=0;
+    }
+    // 熔铸产物携带第二元素：主元素先落，随后第二元素触发元素反应
+    if(def.status2&&def.elem2&&!f.dead)applyElement(f,def.elem2,def.status2.n,def.status2.kind);
+  };
+  for(const f of targets)hitOne(f,1);
+  if(def.spreadFire)spreadFire(tx,ty,def.radius,targets);
+  if(mode==='cast'){
+    if(isMage()&&elem==='arcane'&&tLv('t_arcecho')>0&&Math.random()<TALENT_TUNE.t_arcecho.chance)
+      for(const f of targets)hitOne(f,.5);
+    if(isMage()&&elem==='frost'&&tLv('t_iceshield')>0)
+      gainShield(TALENT_TUNE.t_iceshield.per*tLv('t_iceshield'));
+  }
+}
 
 function isMage(){return P.cls==='mage';}
 const isSpellWeapon=()=>weaponDef(P.weapon).attack==='spell';
@@ -173,35 +234,7 @@ function castSpell(def,tx,ty,overflow=manaOverflow()){
   const elem=def.elem;
   const speed=castSpeedMult();
   const targets=spellTargets(def,tx,ty);
-  for(const f of targets){
-    if(!f||f.dead)continue;
-    let dmg=(def.dmg||0)*TUNE.dmgMul.spell;
-    if(def.shape==='consume')dmg=(f.burnStacks||0)*dmg;
-    dmg*=spellMult(elem,f,overflow);
-    const crit=Math.random()<P.crit;
-    if(crit)dmg*=2;
-    if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),crit,{elem});
-    if(def.status&&!f.dead)applyElement(f,elem,def.status.n,def.status.kind);
-    else if(def.id==='sp_flamedetonate'){
-      FX.detonate(f.x,f.y,f.burnStacks||0);
-      triggerElementReaction(f,elem);
-      f.lastElem=elem;f.lastElemT=S.combatT;
-      f.burnStacks=0;f.burnT=0;f.burnTick=0;
-    }
-    // 熔铸产物携带第二元素：主元素先落，随后第二元素触发元素反应
-    if(def.status2&&def.elem2&&!f.dead)applyElement(f,def.elem2,def.status2.n,def.status2.kind);
-  }
-  if(def.spreadFire)spreadFire(tx,ty,def.radius,targets);
-  if(isMage()&&elem==='arcane'&&tLv('t_arcecho')>0&&Math.random()<TALENT_TUNE.t_arcecho.chance){
-    for(const f of targets){
-      if(!f||f.dead)continue;
-      let dmg=(def.dmg||0)*TUNE.dmgMul.spell;
-      if(def.shape==='consume')dmg=(f.burnStacks||0)*dmg;
-      dmg*=.5*spellMult(elem,f,overflow);
-      if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),false);
-    }
-  }
-  if(isMage()&&elem==='frost'&&tLv('t_iceshield')>0)gainShield(TALENT_TUNE.t_iceshield.per*tLv('t_iceshield'));
+  queueSpellHit(def,tx,ty,{overflow,mode:'cast'});
   spellFx(def,tx,ty,elem,targets);
   if(isMage())spellCastSideEffects(elem,def);
   P.spellCd=MAGE_TUNE.spellGcd/speed;

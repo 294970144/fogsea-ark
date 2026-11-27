@@ -78,26 +78,38 @@ function autoAttack(){
   else {
     const def=nextWeaponSpell();if(!def)return;
     P.atkCd=weaponAttackInterval(w);P.face=ang;
-    if(def.spreadFire&&tgt.type==='tree')spreadFire(tgt.x,tgt.y,def.radius,[]);
-    hitNode(tgt);
-    spellFx(def,tgt.x,tgt.y,def.elem,[]);
+    const tx=tgt.x,ty=tgt.y;
+    queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(d,x,y)=>{
+      const node=nodes.find(n=>n===tgt&&n.alive);
+      if(!node)return; // 树已倒下即打空
+      if(d.spreadFire&&node.type==='tree')spreadFire(x,y,d.radius,[]);
+      hitNode(node);
+    }});
+    spellFx(def,tx,ty,def.elem,[]);
   }
 }
 function autoCastWeapon(w,tgt,def){
   def=def||nextWeaponSpell();if(!def)return;
   const ang=Math.atan2(tgt.y-P.y,tgt.x-P.x);
   P.atkCd=weaponAttackInterval(w);P.face=ang;
-  const targets=def.shape==='single'?[tgt]:spellTargets(def,tgt.x,tgt.y);
-  for(const f of targets){
-    if(!f||f.dead)continue;
-    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell*sigilMods().dmg;
-    const crit=Math.random()<P.crit;if(crit)dmg*=2;
-    if(dmg>0)damageFoe(f,dmg,ang,crit,{noKnock:true});
-    if(def.status&&!f.dead)applyElement(f,def.elem,def.status.n,def.status.kind);
-  }
-  if(def.spreadFire)spreadFire(tgt.x,tgt.y,def.radius,targets);
-  spellFx(def,tgt.x,tgt.y,def.elem,targets);
-  if(targets.length)S.hitstop=Math.max(S.hitstop,.02);
+  const tx=tgt.x,ty=tgt.y;
+  const targets=def.shape==='single'?[tgt]:spellTargets(def,tx,ty);
+  // 弹道到达时按落点重新索敌：目标死了或跑出范围即打空。单体锁定发射时那只目标。
+  queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(d,x,y)=>{
+    const now=(d.shape==='single'
+      ? (tgt&&!tgt.dead&&dist(x,y,tgt.x,tgt.y)<=(tgt.r||.3)+.6?[tgt]:[])
+      : spellTargets(d,x,y));
+    for(const f of now){
+      if(!f||f.dead)continue;
+      let dmg=(d.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell*sigilMods().dmg;
+      const crit=Math.random()<P.crit;if(crit)dmg*=2;
+      if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),crit,{noKnock:true});
+      if(d.status&&!f.dead)applyElement(f,d.elem,d.status.n,d.status.kind);
+    }
+    if(d.spreadFire)spreadFire(x,y,d.radius,now);
+    if(now.length)S.hitstop=Math.max(S.hitstop,.02);
+  }});
+  spellFx(def,tx,ty,def.elem,targets);
   sigilEcho(w,tgt);
 }
 function swing(ang){
@@ -643,6 +655,7 @@ function update(dt){
     autoAttack();
   }
   updateSpellState(dt);
+  updatePendingHits();
   updateBurningTrees(dt);
   updateFoes(dt);updateBuilds(dt);updateShots(dt);updatePicks(dt);updateParts(dt);
   core.flash=Math.max(0,core.flash-dt);

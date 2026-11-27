@@ -122,6 +122,8 @@ function makeEnv(opts = {}) {
   sandbox.window = sandbox;
   const ctx = vm.createContext(sandbox);
   vm.runInContext(SRC, ctx, { filename: 'bundle.js' });
+  // 延迟命中在测试里默认同步结算（保留完整 resolve 路径），时序由 R26 单独验证。
+  vm.runInContext('var __realSpellFxTime=spellFxTime;spellFxTime=()=>0;', ctx);
   return { ctx, ids, docL, winL, store, timers, cv, run: code => vm.runInContext(code, ctx) };
 }
 
@@ -1374,6 +1376,47 @@ testCase('R25_card_fusion_recipe_and_drag', () => {
   }))`);
   assert.deepEqual(brief.filter(b => !b.len).map(b => b.id), []);
   assert.deepEqual(brief.filter(b => !b.shorter).map(b => b.id), []);
+});
+
+testCase('R26_delayed_spell_hit_and_miss', () => {
+  const env = makeEnv();
+  env.run(`initRun();S.mode='play';S.phase='day';P.en=100;P.crit=0;P.stacks={};
+    P.cls='mage';spellFxTime=__realSpellFxTime;`);
+  const setup = () => {
+    env.run(`pendingHits.length=0;foes.length=0;`);
+    seedFoe(env, 1.5, 0);
+    env.run(`foes[0].hp=foes[0].max=1000;foes[0].dead=false;rebuildFoeGrid();`);
+  };
+  const fire = () => env.run(`castSpell(CDEFS.sp_fireball,foes[0].x,foes[0].y)`);
+  const arrive = () => env.run(`S.combatT+=1;updatePendingHits();`);
+
+  // 1) 施法帧不结算；弹道到达帧才掉血、才附加燃烧
+  setup(); fire();
+  const early = j(env)(`JSON.stringify({hp:foes[0].hp,burn:foes[0].burnStacks||0,queued:pendingHits.length})`);
+  assert.deepEqual(early, { hp: 1000, burn: 0, queued: 1 });
+  arrive();
+  const landed = j(env)(`JSON.stringify({dmg:1000-foes[0].hp,burn:foes[0].burnStacks||0,queued:pendingHits.length})`);
+  assert.ok(landed.dmg > 0);
+  assert.equal(landed.burn, 2);
+  assert.equal(landed.queued, 0);
+
+  // 2) 目标在弹道途中死亡 = 打空
+  setup(); fire();
+  env.run(`killFoe(foes[0]);`);
+  arrive();
+  assert.equal(env.run('foes[0].hp'), 1000);
+
+  // 3) 目标在弹道途中跑出落点 = 打空
+  setup(); fire();
+  env.run(`foes[0].x+=4;foes[0].y+=4;rebuildFoeGrid();`);
+  arrive();
+  assert.equal(env.run('foes[0].hp'), 1000);
+
+  // 4) 延迟值与 FX 同源：改表后逻辑延迟跟着变
+  const t = j(env)(`(()=>{pendingHits.length=0;spellFxTime=()=>.5;
+    castSpell(CDEFS.sp_fireball,P.x+1,P.y);const at=pendingHits[0].at;spellFxTime=__realSpellFxTime;
+    return JSON.stringify({delay:+(at-S.combatT).toFixed(2)});})()`);
+  assert.deepEqual(t, { delay: .5 });
 });
 
 function main() {

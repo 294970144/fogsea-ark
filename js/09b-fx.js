@@ -996,17 +996,17 @@ FX.spell=function(def,tx,ty,elem,targets){
   const id=def.fx||def.id;
   if(id==='sp_fireball'){
     burstW(P.x,P.y,{n:sc(8),col:FIRE,col2:FIRE2,spd:1,life:.25,size:4,shape:0,z0:16,vz:10,grav:0});
-    projectile({from:[P.x,P.y,18],to:[tx,ty,8],dur:.16,arc:26,trail:'fire',col:FIRE,
+    projectile({from:[P.x,P.y,18],to:[tx,ty,8],dur:spellFxTime(def),arc:26,trail:'fire',col:FIRE,
       onArrive:(x,y)=>{explodeFire(x,y,false);impact(1.5,0);if(typeof sfx==='function')sfx('boom');}});
   }else if(id==='sp_frostbolt'){
-    projectile({from:[P.x,P.y,18],to:[tx,ty,8],dur:.15,arc:12,trail:'frost',col:FROST,
+    projectile({from:[P.x,P.y,18],to:[tx,ty,8],dur:spellFxTime(def),arc:12,trail:'frost',col:FROST,
       onArrive:(x,y)=>{explodeFrost(x,y,false);impact(1,0);}});
   }else if(id==='sp_arcbolt'){
     beamW(P.x,P.y,tx,ty,{col:ARC,life:.12,width:6});
-    after(.06,()=>{explodeArcane(tx,ty);glyphW(tx,ty,{shape:3,col:ARC,size:36,life:.5});impact(1,0);});
+    after(spellFxTime(def),()=>{explodeArcane(tx,ty);glyphW(tx,ty,{shape:3,col:ARC,size:36,life:.5});impact(1,0);});
   }else if(id==='sp_emberburst'){
     decalW(tx,ty,{col:FIRE,r:def.radius||2.2,life:2.2,a:.55});
-    after(.1,()=>{
+    after(spellFxTime(def),()=>{
       flashW(tx,ty,{col:FIRE2,size:54,life:.22});
       ringW(tx,ty,{r0:.2,r1:(def.radius||2.2)+.4,col:FIRE,life:.45});
       burstW(tx,ty,{n:sc(110),col:FIRE,col2:FIRE2,spd:2.6,life:.7,size:5.5,shape:1,shape2:0,vz:80,grav:110,jitter:.9});
@@ -1015,7 +1015,7 @@ FX.spell=function(def,tx,ty,elem,targets){
       impact(3,0);
     });
   }else if(id==='sp_flameimpact'){
-    projectile({from:[tx-3.2,ty-1.2,240],to:[tx,ty,6],dur:.2,trail:'meteor',col:FIRE,
+    projectile({from:[tx-3.2,ty-1.2,240],to:[tx,ty,6],dur:spellFxTime(def),trail:'meteor',col:FIRE,
       onArrive:(x,y)=>{explodeFire(x,y,true);impact(6,.04);if(typeof sfx==='function')sfx('boom');}});
   }else if(id==='sp_flamedetonate'){
     const n=FX._detN;FX._detN=0;
@@ -1053,8 +1053,9 @@ FX.spell=function(def,tx,ty,elem,targets){
     ringW(P.x,P.y,{r0:.15,r1:1.2,col:ARC,life:.3});
     const ts=(targets||[]).slice(0,def.missiles||3);
     ts.forEach((f,i)=>{
+      const fx=f.x,fy=f.y; // 固定落点，不追踪；目标跑开即打空，与逻辑一致
       after(i*.06,()=>{
-        projectile({from:[P.x,P.y,20],to:[f.x,f.y,10],target:f,dur:.28,arc:60,trail:'arcane',col:ARC,
+        projectile({from:[P.x,P.y,20],to:[fx,fy,10],dur:spellFxTime(def),arc:60,trail:'arcane',col:ARC,
           onArrive:(x,y)=>{explodeArcane(x,y);glyphW(x,y,{shape:3,col:ARC,size:32,life:.5});impact(1.5,0);}});
       });
     });
