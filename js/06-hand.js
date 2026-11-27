@@ -58,17 +58,41 @@ function showDragCard(uid){
   const c=handCard(uid);if(!c)return;
   const def=CDEFS[c.id],el=$('dragCard');
   dragBuildType=def.kind==='build'?def.build:null;
+  el.classList.remove('build','sigil');
   if(dragBuildType){
     el.classList.add('build');
     el.innerHTML='<canvas id="dragBuildCv"></canvas>';
     sizeDragCv();drawDragBuild();
+  }else if(def.sigil){
+    // 刻印牌拖出只显示图标，与建筑拖出只显示模型一致
+    el.classList.add('sigil');
+    const m=sigilMeta(c.id);
+    el.innerHTML=`<div class="dragSigil" style="color:${m?m.color:def.color}">${svg(m?m.icon:def.icon,54)}<b>${m?m.short:def.name}</b></div>`;
   }else{
-    el.classList.remove('build');
     el.innerHTML=`<div class="hcard" style="position:relative;left:0;transform:none;width:100%;height:100%">${cardInner(def,'')}</div>`;
   }
   el.style.display='block';
   const h=document.querySelector(`.hcard[data-uid="${uid}"]`);if(h)h.classList.add('drag');
   markFuseTargets(uid);
+}
+/* 槽位拖出：与手牌拖拽共用 #dragCard，独立状态不入存档 */
+let slotDrag=null;
+function showSlotDrag(i){
+  const c=(P.sigils||[])[i],m=c&&sigilMeta(c.id);if(!m)return;
+  const el=$('dragCard');
+  el.classList.remove('build');el.classList.add('sigil');
+  el.innerHTML=`<div class="dragSigil" style="color:${m.color}">${svg(m.icon,54)}<b>${m.short}</b></div>`;
+  el.style.display='block';
+  const h=UI.weaponSlotsRow&&UI.weaponSlotsRow.querySelector(`.wslot[data-slot="${i}"]`);
+  if(h)h.classList.add('dragging');
+}
+function endSlotDrag(){
+  if(slotDrag){
+    const h=UI.weaponSlotsRow&&UI.weaponSlotsRow.querySelector(`.wslot[data-slot="${slotDrag.i}"]`);
+    if(h)h.classList.remove('dragging');
+  }
+  slotDrag=null;
+  $('dragCard').style.display='none';
 }
 function sizeDragCv(){
   const cv=$('dragBuildCv');if(!cv)return;
@@ -160,28 +184,32 @@ function placeCheck(def,tx,ty){
   }
   return{ok:true,msg:''};
 }
-/* 拖到武器槽面板：带刻印标签的卡从手牌消耗进弃牌堆，写入槽位。
-   法术刻印决定自动攻击，数值刻印提供加成；剑也能装但不触发法术轮发。 */
-function engraveCard(uid){
+/* 卡是实体，槽位是它的另一个位置：装槽=手牌→槽位，卸下=槽位→手牌，牌库总量不变。 */
+function engraveCard(uid,targetSlot){
   const idx=DECK.hand.findIndex(c=>c.uid===uid);if(idx<0)return false;
   const card=DECK.hand[idx],def=CDEFS[card.id];
   if(!def||!def.sigil){toast('此卡没有刻印标签','warn');sfx('deny');return false;}
   const w=weaponDef(P.weapon),cap=w.slots||0;
-  if((P.sigils||[]).length>=cap){toast('武器槽位已满','warn');sfx('deny');return false;}
-  DECK.hand.splice(idx,1);DECK.discard.push(card);
-  P.sigils.push(card.id);
+  if(w.attack!=='spell'&&!def.sigilOnly){toast('法术刻印只能装入法杖','warn');sfx('deny');return false;}
+  const list=P.sigils||[];
+  let slot=Number.isInteger(targetSlot)&&targetSlot>=0&&targetSlot<cap?targetSlot:list.length;
+  if(slot>list.length)slot=list.length;
+  DECK.hand.splice(idx,1);
+  const displaced=slot<list.length?list[slot]:null;
+  if(displaced)list[slot]=card;else list.push(card);
+  if(displaced)DECK.hand.splice(idx,0,displaced);
   if(S.aimUid===uid)S.aimUid=null;
-  S.handDirty=true;bumpSeen('sigil',card.id);
-  toast('已刻印 '+def.name,'good');sfx('level');
+  S.handDirty=true;
+  if(def.sigilOnly)bumpSeen('sigil',card.id);else bumpSeen('play',card.id);
+  toast(displaced?'替换 '+def.name:'已刻印 '+def.name,'good');sfx('level');
   return true;
 }
 function unfillSlot(i){
   if(!Number.isInteger(i)||i<0||i>=(P.sigils||[]).length)return false;
-  const id=P.sigils[i],def=CDEFS[id];
-  P.sigils.splice(i,1);
-  if(def)DECK.discard.push(mkCard(id));
+  const card=P.sigils.splice(i,1)[0],def=CDEFS[card.id];
+  DECK.hand.push(card);
   S.handDirty=true;sfx('ui');
-  toast('卸下 '+(def?def.name:id),'good');
+  toast('卸下 '+def.name+' 到手牌','good');
   return true;
 }
 function tryPlayAt(uid,wx,wy){

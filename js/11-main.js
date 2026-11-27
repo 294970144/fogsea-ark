@@ -465,10 +465,15 @@ cacheUI();resize();setMuted(save.muted);
 $('btnSpeed').textContent='1×';
 $('btnNight').addEventListener('click',()=>{auInit();skipToNight();});
 $('weaponHud').addEventListener('click',()=>{if(S.mode==='play')toggleWeaponSlots();});
-$('weaponSlots').addEventListener('click',e=>{
-  e.stopPropagation();
+$('weaponSlots').addEventListener('click',e=>e.stopPropagation());
+$('weaponSlots').addEventListener('pointerdown',e=>{
+  if(S.mode!=='play'||e.button!==0)return;
   const slot=e.target.closest&&e.target.closest('.wslot.filled');
-  if(slot&&S.mode==='play'&&unfillSlot(+slot.dataset.slot))toggleWeaponSlots();
+  if(!slot)return;
+  e.stopPropagation();e.preventDefault();
+  const i=+slot.dataset.slot;
+  slotDrag={i,pid:e.pointerId,start:[e.clientX,e.clientY],moved:false};
+  mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
 });
 $('btnPause').addEventListener('click',()=>{auInit();S.mode==='play'?pauseGame():(S.mode==='pause'&&!codexOpen&&resumeGame());});
 $('btnMute').addEventListener('click',()=>{auInit();setMuted(!save.muted);sfx('ui');});

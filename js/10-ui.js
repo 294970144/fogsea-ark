@@ -31,18 +31,18 @@ function renderWeaponSlots(){
   const list=P.sigils||[];
   let html='';
   for(let i=0;i<cap;i++){
-    const id=list[i],m=id&&sigilMeta(id);
-    html+=m?`<span class="wslot filled" data-slot="${i}" style="color:${m.color}" title="${m.n} · ${sigilDesc(id)} · 点击卸下">
-        <span class="wslotBox">${svg(m.icon,20)}</span><span class="wslotName">${m.short}</span></span>`
-           :'<span class="wslot empty"><span class="wslotBox"></span></span>';
+    const c=list[i],m=c&&sigilMeta(c.id);
+    html+=m?`<span class="wslot filled" data-slot="${i}" style="color:${m.color}" title="${m.n} · ${sigilDesc(c.id)} · 拖出卸下">
+        <span class="wslotBox">${svg(m.icon,28)}</span><span class="wslotName">${m.short}</span></span>`
+           :`<span class="wslot empty" data-slot="${i}"><span class="wslotBox"></span></span>`;
   }
   box.innerHTML=html;
   const spellCount=weaponSpells().length;
   const warn=weaponDef(P.weapon).attack==='spell'&&!spellCount;
   box.classList.toggle('noSpell',warn);
   box.title=warn?'法杖缺少法术刻印 · 拖入法术牌后可攻击':'';
-  // 52px 槽 + 6px 沟槽；面板宽 = 行宽 + 左右内边距 32 + 边框 2 + 余量 10（防子像素舍入换行）
-  const rowW=cap*52+(cap>0?(cap-1)*6:0);
+  // 68px 槽 + 8px 沟槽；面板宽 = 行宽 + 左右内边距 32 + 边框 2 + 余量 10（防子像素舍入换行）
+  const rowW=cap*68+(cap>0?(cap-1)*8:0);
   UI.weaponHud.style.setProperty('--slotW',Math.max(260,rowW+44)+'px');
 }
 function toggleWeaponSlots(){
@@ -65,7 +65,7 @@ function syncHUD(){
   }
   setTxt(UI.weaponLv,'Lv.'+P.lvl);
   setBar(UI.weaponXpWrap,UI.weaponXp,P.xp/P.next);
-  const sigKey=(P.weapon||'')+'|'+(P.sigils||[]).join(',');
+  const sigKey=(P.weapon||'')+'|'+(P.sigils||[]).map(c=>c&&c.uid).join(',');
   if(UI.weaponSlots._k!==sigKey){UI.weaponSlots._k=sigKey;renderWeaponSlots();}
   const night=S.phase==='night';
   const showNight=S.mode==='play'&&!night;
@@ -142,7 +142,7 @@ const CX_CATS=[{id:'all',name:'全部'},{id:'role',name:'角色'},{id:'res',name
   {id:'foe',name:'雾裔'},{id:'bless',name:'祝福'},{id:'legacy',name:'传承'},{id:'term',name:'术语'}];
 const foeNow=t=>Math.round(FOES[t].hp*DIFFS[save.diff].hp*dayScale(Math.max(1,S.day)));
 // 刻印摘要：图鉴多处引用同一份持有情况
-const sigilList=()=>{const l=(P.sigils||[]).map(id=>{const m=sigilMeta(id);return m?m.short:id;});return l.length?l.join(' / '):'无';};
+const sigilList=()=>{const l=(P.sigils||[]).map(c=>{const m=sigilMeta(c&&c.id);return m?m.short:'?';});return l.length?l.join(' / '):'无';};
 const sigilCap=()=>weaponDef(P.weapon).slots||0;
 const CODEX=[
   {id:'keeper',cat:'role',name:'守灯人',icon:'lantern',color:'#ffb454',sprite:'player',
@@ -258,10 +258,10 @@ const CODEX=[
     rel:['dawn','keeper','hand']})),
   ...SIGIL_IDS.map(id=>{const s=SIGILS[id];
     return {id:'s_'+id,cat:'role',name:s.n,icon:s.icon,color:s.color,
-      desc:sigilDesc(id)+'。已改为卡牌，从牌库抽到后拖入武器槽位，同种最多叠装 '+SIGIL_COPIES+' 份；纯数值刻印不能拖地释放。',
+      desc:sigilDesc(id)+'。卡牌从牌库抽到后拖入武器槽位，同种可叠装但受牌库张数限制；纯数值刻印不能拖地释放。',
       tags:sigilTags(s),badge:()=>{const n=(save.seen.sigil||{})[id]||0;return n?'×'+n:'';},
-      stats:()=>[['效果',sigilDesc(id)],['叠加上限',SIGIL_COPIES+' 份'],
-        ['本局持有',(P.sigils||[]).filter(x=>x===id).length+' 份'],
+      stats:()=>[['效果',sigilDesc(id)],
+        ['本局持有',(P.sigils||[]).filter(x=>x&&x.id===id).length+' 份'],
         ['累计铭刻',((save.seen.sigil||{})[id]||0)+' 枚']],
       rel:['keeper','dawn','w_sword']};}),
   ...Object.entries(BLESS).map(([k,b])=>({id:'l_'+k,cat:'legacy',name:b.name+'传承',icon:b.icon,color:b.color,

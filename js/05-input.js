@@ -99,8 +99,17 @@ addEventListener('keydown',e=>{
   }
 });
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
-addEventListener('blur',()=>{for(const k in keys)keys[k]=false;endDrag();});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;endDrag();endSlotDrag();});
 addEventListener('pointermove',e=>{
+  if(slotDrag){
+    if(e.pointerId!==slotDrag.pid)return;
+    mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
+    if(!slotDrag.moved&&Math.hypot(mouseX-slotDrag.start[0],mouseY-slotDrag.start[1])>7){
+      slotDrag.moved=true;showSlotDrag(slotDrag.i);
+    }
+    if(slotDrag.moved)moveDragCard(mouseX,mouseY);
+    return;
+  }
   if(S.dragUid&&e.pointerId!==S.dragPointerId)return;
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;
   if(S.dragUid){
@@ -121,10 +130,21 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('wheel',e=>{e.preventDefault();cam.tz=clamp(cam.tz-Math.sign(e.deltaY)*.12,.9,1.9);},{passive:false});
 addEventListener('pointerup',e=>{
+  if(slotDrag){
+    if(e.pointerId!==slotDrag.pid)return;
+    const i=slotDrag.i,moved=slotDrag.moved;
+    const hit=document.elementFromPoint(e.clientX,e.clientY);
+    const overSlots=!!(hit&&hit.closest&&hit.closest('#weaponSlots'));
+    endSlotDrag();
+    if(moved&&!overSlots&&S.mode==='play')unfillSlot(i);
+    return;
+  }
   if(!S.dragUid||e.pointerId!==S.dragPointerId)return;
   const uid=S.dragUid,moved=S.dragMoved;
   const hit=document.elementFromPoint(e.clientX,e.clientY);
+  const slotEl=hit&&hit.closest?hit.closest('.wslot'):null;
   const overSlots=!!(hit&&hit.closest&&hit.closest('#weaponSlots'));
+  const targetSlot=slotEl&&slotEl.dataset&&slotEl.dataset.slot!==undefined?+slotEl.dataset.slot:undefined;
   const overCanvas=hit===cv||(hit&&hit.closest&&!!hit.closest('#weaponHud'));
   const cardEl=hit&&hit.closest?hit.closest('.hcard'):null;
   const overUid=cardEl&&cardEl.dataset&&cardEl.dataset.uid!==undefined?+cardEl.dataset.uid:0;
@@ -133,14 +153,17 @@ addEventListener('pointerup',e=>{
   if(S.mode!=='play')return;
   if(moved){
     if(overUid&&overUid!==uid){tryFuse(uid,overUid);return;}
-    if(overSlots)engraveCard(uid);
+    if(overSlots)engraveCard(uid,targetSlot);
     else if(overCanvas){updateMouseWorld();tryPlayAt(uid,mouseWorld[0],mouseWorld[1]);}
     else selectCard(uid);
   }else{
     if(S.aimUid===uid)clearAim();else selectCard(uid);
   }
 });
-addEventListener('pointercancel',e=>{if(S.dragUid&&e.pointerId===S.dragPointerId)endDrag();});
+addEventListener('pointercancel',e=>{
+  if(slotDrag&&e.pointerId===slotDrag.pid){endSlotDrag();return;}
+  if(S.dragUid&&e.pointerId===S.dragPointerId)endDrag();
+});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.mode==='play'&&!codexOpen)pauseGame();});
 function updateMouseWorld(){
   const cp=proj(cam.x,cam.y);

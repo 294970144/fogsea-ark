@@ -765,9 +765,13 @@ function glyphW(x,y,o){return quad(6,{x,y,life:o.life||.6,col:o.col,shape:o.shap
 function pillarW(x,y,o){const h=o.h||150,w=o.w||26;return quad(7,{x,y,life:o.life||.5,col:o.col,sw:w,sh:h});}
 function beamW(x0,y0,x1,y1,o){return quad(2,{x0,y0,x1,y1,life:o.life||.15,col:o.col,sw:0,sh:o.width||7});}
 function bubbleW(o){return quad(3,{follow:'player',life:o.dur||4,col:o.col||'#8fe3d0',sw:74,sh:74});}
-/* 弧月刀光：p1=屏幕空间中心角(世界角+π/4)，p2=半扫角，p3=头部内缘，p4=纹理种类 */
-function slashW(x,y,ang,r,o){return quad(8,{x,y,life:o.life||.3,col:o.col||'#ffb454',col2:o.col2||o.col||'#ffb454',
-  p1:ang+Math.PI/4,p2:o.half===undefined?1.5:o.half,p3:o.inner===undefined?.3:o.inner,p4:o.tex||0,r0:r});}
+/* 弧月刀光：p1=屏幕空间中心角（世界角经等距投影换算），p2=半扫角，p3=头部内缘，p4=纹理种类 */
+function slashW(x,y,ang,r,o){
+  // 等距投影下世界方向 (cos a,sin a) 投到屏幕是 ((cos a-sin a)*32,(cos a+sin a)*16)，
+  // 直接用 ang+π/4 只在 45° 对角线成立，其余方向偏差约 18.4°。
+  const sx=(Math.cos(ang)-Math.sin(ang))*32,sy=(Math.cos(ang)+Math.sin(ang))*16;
+  return quad(8,{x,y,life:o.life||.3,col:o.col||'#ffb454',col2:o.col2||o.col||'#ffb454',
+    p1:Math.atan2(sy,sx),p2:o.half===undefined?1.5:o.half,p3:o.inner===undefined?.3:o.inner,p4:o.tex||0,r0:r});}
 
 function w2s(x,y){
   const z=cam.z,cpx=(cam.x-cam.y)*32,cpy=(cam.x+cam.y)*16;

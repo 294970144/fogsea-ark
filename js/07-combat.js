@@ -8,19 +8,20 @@ function weaponAttackInterval(w=weaponDef(P.weapon)){
 }
 function sigilMods(){
   const m={dmg:1,spd:1,echo:0};
-  for(const id of P.sigils||[]){
-    const s=SIGILS[id];if(!s)continue;
+  for(const c of P.sigils||[]){
+    const s=SIGILS[c&&c.id];if(!s)continue;
     if(s.dmg!=null)m.dmg*=1+s.dmg;
     if(s.spd!=null)m.spd*=1+s.spd;
     if(s.echo!=null)m.echo=Math.min(.75,m.echo+s.echo);
   }
   return m;
 }
-/* 槽位中的法术刻印按从左到右轮发；没有法术刻印时法杖不攻击。 */
+/* 槽位中的法术刻印按从左到右轮发；没有法术刻印时法杖不攻击。剑不能施法，故不参与轮发。 */
 function weaponSpells(){
+  if(weaponDef(P.weapon).attack!=='spell')return [];
   const out=[];
-  for(const id of P.sigils||[]){
-    const d=CDEFS[id];
+  for(const c of P.sigils||[]){
+    const d=CDEFS[c&&c.id];
     if(d&&d.sigil&&!d.sigilOnly&&!d.weaponAttack)out.push(d);
   }
   return out;

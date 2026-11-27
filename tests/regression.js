@@ -718,7 +718,7 @@ testCase('R16_weapon_auto_attacks', () => {
   const weaponIds = env.run('WEAPON_IDS');
   for (const id of weaponIds) {
     env.run(`initRun();S.mode='play';P.weapon='${id}';
-      P.sigils=(weaponDef(P.weapon).startSigils||[]).slice();P.sigCast=0;
+      P.sigils=[...(weaponDef(P.weapon).startSigils||[])].map(mkCard);P.sigCast=0;
       P.dmg=TUNE.player.baseDmg;P.range=TUNE.player.baseRange;
       P.crit=0;P.atkCd=0;P.wave=0;P.cls='mage';P.maxEn=200;P.en=137;P.spellCd=.4;
       P.stacks={t_resonance:1,t_arccharge:1,t_storm:1};P.resoElem='fire';P.resoN=2;P.arcCharge=3;P.stormCount=4;P.charge=5;P.shield=6;
@@ -765,7 +765,7 @@ testCase('R16_weapon_auto_attacks', () => {
   env.run('autoAttack()');
   assert.ok(env.run(`shots.some(s=>s.type==='wave')`));
 
-  env.run(`initRun();P.weapon='flame';P.sigils=['sig_flame'];P.atkCd=0;P.range=TUNE.player.baseRange*1.18;foes.length=0;nodes.length=0;`);
+  env.run(`initRun();P.weapon='flame';P.sigils=[mkCard('sig_flame')];P.atkCd=0;P.range=TUNE.player.baseRange*1.18;foes.length=0;nodes.length=0;`);
   seedFoe(env, 8, 0);
   env.run('autoAttack()');
   assert.ok(env.run('10000-foes[0].hp') > 0);
@@ -1053,7 +1053,7 @@ testCase('R22_weapon_slots_and_sigils', () => {
     const setup=(w,sigils)=>{
       save.weapon=w;initRun();S.mode='play';
       P.dmg=TUNE.player.baseDmg;P.atkCd=0;P.crit=0;P.wave=0;P.cls='mage';P.maxEn=200;P.en=137;P.spellCd=.4;
-      P.stacks={};P.sigils=sigils;P.sigCast=0;
+      P.stacks={};P.sigils=sigils.map(mkCard);P.sigCast=0;
       foes.length=0;nodes.length=0;shots.length=0;slashes.length=0;
     };
     const foe=()=>{foes.push({type:'crawler',x:P.x+1.1,y:P.y,hp:10000,max:10000,spd:0,dmg:6,r:.32,xp:5,coreDmg:6,
@@ -1080,30 +1080,33 @@ testCase('R22_weapon_slots_and_sigils', () => {
   assert.ok(Math.abs(combat.cdPlain - .42) < 1e-9);
   assert.ok(combat.cdSwift < combat.cdPlain);
 
-  // 4) 刻印牌链路：开局预装并保底入手 → 卸下回弃牌堆 → 装槽消耗 → 按槽轮发（数值刻印跳过）
+  // 4) 刻印链路：开局实体卡直接入槽且不重复 → 卸下回手牌 → 装槽到指定位 → 牌库守恒 → 轮发
   const cycle = j(env)(`(()=>{
     save.weapon='flame';initRun();S.mode='play';UI.toasts.innerHTML='';
-    const start=P.sigils[0]==='sig_flame'&&DECK.hand.some(c=>c.id==='sig_flame');
-    DECK.discard=[];
-    const off=unfillSlot(0),back=DECK.discard.some(c=>c.id==='sig_flame');
-    DECK.hand=[mkCard('sig_flame')];DECK.discard=[];UI.toasts.innerHTML='';
-    const on=engraveCard(DECK.hand[0].uid);
-    const consumed=!DECK.hand.length&&DECK.discard.some(c=>c.id==='sig_flame')&&P.sigils.includes('sig_flame');
-    P.sigils=['keen','sig_flame','sig_frost'];P.sigCast=0;
+    const start=P.sigils[0]&&P.sigils[0].id==='sig_flame';
+    const noDup=!DECK.hand.some(c=>c.id==='sig_flame')&&!DECK.draw.some(c=>c.id==='sig_flame');
+    const total=()=>DECK.hand.length+DECK.draw.length+DECK.discard.length+P.sigils.length;
+    const before=total();
+    const off=unfillSlot(0),back=DECK.hand.some(c=>c.id==='sig_flame');
+    const uid=DECK.hand.find(c=>c.id==='sig_flame').uid;
+    const on=engraveCard(uid,0);
+    const slot=P.sigils.length===1&&P.sigils[0].id==='sig_flame';
+    const conserved=total()===before&&!DECK.hand.some(c=>c.id==='sig_flame');
+    P.sigils=['keen','sig_flame','sig_frost'].map(mkCard);P.sigCast=0;
     const order=[];for(let i=0;i<3;i++)order.push(nextWeaponSpell().id);
-    return JSON.stringify({start,off,back,on,consumed,order});
+    return JSON.stringify({start,noDup,off,back,on,slot,conserved,order});
   })()`);
-  assert.deepEqual(cycle, {start:true,off:true,back:true,on:true,consumed:true,
+  assert.deepEqual(cycle, {start:true,noDup:true,off:true,back:true,on:true,slot:true,conserved:true,
     order:['sig_flame','sig_frost','sig_flame']});
 
-  // 5) 存档往返保留刻印（数值刻印 + 法术刻印）
+  // 5) 存档往返保留卡对象（uid + id）
   const roundtrip = j(env)(`(()=>{
     save.weapon='flame';initRun();S.mode='play';
-    P.sigils=['keen','sig_flame'];
+    P.sigils=['keen','sig_flame'].map(mkCard);
     const snap=captureSnapshot();
     P.sigils=[];
     restoreSnapshot(JSON.parse(JSON.stringify(snap)));
-    return JSON.stringify({sigils:P.sigils,snapIds:snap.P.sigils});
+    return JSON.stringify({sigils:P.sigils.map(c=>c.id),snapIds:snap.P.sigils.map(c=>c.id)});
   })()`);
   assert.deepEqual(roundtrip.sigils, ['keen','sig_flame']);
   assert.deepEqual(roundtrip.snapIds, ['keen','sig_flame']);

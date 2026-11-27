@@ -280,7 +280,7 @@ function dlPush(d,k,o){let it=dlPool[dlN];if(!it){it={d:0,k:0,o:null};dlPool[dlN
 function drawGhost(){
   const a=aimDef();if(!a||S.mode!=='play')return;
   const def=a.def;
-  if(def.target==='self'||def.target==='pick')return;
+  if(def.sigilOnly||def.target==='self'||def.target==='pick')return;
   if(def.kind==='build'){
     const[tx,ty]=ghostTile(),chk=placeCheck(def,tx,ty);
     const pp=proj(P.x,P.y);
