@@ -14,11 +14,41 @@ const pendingHits=[];
 /* 投掷物（def.proj）：逻辑层持有真实坐标，逐帧子步长推进，撞到敌人才结算；
    撞地形/被瞄准的资源节点也在原位结算；超时只消散。视觉层按 track 跟随本对象。 */
 const spellShots=[];
+/* 通用曲线弹道：出膛方向由分叉偏角决定，终点恒为瞄准目标。
+   贝塞尔 B(t)=(1-t)²·起点 + 2(1-t)t·控制点 + t²·终点。
+   t=0 切线朝出膛角（向两侧张开），t=1 精确落到目标（汇聚），不会飞过头再折返。
+   分叉几发就生成几条曲线，新增 N 叉卡只要多给几个偏角，不必改任何卡的视觉分支。 */
+function bezier2(x0,y0,cx,cy,x1,y1,t){
+  const u=1-t;
+  return [u*u*x0+2*u*t*cx+t*t*x1,u*u*y0+2*u*t*cy+t*t*y1];
+}
+function bezierLen(x0,y0,cx,cy,x1,y1){
+  let L=0,px=x0,py=y0;
+  for(let i=1;i<=8;i++){
+    const [x,y]=bezier2(x0,y0,cx,cy,x1,y1,i/8);
+    L+=Math.hypot(x-px,y-py);px=x;py=y;
+  }
+  return L;
+}
 function spawnSpellShot(def,fx,fy,tx,ty,ctx){
-  // 固定弹速：飞行时间 = 距离 / 速度，远处的弹丸不会因为「时长固定」而变成瞬移
+  ctx=ctx||{};
   const dx=tx-fx,dy=ty-fy,d=Math.hypot(dx,dy)||.001;
-  const spd=spellShotSpeed(def),dur=Math.max(.06,d/spd);
-  const shot={def,x:fx,y:fy,vx:dx/d*spd,vy:dy/d*spd,dur,life:dur*1.6,ctx:ctx||{},dead:false};
+  const spd=spellShotSpeed(def);
+  // 固定弹速：飞行时间按实际路径长度算。曲线沿弧长走，直线沿距离走。
+  let path=null,dur;
+  if(ctx.path){
+    const {cx,cy}=ctx.path;
+    const L=bezierLen(fx,fy,cx,cy,tx,ty);
+    dur=Math.max(.06,L/spd);
+    path={x0:fx,y0:fy,cx,cy,x1:tx,y1:ty,t:0,target:ctx.path.target||null};
+  }else dur=Math.max(.06,d/spd);
+  // 出膛方向：曲线取起点切线（朝控制点），直线取朝终点；vx/vy 只供子步长估算，轨迹另由 path 决定
+  let vx=dx/d*spd,vy=dy/d*spd;
+  if(path){
+    const ax=path.cx-fx,ay=path.cy-fy,ad=Math.hypot(ax,ay)||1;
+    vx=ax/ad*spd;vy=ay/ad*spd;
+  }
+  const shot={def,x:fx,y:fy,vx,vy,dur,life:dur*1.6,ctx,dead:false,path};
   spellShots.push(shot);
   return shot;
 }
@@ -27,13 +57,27 @@ function updateSpellShots(dt){
     const s=spellShots[i];
     s.life-=dt;
     if(s.life<=0){s.dead=true;s.fade=true;spellShots.splice(i,1);continue;} // 超时：只消散，不结算
+    const p=s.path;
+    // 终点跟随活目标：弹丸飞向目标当下位置，目标倒下则定格在最后落点
+    if(p&&p.target&&!p.target.dead&&p.target.alive!==false){p.x1=p.target.x;p.y1=p.target.y;}
     const spd=Math.hypot(s.vx,s.vy);
     const steps=Math.min(10,Math.max(1,Math.ceil(spd*dt/.25)));
-    const sx=s.vx*dt/steps,sy=s.vy*dt/steps;
+    const t0=p?p.t:0,dtStep=p?dt/s.dur/steps:0;
     let done=false;
-    for(let k=0;k<steps&&!done;k++){
-      s.x+=sx;s.y+=sy;
+    for(let k=1;k<=steps&&!done;k++){
+      if(p){
+        p.t=Math.min(1,t0+dtStep*k);
+        const [x,y]=bezier2(p.x0,p.y0,p.cx,p.cy,p.x1,p.y1,p.t);
+        s.x=x;s.y=y;
+      }else{
+        s.x+=s.vx*dt/steps;s.y+=s.vy*dt/steps;
+      }
       done=spellShotStepHit(s);
+    }
+    // 曲线走到终点仍未碰撞：在终点按落点结算一次（目标跑开则自然打空），然后消散
+    if(p&&p.t>=1&&!done){
+      if(!spellShotStepHit(s)){s.dead=true;s.fade=true;done=true;}
+      else done=true;
     }
     if(done)spellShots.splice(i,1);
   }
@@ -59,6 +103,14 @@ function impactSpellShot(s,x,y,foe){
 }
 function queueSpellHit(def,tx,ty,ctx){
   const delay=spellFxTime(def);
+  // 带曲线路径的分叉发一律走实体弹道（哪怕法术本身是 hitscan，如奥术）
+  if(ctx&&ctx.path){
+    if(def.shape==='multi'){
+      const ts=spellTargets(def,tx,ty);
+      return ts.length?ts.map(f=>spawnSpellShot(def,P.x,P.y,f.x,f.y,{...ctx,locked:f})):null;
+    }
+    return spawnSpellShot(def,P.x,P.y,tx,ty,ctx);
+  }
   if(delay<=0){resolveSpellHit(def,tx,ty,ctx);return null;}
   if(def.proj){
     // 多发飞弹：每发一条独立弹道，各自锁定发射时的那只目标

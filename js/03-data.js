@@ -301,6 +301,9 @@ const SIGILS={
   scatter:{id:'scatter',n:'二叉',short:'二叉',icon:'sigScatter',color:'#ffb454',op:'fan',copies:2,spread:90,dmgB:.55,mana:5},
   trident:{id:'trident',n:'三叉',short:'三叉',icon:'sigTrident',color:'#c9a8ff',op:'fan',copies:3,spread:20,dmgB:.45,mana:5}
 };
+/* 可当功能刻印的法术：本身是可主动施放的牌，挂在法术右侧时按 op 改写左侧法术。
+   与 SIGILS 分开，避免污染刻印种类计数与卡面（两者保留）。数值读 CDEFS 自身。 */
+const SPELL_SIGIL_OPS={sp_emberburst:'ember'};
 const SIGIL_IDS=Object.keys(SIGILS);
 // 文案实时派生：改数值即改描述，避免与表漂移
 /* 刻印文案直接从 SIGILS 派生：迅捷只压整轮充能，换算成充能降幅展示（出手频率等效 +spd）。 */

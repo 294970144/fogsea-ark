@@ -85,8 +85,10 @@ function sigilChain(slot){
   for(let i=(slot|0)+1;i<g.length;i++){
     const c=g[i];if(!c)continue;
     const s=SIGILS[c.id];
-    if(!s)break;                       // 遇到法术：链到此为止
-    if(s.op)out.push(s);               // 数值刻印不参与，也不截断链
+    if(s){if(s.op)out.push(s);continue;}  // 真刻印：有 op 入链，数值刻印跳过但不截断
+    const sop=SPELL_SIGIL_OPS[c.id];
+    if(sop){out.push({op:sop,id:c.id});continue;} // 可当刻印的法术（如余烬爆发）：入链
+    break;                             // 普通法术：链到此为止
   }
   return out;
 }
@@ -109,12 +111,14 @@ const SIGIL_OPS={
     const n=Math.max(1,s.copies|0),k=s.dmgB==null?1:s.dmgB;
     st.rep.n+=n-1;st.rep.mul*=k;
     return st;
-  }
+  },
+  /* 余烬爆发：给左侧法术的每一次命中附加范围火伤+灼烧，数值走 CDEFS.sp_emberburst。 */
+  ember:(st)=>{st.ember=true;return st;}
 };
 /* 把一串功能刻印从左到右折进初始状态：
    shots = 每发的偏角与伤害系数；rep = 错峰补发次数与系数。 */
 function foldCast(chain){
-  const st={shots:[{off:0,mul:1}],rep:{n:1,mul:1}};
+  const st={shots:[{off:0,mul:1}],rep:{n:1,mul:1},ember:false};
   for(const s of chain){const op=SIGIL_OPS[s.op];if(op)op(st,s);}
   st.shots.sort((a,b)=>a.off-b.off);   // 统一按角度从右到左出膛，读数与画面稳定
   return st;
@@ -134,7 +138,11 @@ function weaponCastSlots(w=weaponDef(P.weapon)){
   const N=w.slots||0;
   for(let i=0;i<N;i++){
     const d=CDEFS[P.sigils&&P.sigils[i]&&P.sigils[i].id];
-    if(d&&d.sigil&&!d.sigilOnly&&!d.weaponAttack)out.push(i);
+    if(!d||!d.sigil||d.sigilOnly||d.weaponAttack)continue;
+    // 可当功能刻印的法术（如余烬爆发）装槽时只修饰左侧法术，不自己射击；
+    // 它作为主动法术的用法走手牌那条路，与武器槽无关。
+    if(SPELL_SIGIL_OPS[d.id])continue;
+    out.push(i);
   }
   return out;
 }
@@ -239,7 +247,21 @@ function nearestTarget(w){
 }
 /* 落点命中：每发弹道到达时对落点附近的所有目标结算，范围看法术自身的 shape/radius。
    single 只打落点最近的那个，其余按 radius 覆盖全体——这是法术语义，与目标类型无关。 */
-function weaponHitAt(def,x,y,k,node){
+/* 余烬爆发附加效果：在命中点按 CDEFS.sp_emberburst 的现卡值造成范围火伤+灼烧。
+   独立于本发法术的 k（分叉系数），避免与分裂倍率重复；只作用于敌人，不采集节点。 */
+function applyEmberAt(x,y){
+  const e=CDEFS.sp_emberburst;
+  if(!e)return;
+  const R=e.radius||2.2,dmg=(e.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell;
+  const foes=attackables().filter(t=>!isNode(t)&&!t.dead&&dist(x,y,t.x,t.y)<=R+hitRadius(t));
+  for(const f of foes){
+    const crit=Math.random()<P.crit,dd=crit?dmg*2:dmg;
+    if(dd>0)damageFoe(f,dd,Math.atan2(f.y-P.y,f.x-P.x),crit,{noKnock:true});
+    if(e.status&&!f.dead)applyElement(f,e.elem,e.status.n,e.status.kind);
+  }
+  FX.spell(e,x,y,e.elem,foes,null);
+}
+function weaponHitAt(def,x,y,k,node,ember){
   const single=def.shape==='single',R=def.radius||.6,foesHit=[];
   // 敌人按法术形状覆盖（single 只取最近一个），火焰蔓延以命中的敌人为种子
   const targets=attackables().filter(t=>!isNode(t)&&dist(x,y,t.x,t.y)<=R+hitRadius(t));
@@ -262,6 +284,7 @@ function weaponHitAt(def,x,y,k,node){
   }
   const hits=foesHit.concat(node&&node.alive?[node]:[]);
   if(def.spreadFire&&foesHit.length)spreadFire(x,y,def.radius,foesHit);
+  if(ember&&hits.length)applyEmberAt(x,y);   // 余烬爆发刻印：命中后在落点附加范围火伤+灼烧
   if(hits.length)S.hitstop=Math.max(S.hitstop,.02);
   return hits;
 }
@@ -270,18 +293,27 @@ function fireWeaponCast(w,tgt,cast,mul){
   const def=cast.def,pl=castPlan(cast.slot);
   const base=Math.atan2(tgt.y-P.y,tgt.x-P.x);
   const d=Math.max(.6,dist(P.x,P.y,tgt.x,tgt.y));
+  const fan=pl.shots.length>1;
   for(const p of pl.shots){
-    // 每发各自抖一次：二叉的两路也会略微不对称，连发不会叠成一条线
-    const a=base+p.off+weaponSpreadOffset(),tx=P.x+Math.cos(a)*d,ty=P.y+Math.sin(a)*d;
+    // 出膛角：分叉偏角决定弹丸朝哪两侧张开；每发各自抖一次，连发不叠成一条线
+    const a=base+p.off+weaponSpreadOffset();
     const k=p.mul*(mul==null?1:mul);
-    // 发射时锁定这一发要采的节点：落点附近的，或瞄准的那一个。每发各锁各的，分叉就能分采不同的树。
-    let node=null;
-    if(isNode(tgt)){
-      let nd=1e9;
-      for(const n of nodes){if(!n.alive)continue;const q=dist(tx,ty,n.x,n.y);if(q<=.9&&q<nd){nd=q;node=n;}}
-      if(!node)node=tgt;
+    // 分叉：终点恒为瞄准目标，控制点沿出膛角前伸 → 先向两侧张开、再汇聚回目标（不飞过头折返）。
+    // 单发：沿用原落点（带散布抖动），保持可被打空/被拦截的手感。
+    let tx,ty,path=null,node=null;
+    if(fan){
+      tx=tgt.x;ty=tgt.y;
+      const bow=d*0.62;
+      path={cx:P.x+Math.cos(a)*bow,cy:P.y+Math.sin(a)*bow,
+        target:tgt&&!tgt.dead?tgt:null};  // 终点跟随活目标
+      if(isNode(tgt))node=tgt;         // 汇聚到同一处：瞄准节点则锁定它
+    }else{
+      tx=P.x+Math.cos(a)*d;ty=P.y+Math.sin(a)*d;
+      if(isNode(tgt))node=tgt;
     }
-    const shot=queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(dd,x,y)=>weaponHitAt(dd,x,y,k,node)});
+    const ctx={mode:'weapon'};
+    if(path)ctx.path=path;
+    const shot=queueSpellHit(def,tx,ty,{...ctx,resolve:(dd,x,y)=>weaponHitAt(dd,x,y,k,node,pl.ember)});
     spellFx(def,tx,ty,def.elem,spellTargets(def,tx,ty),shot);
   }
 }

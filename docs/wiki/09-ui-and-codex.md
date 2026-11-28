@@ -155,7 +155,7 @@ try {
 - `isTouch` 由 `pointer:coarse` 或 `ontouchstart` 判定，给 `body` 加 `.touch`；触摸端出现虚拟摇杆与冲刺/雾爆按钮；
 - `reduceMotion` 由 `prefers-reduced-motion` 判定，关闭飞牌动画、降低特效粒子量；
 - 遮罩有 `role="dialog"`、`aria-modal`、`aria-label`；武器选择器与确认框做焦点陷阱；
-- 但 UX 审计（`docs/ux-audit-2026-11-27.html`）仍指出：viewport 禁缩放、弹窗无完整 focus trap、手牌非语义元素——这些是待改进项。
+- 已知待改进项（原 UX 审计结论）：viewport 禁缩放、弹窗无完整 focus trap、手牌非语义元素——审计记录已清理，结论保留于此。
 
 ## 下一步
 

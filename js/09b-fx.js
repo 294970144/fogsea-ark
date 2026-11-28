@@ -6,10 +6,10 @@
 const FX={on:false,q:1,time:0,_detN:0,_magePending:false,backend:'none'};
 
 (function(){
-const ADD=6144,ALPHA=2048,QUADS=16;
+const ADD=6144,ALPHA=2048,QUADS=16,ROCK_QUADS=16;
 let renderer=null,scene=null,camera=null,atlasTex=null,atlasCanvas=null,veil=null;
 let gpu=null;
-let pools=null,quads=[],projs=[],events=[],rockBits=[],rockBursts=[];
+let pools=null,quads=[],rockQuads=[],projs=[],events=[],rockBits=[],rockBursts=[];
 let lastNow=0,wasActive=false,emaMs=16,slowT=0,deadT=0,veilOff=false;
 let vw=0,vh=0,vdpr=1;
 
@@ -68,7 +68,22 @@ function makeAtlas(){
     g.beginPath();g.moveTo(64,118);g.lineTo(51,88);g.lineTo(77,88);g.closePath();g.fill();
     g.beginPath();g.moveTo(62,16);g.lineTo(49,8);g.lineTo(49,26);g.lineTo(62,34);g.closePath();g.fill();
     g.beginPath();g.moveTo(66,16);g.lineTo(79,8);g.lineTo(79,26);g.lineTo(66,34);g.closePath();g.fill();});
-  // 投石形状现在由 2D 主画布直接绘制，不再占用 FX 图集单元
+  // 投石实体：三帧旋转石块，走 FX 层（法线混合），不再画 2D 主画布。
+  // 配色沿用原 2D 版：石灰岩亮面 + 暗面 + 深色包边。
+  if(typeof THROW_ROCK_FRAMES!=='undefined')
+    for(let f=0;f<3;f++)cell(9+f,()=>{
+      const pg=THROW_ROCK_FRAMES[f],K=3.6;
+      const poly=(pts,fill,stroke,lw)=>{
+        g.beginPath();
+        pts.forEach((pt,i)=>{const x=64+pt[0]*K,y=64+pt[1]*K;i?g.lineTo(x,y):g.moveTo(x,y);});
+        g.closePath();
+        if(fill){g.fillStyle=fill;g.fill();}
+        if(stroke){g.strokeStyle=stroke;g.lineWidth=lw;g.lineJoin='round';g.stroke();}
+      };
+      poly(pg.body,'#6d7b82','#2f3b41',7);
+      poly(pg.face,'#9aa8ad');
+      poly(pg.shade,'#4f5d64');
+    });
   atlasCanvas=c;
   const t=new THREE.CanvasTexture(c);t.flipY=false;return t;
 }
@@ -304,7 +319,7 @@ struct Out { @location(0) uv: vec2f };
     let flick = 0.8 + 0.2 * sin(U.time * 30.0 + uv.y * 20.0);
     a = hor * ver * flick * env;
     col = mix(U.col.rgb, vec3f(1.0), ver * 0.4);
-  } else {
+  } else if (U.mode < 8.5) {
     let ang = atan2(p.y, p.x);
     let rel = atan2(sin(ang - U.p1.x), cos(ang - U.p1.x));
     let hs = U.p1.y;
@@ -341,6 +356,13 @@ struct Out { @location(0) uv: vec2f };
     col = mix(col, U.col2.rgb, (1.0 - smoothstep(inner, inner + 0.25, d)) * 0.35 * (1.0 - head));
     col = mix(col, U.col.rgb, halo * 0.5);
     a = (body * (0.75 + 0.35 * (1.0 - bh)) + head * band * 0.6 + band * rim * 0.6 * (1.0 - bh) + halo * 0.45 * tailFade) * inArc * fade;
+  } else {
+    // mode 9：图集实体（不透光石块），法线混合，颜色取图集本身；不随时间淡出、不吃元素色
+    let shv = floor(U.shape + 0.5);
+    let auv9 = (vec2f(floor(shv % 4.0), floor(shv / 4.0)) + vec2f(uv.x, 1.0 - uv.y)) / vec2f(4.0, 3.0);
+    let tx9 = textureSample(atlas, smp, auv9);
+    a = tx9.a * U.p1.x;
+    col = tx9.rgb;
   }
   if (a < 0.004) { discard; }
   return vec4f(col, a);
@@ -426,7 +448,7 @@ function renderGPU(){
     pass.setPipeline(pipeline);pass.setBindGroup(0,pool.bg);pass.draw(6,pool.n);
   }
   if(!gpu.quadBuffers){
-    gpu.quadBuffers=Array.from({length:QUADS+1},()=>gpu.device.createBuffer({size:QUAD_STRIDE,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}));
+    gpu.quadBuffers=Array.from({length:QUADS+ROCK_QUADS+1},()=>gpu.device.createBuffer({size:QUAD_STRIDE,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}));
     gpu.quadBgs=gpu.quadBuffers.map(buffer=>gpu.device.createBindGroup({layout:gpu.quadLayout,entries:[
       {binding:0,resource:{buffer:gpu.globals}},{binding:1,resource:{buffer}},
       {binding:2,resource:gpu.atlasTex.createView()},{binding:3,resource:gpu.sampler}]}));
@@ -438,6 +460,7 @@ function renderGPU(){
     pass.setPipeline(pipeline);pass.setBindGroup(0,gpu.quadBgs[qi]);pass.draw(6,1);qi++;
   };
   for(const q of quads)if(q.active)drawQuad(q.gpuData,gpu.quadAdd);
+  for(const q of rockQuads)if(q.active)drawQuad(q.gpuData,gpu.quadAlpha);
   if(veil&&veil.visible)drawQuad(veil.gpuData,gpu.quadAlpha);
   pass.end();gpu.device.queue.submit([encoder.finish()]);
 }
@@ -688,7 +711,7 @@ void main(){
     float ver=pow(vUv.y,1.6);
     float flick=0.8+0.2*sin(uTime*30.0+vUv.y*20.0);
     a=hor*ver*flick*env;col=mix(uCol,vec3(1.0),ver*0.4);
-  }else{
+  }else if(uMode<8.5){
     float ang=atan(p.y,p.x);
     float rel=atan(sin(ang-uP1.x),cos(ang-uP1.x));
     float hs=uP1.y;
@@ -720,6 +743,13 @@ void main(){
     col=mix(col,uCol2,(1.0-smoothstep(inner,inner+0.25,d))*0.35*(1.0-head));
     col=mix(col,uCol,halo*0.5);
     a=(body*(0.75+0.35*(1.0-bh))+head*band*0.6+band*rim*0.6*(1.0-bh)+halo*0.45*tailFade)*inArc*fade;
+  }else{
+    // mode 9：图集实体（不透光石块），法线混合，颜色取图集本身；不随时间淡出、不吃元素色
+    float sh9=floor(uShape+0.5);
+    vec2 auv9=(vec2(mod(sh9,4.0),floor(sh9/4.0))+vec2(vUv.x,1.0-vUv.y))/vec2(4.0,3.0);
+    vec4 t9=texture2D(uAtlas,auv9);
+    a=t9.a*uP1.x;
+    col=t9.rgb;
   }
   if(a<0.004)discard;
   gl_FragColor=vec4(col,a);
@@ -825,13 +855,43 @@ function updateQuad(q){
 
 /* ---------------- 弹道 ---------------- */
 function projectile(o){
-  if(projs.length>=16)projs.shift();
-  projs.push({x0:o.from[0],y0:o.from[1],z0:o.from[2]||14,
+  if(projs.length>=24)projs.shift();
+  const pr={x0:o.from[0],y0:o.from[1],z0:o.from[2]||14,
     x1:o.to[0],y1:o.to[1],z1:o.to[2]||8,target:o.target||null,track:o.track||null,
     birth:FX.time+(o.delay||0),dur:o.dur||.2,arc:o.arc||0,
     px:o.from[0],py:o.from[1],ph:o.from[2]||14,
-    col:o.col||'#ffffff',trail:o.trail||'fire',spin:o.spin||0,onArrive:o.onArrive||null,done:false});
+    col:o.col||'#ffffff',trail:o.trail||'fire',spin:o.spin||0,onArrive:o.onArrive||null,done:false};
+  projs.push(pr);
+  // 投石实体：法线混合的图集石块，与弹丸同生命周期（本体不再画 2D 主画布）
+  if(pr.trail==='rock'&&rockQuads.length){
+    const q=rockQuads.find(r=>!r.active)||rockQuads[0];
+    q.active=true;q.mesh.visible=true;q.pr=pr;pr.rq=q;
+  }
+  return pr;
 }
+/* 投石实体跟随弹丸：位置取逻辑坐标，三帧旋转，尺寸随镜头缩放。 */
+function rockQuadFollow(pr){
+  const q=pr.rq;if(!q)return;
+  const s=w2s(pr.ix,pr.iy),age=FX.time-pr.birth;
+  const fr=Math.abs(Math.floor(age*11))%3;
+  const m=q.mesh,u=m.material.uniforms;
+  m.position.set(s[0],s[1]-(pr.h||12)*cam.z,1);
+  m.scale.set(27*cam.z,27*cam.z,1);
+  m.rotation.z=Math.sin(age*11*2.1)*.16;
+  u.uMode.value=9;u.uT.value=0;u.uTime.value=FX.time;
+  u.uShape.value=9+fr;u.uP1.value.set(1,0,0,0);u.uCol.value.set(1,1,1);
+  if(gpu){
+    const d=q.gpuData;
+    d[0]=9;d[2]=FX.time;d[3]=9+fr;d[4]=0;
+    d[8]=1;d[9]=1;d[10]=1;d[11]=1;
+    d[12]=1;d[13]=1;d[14]=1;d[15]=1;
+    d[16]=1;d[17]=0;d[18]=0;d[19]=0;
+    d[20]=m.position.x;d[21]=m.position.y;
+    d[22]=m.scale.x;d[23]=m.scale.y;
+    d[24]=m.rotation.z;
+  }
+}
+function closeRockQuad(q){if(!q)return;q.active=false;q.mesh.visible=false;q.pr=null;}
 const TRAILS={
   fire:{shape:0,shape2:1,col:'#ff7a45',col2:'#ffd166',size:7,life:.32},
   frost:{shape:4,shape2:2,col:'#6fd8ff',col2:'#dffaff',size:6,life:.3},
@@ -844,10 +904,13 @@ const TRAILS={
    参考投掷物/命中 VFX 的分层：飞行掉砂、命中短闪+裂纹环、石片/碎石/砂粒分段散开。 */
 function rockBit(x,y,z,vx,vy,vz,life,scale,kind,light,seed){
   const grav=kind==='grit'?220:kind==='chip'?190:150;
-  rockBits.push({x,y,z,vx,vy,vz,grav,birth:FX.time,life,scale,kind,light,seed});
+  spawn(pools.alpha,{x,y,z0:z,vx,vy,vz,grav,drag:kind==='grit'?1.1:.55,
+    life,size:Math.max(2,scale*14),shape:kind==='grit'?0:1,
+    col:rgb(light?'#9aa8ad':'#5b6970'),seed,spin:(seed-.5)*6});
 }
 function rockFade(x,y,z){
-  rockBursts.push({x,y,z,birth:FX.time,life:.26,seed:R()});
+  flashW(x,y,{col:'#c9d2d4',size:16,life:.16});
+  ringW(x,y,{r0:.25,r1:1.5,col:'#9aa8ad',life:.26,width:.07});
   for(let i=0;i<22;i++){
     const a=R()*TAU2,spd=1.6+R()*2;
     rockBit(x+Math.cos(a)*.1,y+Math.sin(a)*.1,z+(R()-.5)*2,
@@ -916,6 +979,7 @@ function updateProj(pr){
     if(pr.trail!=='fire')spawn(pools.add,{x,y,z0:h,life:.1,size:pr.trail==='meteor'?22:14,shape:7,col});
   }
   pr.px=x;pr.py=y;pr.ph=h;
+  if(pr.rq)rockQuadFollow(pr);
 }
 
 /* 火球拖尾：沿两帧之间的路径按固定间距采样（掉帧也不会断成点），
@@ -1077,14 +1141,21 @@ FX.spell=function(def,tx,ty,elem,targets,shot){
   const id=def.fx||def.id;
   if(id==='sp_fireball'){
     burstW(P.x,P.y,{n:sc(8),col:FIRE,col2:FIRE2,spd:1,life:.25,size:4,shape:0,z0:16,vz:10,grav:0});
-    projectile({from:[P.x,P.y,18],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:shot?8:26,trail:'fire',col:FIRE,
+    // 实体飞行也保留完整抛物线：弧高由 sin(πk) 走完，不因 track 压低，否则看着像直线冲过去
+    projectile({from:[P.x,P.y,18],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:26,trail:'fire',col:FIRE,
       onArrive:(x,y)=>{explodeFire(x,y,false);impact(1.5,0);if(typeof sfx==='function')sfx('boom');}});
   }else if(id==='sp_frostbolt'){
-    projectile({from:[P.x,P.y,18],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:shot?5:12,trail:'frost',col:FROST,
+    projectile({from:[P.x,P.y,18],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:12,trail:'frost',col:FROST,
       onArrive:(x,y)=>{explodeFrost(x,y,false);impact(1,0);}});
   }else if(id==='sp_arcbolt'){
-    beamW(P.x,P.y,tx,ty,{col:ARC,life:.12,width:6});
-    after(spellFxTime(def),()=>{explodeArcane(tx,ty);glyphW(tx,ty,{shape:3,col:ARC,size:36,life:.5});impact(1,0);});
+    // 分叉奥术已走实体弹道（有 shot）：画沿曲线飞行的光弹，汇聚到目标；否则保留瞬时光束
+    if(shot){
+      projectile({from:[P.x,P.y,20],to:[tx,ty,10],track:shot,dur:shot.dur||spellFxTime(def),arc:18,trail:'arcane',col:ARC,
+        onArrive:(x,y)=>{explodeArcane(x,y);glyphW(x,y,{shape:3,col:ARC,size:36,life:.5});impact(1,0);}});
+    }else{
+      beamW(P.x,P.y,tx,ty,{col:ARC,life:.12,width:6});
+      after(spellFxTime(def),()=>{explodeArcane(tx,ty);glyphW(tx,ty,{shape:3,col:ARC,size:36,life:.5});impact(1,0);});
+    }
   }else if(id==='sp_emberburst'){
     decalW(tx,ty,{col:FIRE,r:def.radius||2.2,life:2.2,a:.55});
     after(spellFxTime(def),()=>{
@@ -1156,7 +1227,7 @@ FX.spell=function(def,tx,ty,elem,targets,shot){
         Math.cos(ba)*(.5+R()*.7),Math.sin(ba)*(.5+R()*.7),10+R()*12,
         .16+R()*.12,.18+R()*.12,'chip',i%2===0,R());
     }
-    projectile({from:[P.x,P.y,14],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:shot?4:12,trail:'rock',col:ROCK,spin:7,
+    projectile({from:[P.x,P.y,14],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:12,trail:'rock',col:ROCK,spin:7,
       onArrive:(x,y)=>{
         flashW(x,y,{col:'#e8dcc4',size:28,life:.16});
         ringW(x,y,{r0:.2,r1:(def.radius||1)+.4,col:ROCK,life:.3,width:.1});
@@ -1396,7 +1467,10 @@ FX.frame=function(){
   }
   for(let i=rockBits.length-1;i>=0;i--)if(FX.time-rockBits[i].birth>rockBits[i].life)rockBits.splice(i,1);
   for(let i=rockBursts.length-1;i>=0;i--)if(FX.time-rockBursts[i].birth>rockBursts[i].life)rockBursts.splice(i,1);
-  for(let i=projs.length-1;i>=0;i--){updateProj(projs[i]);if(projs[i].done)projs.splice(i,1);}
+  for(let i=projs.length-1;i>=0;i--){
+    updateProj(projs[i]);
+    if(projs[i].done){if(projs[i].rq)closeRockQuad(projs[i].rq);projs.splice(i,1);}
+  }
   for(const q of quads)if(q.active)updateQuad(q);
   if(veil&&veil.visible){
     const t=(FX.time-veil.birth)/veil.dur;
@@ -1451,6 +1525,8 @@ FX.init=async function(){
   }
   pools={add:makePool(ADD,THREE.AdditiveBlending,20),alpha:makePool(ALPHA,THREE.NormalBlending,8)};
   for(let i=0;i<QUADS;i++)quads.push({mesh:makeQuadMesh(12),active:false,birth:0,gpuData:new Float32Array(QUAD_STRIDE/4)});
+  // 投石实体池：法线混合，画不透光石块（WebGPU 用 quadAlpha，WebGL 用 NormalBlending）
+  for(let i=0;i<ROCK_QUADS;i++)rockQuads.push({mesh:makeQuadMesh(11,THREE.NormalBlending),active:false,birth:0,pr:null,gpuData:new Float32Array(QUAD_STRIDE/4)});
   veil={mesh:makeQuadMesh(4,THREE.NormalBlending),visible:false,birth:0,dur:1,gpuData:new Float32Array(QUAD_STRIDE/4)};
   veil.mesh.visible=false;
   Object.defineProperty(veil,'visible',{get(){return veil.mesh.visible;},set(v){veil.mesh.visible=v;}});
@@ -1461,7 +1537,7 @@ FX.init=async function(){
   FX.on=true;
   FX._dbg={get backend(){return FX.backend;},get pools(){return pools;},get renderer(){return renderer;},
     get gpu(){return gpu;},get scene(){return scene;},get projs(){return projs;},
-    get quads(){return quads;},get events(){return events;},get rockBits(){return rockBits;},get rockBursts(){return rockBursts;},
+    get quads(){return quads;},get rockQuads(){return rockQuads;},get events(){return events;},get rockBits(){return rockBits;},get rockBursts(){return rockBursts;},
     slash:(x,y,a,r,h)=>slashW(x,y,a,r,{life:.6,half:h===undefined?1.1:h})};
 };
 /* 特效入口统一保护：后端未就绪时静默跳过，不再回退 Canvas 2D。 */

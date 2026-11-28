@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>雾海方舟 · 测试场</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* 测试场：隐藏开局、暂停、黎明、结算、存档、图鉴等流程层 */
+  #menu,#dawnOv,#pauseOv,#endOv,#slotOv,#confirmOv,#codexOv{display:none!important;}
+  #btnPause,#btnNight{display:none!important;}
+  /* 顶部武器切换：紧贴流程 HUD 右侧（位置由 JS 量 topLeft 后锚定） */
+  #tbWeap{position:fixed;top:14px;left:320px;height:42px;z-index:40;display:flex;align-items:center;gap:6px;
+    padding:0 10px;border-radius:12px;background:rgba(8,20,24,.82);border:1px solid rgba(143,227,208,.22);
+    box-shadow:0 6px 20px rgba(0,0,0,.35);backdrop-filter:blur(6px);font-size:12px;color:#bfe8f5;white-space:nowrap;}
+  #tbWeap>b{color:#8fe3d0;letter-spacing:.08em;font-weight:700;margin-right:2px;}
+  .tbWeap{border:1px solid rgba(143,227,208,.25);background:rgba(143,227,208,.06);color:#cfe9ee;
+    border-radius:8px;padding:4px 9px;font-size:12px;cursor:pointer;transition:.15s;font-family:inherit;}
+  .tbWeap:hover{background:rgba(143,227,208,.16);border-color:rgba(143,227,208,.5);}
+  .tbWeap.on{background:rgba(255,180,84,.18);border-color:#ffb454;color:#ffd9a0;}
+  #tbWeap #tbReset{margin-left:4px;border-color:rgba(255,122,144,.35);color:#ffb3c0;background:rgba(255,122,144,.08);}
+  /* 顶部速度控制：紧贴右上按钮组左侧（位置由 JS 量 topRight 后锚定） */
+  #tbSpeed{position:fixed;top:14px;right:70px;height:42px;z-index:40;display:flex;align-items:center;gap:8px;
+    padding:0 12px;border-radius:12px;background:rgba(8,20,24,.82);border:1px solid rgba(255,180,84,.26);
+    box-shadow:0 6px 20px rgba(0,0,0,.35);backdrop-filter:blur(6px);font-size:12px;color:#ffd9a0;white-space:nowrap;}
+  #tbSpeed .lbl{color:#8fe3d0;letter-spacing:.06em;font-weight:700;}
+  #tbSpeedRange{-webkit-appearance:none;appearance:none;width:112px;height:4px;border-radius:3px;
+    background:linear-gradient(90deg,rgba(255,180,84,.9),rgba(255,180,84,.22));outline:none;cursor:pointer;}
+  #tbSpeedRange::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+    background:#ffb454;border:2px solid #241005;box-shadow:0 0 10px rgba(255,180,84,.55);cursor:pointer;}
+  #tbSpeedRange::-moz-range-thumb{width:13px;height:13px;border:2px solid #241005;border-radius:50%;background:#ffb454;}
+  #tbSpeedNum{width:54px;padding:3px 6px;border-radius:7px;border:1px solid rgba(255,180,84,.3);
+    background:rgba(0,0,0,.35);color:#ffe9c6;font-size:12px;font-weight:700;text-align:center;font-family:inherit;}
+  #tbSpeedNum:focus{outline:none;border-color:#ffb454;}
+  #tbStep{border:1px solid rgba(143,227,208,.3);background:rgba(143,227,208,.08);color:#cfe9ee;
+    border-radius:8px;padding:4px 9px;font-size:12px;cursor:pointer;font-family:inherit;transition:.15s;}
+  #tbStep:hover{background:rgba(143,227,208,.18);border-color:rgba(143,227,208,.55);}
+  #tbStep:active{transform:translateY(1px);}
+  /* 场景对象：默认空场，点类型后在画面点击放置 */
+  #tbScene{position:fixed;left:14px;top:206px;width:224px;max-height:calc(100vh - 545px);z-index:40;
+    display:flex;flex-direction:column;border-radius:12px;background:rgba(8,20,24,.88);
+    border:1px solid rgba(143,227,208,.2);box-shadow:0 8px 22px rgba(0,0,0,.4);
+    color:#cfe9ee;font-size:12px;overflow:hidden;}
+  .tbSceneHead{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid rgba(143,227,208,.14);
+    color:#8fe3d0;font-weight:700;letter-spacing:.06em;}
+  .tbSceneHead em{font-style:normal;color:#7d9aa1;font-weight:400;}
+  .tbSceneHead button{margin-left:auto;border:1px solid rgba(255,122,144,.3);background:rgba(255,122,144,.08);
+    color:#ffb3c0;border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:inherit;}
+  .tbSpawn{padding:6px 9px 8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;
+    border-bottom:1px solid rgba(143,227,208,.1);}
+  .tbSpawnL{width:100%;color:#7d9aa1;font-size:10px;letter-spacing:.1em;margin-top:2px;}
+  .tbType{border:1px solid rgba(143,227,208,.28);background:rgba(143,227,208,.07);color:#d6edf2;
+    border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;font-family:inherit;transition:.12s;}
+  .tbType:hover{background:rgba(143,227,208,.18);border-color:rgba(143,227,208,.55);}
+  .tbType.on{background:rgba(255,180,84,.2);border-color:#ffb454;color:#ffd9a0;}
+  #tbSceneList{flex:1;overflow:auto;padding:3px 8px 8px;}
+  .tbObj{display:flex;align-items:center;gap:6px;padding:3px 2px;border-bottom:1px solid rgba(143,227,208,.07);}
+  .tbObj span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tbObj em{font-style:normal;color:#7d9aa1;font-size:10px;flex:none;}
+  .tbObj button{border:1px solid rgba(255,122,144,.3);background:rgba(255,122,144,.08);color:#ffb3c0;
+    border-radius:5px;width:18px;height:18px;line-height:1;padding:0;cursor:pointer;font-family:inherit;}
+  .tbEmpty{color:#7d9aa1;font-size:10.5px;padding:8px 3px;line-height:1.5;}
+  /* 卡池面板：整体上移 */
+  #tbPool{position:fixed;right:14px;top:66px;width:252px;max-height:calc(100vh - 96px);z-index:40;
+    display:flex;flex-direction:column;border-radius:14px;background:rgba(8,20,24,.9);
+    border:1px solid rgba(143,227,208,.22);box-shadow:0 10px 28px rgba(0,0,0,.42);backdrop-filter:blur(8px);
+    color:#cfe9ee;font-size:12px;overflow:hidden;}
+  #tbPool .tbHead{display:flex;align-items:center;justify-content:space-between;padding:9px 12px 7px;
+    border-bottom:1px solid rgba(143,227,208,.14);color:#8fe3d0;font-weight:700;letter-spacing:.06em;}
+  #tbPool .tbHead em{font-style:normal;color:#7d9aa1;font-weight:400;}
+  #tbSearch{margin:8px 10px;padding:6px 9px;border-radius:8px;border:1px solid rgba(143,227,208,.22);
+    background:rgba(0,0,0,.3);color:#dffaff;font-size:12px;outline:none;}
+  #tbSearch:focus{border-color:rgba(143,227,208,.55);}
+  #tbPoolList{flex:1;overflow:auto;padding:2px 8px 10px;}
+  #tbPoolList::-webkit-scrollbar{width:6px;}
+  #tbPoolList::-webkit-scrollbar-thumb{background:rgba(143,227,208,.28);border-radius:4px;}
+  .tbGroup{margin:8px 2px 4px;color:#7d9aa1;font-size:11px;letter-spacing:.1em;}
+  .tbCard{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:8px;cursor:pointer;
+    border:1px solid transparent;transition:.12s;color:#d6edf2;}
+  .tbCard:hover{background:rgba(143,227,208,.1);border-color:rgba(143,227,208,.28);}
+  .tbCard i{width:8px;height:8px;border-radius:50%;flex:none;background:#8fe3d0;}
+  .tbCard span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tbCard em{font-style:normal;color:#7d9aa1;font-size:11px;flex:none;}
+  #tbHint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:40;
+    padding:6px 12px;border-radius:10px;background:rgba(8,20,24,.78);border:1px solid rgba(143,227,208,.18);
+    color:#9fc4cc;font-size:12px;pointer-events:none;white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis;}
+  /* 速度由顶部的精确滑杆接管，1×/2× 按钮退场 */
+  #btnSpeed{display:none!important;}
+  /* 回收区：常显，随时弃牌；挪到左下（玩家面板正上方），避开手牌与卡池 */
+  #hud #recycleZone{left:14px;right:auto;bottom:190px;width:224px;height:124px;
+    opacity:1!important;visibility:visible!important;pointer-events:auto!important;
+    transform:none;animation:none!important;}
+  #hud #recycleZone.dragOver{transform:scale(1.04);}
+  #hud #recycleZone .rzHead{font-size:13px;letter-spacing:2px;}
+  @media (max-width:1180px){
+    #tbWeap{padding:0 8px;gap:4px;font-size:11px;}
+    #tbWeap>b{display:none;}
+    .tbWeap{padding:3px 7px;font-size:11px;}
+    #tbSpeed{padding:0 9px;gap:6px;}
+    #tbSpeedRange{width:74px;}
+    #tbHint{display:none;}
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<canvas id="fxcv"></canvas>
+<div id="grain"></div><div id="hurtFx"></div><div id="coreFx"></div>
+
+<div id="hud" class="hidden">
+  <div id="topLeft" class="panel">
+    <span id="logoMini">雾海方舟</span>
+    <span id="phaseChip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg><em id="phaseName" style="font-style:normal">白昼</em></span>
+    <span id="dayLabel">第 1 日</span>
+    <span id="nightLabel">夜 0/–</span>
+    <span id="phaseBarWrap"><span id="phaseBar"></span></span>
+  </div>
+  <div id="weaponHud" class="panel">
+    <span id="weaponHudIcon"></span>
+    <div class="whBody">
+      <b id="weaponHudName">剑</b>
+      <span class="whSub">等级 <span id="weaponHudLv">Lv.1</span> · <span id="weaponHudRoute">近战武器</span></span>
+      <span id="weaponHudXpWrap"><span id="weaponHudXp"></span></span>
+    </div>
+    <span id="weaponHudChev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+    <div id="weaponSlots"><div id="weaponSlotsRow"></div></div>
+    <div id="castBar" aria-hidden="true"><i id="castFill"></i></div>
+  </div>
+  <div id="topRight">
+    <button class="iconBtn" id="btnNight" aria-label="提前入夜" title="提前入夜 (N)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14A8.5 8.5 0 019.5 3.5 8.5 8.5 0 1020 14z"/></svg></button>
+    <button class="iconBtn" id="btnSpeed" aria-label="速度">1×</button>
+    <button class="iconBtn" id="btnMute" aria-label="音效"></button>
+    <button class="iconBtn" id="btnPause" aria-label="暂停"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button>
+  </div>
+  <div id="banner"><h2></h2><p></p></div>
+  <div id="toasts"></div>
+
+  <div id="playerPanel" class="panel">
+    <div id="ppTop">
+      <div id="lvlBadge"><b id="lvlNum">1</b><i>等级</i></div>
+      <div style="min-width:0">
+        <div id="ppName">守灯人</div>
+        <div id="ppStacks"></div>
+      </div>
+    </div>
+    <div class="bar" id="hpBar"><span></span><label><em style="font-style:normal">生命</em><em style="font-style:normal" id="hpTxt">100/100</em></label></div>
+    <div class="bar" id="enBar"><span></span><label><em style="font-style:normal" id="enLabel">雾能</em><em style="font-style:normal" id="enTxt">100</em></label></div>
+    <div class="bar" id="shieldBar" style="display:none"><span></span><label><em style="font-style:normal">护盾</em><em style="font-style:normal" id="shieldTxt">0</em></label></div>
+    <div class="bar" id="xpBar"><span></span></div>
+    <div id="cdRow">
+      <div class="cdPip" id="dashPip"><span class="fill"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 3L4 14h6l-1 7 9-11h-6l1-7z"/></svg><em>冲刺 <span class="kb kb-hint">空格</span></em></div>
+      <div class="cdPip" id="novaPip"><span class="fill"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" opacity=".5"/></svg><em>雾爆 <span class="kb kb-hint">Q</span></em></div>
+    </div>
+  </div>
+
+  <div id="handArea">
+    <div id="handMeta">
+      <div id="resRow"></div>
+      <span class="pileChip draw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="12" height="16" rx="2"/><path d="M8 7h12v14H8"/></svg>抽牌堆 <b id="drawN">0</b></span>
+      <span class="pileChip disc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>弃牌 <b id="discN">0</b></span>
+      <span class="pileChip limit">手牌 <b id="handN">0/5</b><em id="handWarn"></em></span>
+      <span class="pileChip rec">回收率 <b id="recN">0%</b></span>
+      <button id="repairBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.7 2.7-3-3 2.7-2.7z"/></svg>修复 <span class="kb kb-hint">F</span></button>
+    </div>
+    <div id="handRow"></div>
+  </div>
+
+  <div id="rightBottom">
+    <div id="coreWrap" class="panel">
+      <div class="cwTop"><span>⬢ 方舟核心</span><span id="coreTxt">600/600</span></div>
+      <div class="bar" id="coreBar"><span></span></div>
+    </div>
+    <div id="mmWrap" class="panel"><canvas id="mm" width="132" height="132"></canvas></div>
+  </div>
+  <div id="recycleZone" class="recycleZone" role="button" tabindex="0" aria-label="回收超额手牌">
+    <div class="rzHead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5 3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-3"/></svg><b>回收卡牌</b></div>
+    <div class="rzBack">返还 <b id="recycleBack">0%</b></div>
+    <div class="rzHint">拖入 · 或选中后点击</div>
+  </div>
+</div>
+
+<div id="dragCard"></div>
+
+<div id="touchUI">
+  <div id="stick"><div id="knob"></div></div>
+  <button class="tBtn" id="btnDash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 3L4 14h6l-1 7 9-11h-6l1-7z"/></svg>冲刺</button>
+  <button class="tBtn" id="btnNova"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" opacity=".5"/></svg>雾爆</button>
+</div>
+
+<!-- 流程遮罩保留 DOM 供引擎绑定，测试场样式里已统一隐藏 -->
+<div class="overlay show" id="menu"><div class="scrim"></div><div id="menuPanel" data-view="title">
+  <section class="menuView" data-view="title"><div class="menuHead"><h1 id="gameTitle">雾海方舟</h1><div id="gameSub">孤灯不灭</div></div>
+  <div id="saveWarn" class="saveWarn" hidden><b>存档异常</b><span id="saveWarnText"></span><button id="saveWarnAck" aria-label="知道了">知道了</button></div>
+  <div class="menuFoot"><button id="startBtn">开始</button><button id="btnContinue">继续</button><button class="mBtn book" id="btnCodexMenu">图鉴</button></div></section>
+  <section class="menuView" data-view="prep"><div class="prepHead"><h2>出航准备</h2></div><div class="menuScroll">
+    <button id="prepWeaponBtn" class="prepWeaponBtn" aria-expanded="false"><span id="prepWeaponIcon"></span><span class="prepWeaponText"><small>当前武器</small><b id="prepWeaponName">剑</b></span><em>更换</em></button>
+    <div class="secT">雾潮强度</div><div id="diffRow"></div><p class="prepNote" id="prepMageNote"></p>
+    <div class="secT">文明传承</div><div id="emberRow"><span id="emberCount"><span id="emberNum">0</span> 火种</span><span id="bestChip"></span></div><div id="blessList"></div>
+    <div class="secT">操作</div><div id="ctrlGrid"></div></div>
+    <div class="weaponDrop" id="weaponDrop" role="dialog" aria-label="选择武器"><div class="weaponList" id="weaponGrid"></div></div>
+    <div class="prepFoot"><button id="launchBtn">启航</button><button class="mBtn" id="btnPrepBack">返回</button></div></section>
+  <section class="menuView" data-view="load"><div class="prepHead"><h2>存档</h2></div><div class="menuScroll"><div id="menuSlotList"></div></div>
+  <div class="prepFoot"><button class="mBtn" id="btnLoadBack">返回</button></div></section>
+</div></div>
+
+<div class="overlay" id="dawnOv" role="dialog" aria-modal="true"><div class="scrim"></div><div class="dawnBox">
+  <div class="dawnStep" id="dawnStep">1 / 2</div><div class="dawnTitle" id="dawnTitle">黎明</div><div class="dawnSub" id="dawnSub"></div>
+  <div class="pickRow" id="dawnRow"></div><button class="skipBtn" id="dawnSkip">跳过</button></div></div>
+
+<div class="overlay" id="pauseOv" role="dialog" aria-modal="true"><div class="scrim"></div><div class="modalBox pausePanel">
+  <div class="pausePages" id="pausePages">
+    <section class="pausePage" data-pg="main"><h2>暂停</h2><button class="mBtn primary" id="btnResume">继续</button>
+      <button class="mBtn" id="btnSave">存档</button><button class="mBtn" id="btnCodexPause">图鉴</button>
+      <button class="mBtn" id="btnRestart">重新开始</button><button class="mBtn" id="btnToTitle">返回标题</button></section>
+    <section class="pausePage" data-pg="slots"><h2>存档位</h2><div class="msub" id="pauseSlotSub"></div><div id="pauseSlotList"></div>
+      <button class="mBtn ghost" id="btnPauseSlotBack">返回</button></section>
+    <section class="pausePage" data-pg="confirm"><div class="confirmPage"><h2 id="pauseCfmTitle"></h2><div class="msub" id="pauseCfmSub"></div>
+      <button class="mBtn primary" id="pauseCfmYes">确认</button><button class="mBtn" id="pauseCfmNo">取消</button></div></section>
+  </div></div></div>
+
+<div class="overlay" id="endOv" role="dialog" aria-modal="true"><div class="scrim"></div><div class="modalBox">
+  <h2 id="endTitle"></h2><div class="msub" id="endSub"></div><div id="statsGrid"></div>
+  <div id="emberGainRow"><span>火种</span><span id="emberGain">+0</span><span id="emberTotal"></span></div>
+  <button class="mBtn primary" id="btnAgain">再次远航</button><button class="mBtn book" id="btnEndless">继续守护</button>
+  <button class="mBtn" id="btnTitle2">返回标题</button></div></div>
+
+<div class="overlay" id="slotOv" role="dialog" aria-modal="true" aria-label="存档位"><div class="scrim"></div><div class="modalBox slotBox">
+  <h2 id="slotTitle">存档位</h2><div id="slotList"></div><button class="mBtn" id="slotDelete">删除存档</button>
+  <button class="mBtn" id="slotBack">返回</button></div></div>
+
+<div class="overlay" id="confirmOv" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle"><div class="scrim"></div><div class="modalBox confirmBox">
+  <h2 id="confirmTitle"></h2><div class="msub" id="confirmSub"></div><button class="mBtn primary" id="confirmYes">确认</button>
+  <button class="mBtn" id="confirmNo">取消</button></div></div>
+
+<div class="overlay" id="codexOv" role="dialog" aria-modal="true" aria-label="雾海图鉴"><div class="scrim"></div><div id="codexPanel">
+  <div class="cxHead"><h2>雾海图鉴</h2><div class="cxHeadMeta"><span id="cxCount">— 条</span></div>
+    <button id="cxClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="cxTools"><label class="cxSearchWrap"><input id="cxSearch" type="search" placeholder="搜索" autocomplete="off"></label><div id="cxCats"></div></div>
+  <div class="cxBody"><div id="cxList"></div><div id="cxDetail">
+    <div class="cxDTop"><div class="cxVis"><canvas id="cxPreview"></canvas><div id="cxIcon"></div></div>
+      <div class="cxDHead"><div id="cxName">—</div><div id="cxTags"></div><p id="cxDesc"></p></div></div>
+    <div id="cxStats"></div><div class="cxRelT">相关条目</div><div id="cxRel"></div>
+    <div id="cxTagT" class="cxRelT">标签</div><div id="cxEntryTags"></div></div></div>
+  <div class="cxFoot"><span id="cxFootL">雾海方舟 · 记录册</span><span class="kb-hint">Esc 关闭</span></div>
+</div></div>
+
+<!-- 测试场专用 UI -->
+<div id="tbWeap"><b>测试场</b><span id="tbWeapons"></span><button class="tbWeap" id="tbReset">重置</button></div>
+<div id="tbSpeed" title="游戏速度 0~1（0=冻结，1=正常）；可拖拽、可填写，也可单帧步进">
+  <span class="lbl">速度</span>
+  <input id="tbSpeedRange" type="range" min="0" max="1" step="0.1" value="1" aria-label="游戏速度">
+  <input id="tbSpeedNum" type="number" min="0" max="1" step="0.1" value="1" aria-label="游戏速度数值">
+  <button id="tbStep" title="前进一帧（1/60 秒）">下一帧</button>
+</div>
+<div id="tbScene">
+  <div class="tbSceneHead">场景对象 <em id="tbSceneCount"></em><button id="tbSceneClear">清空</button></div>
+  <div class="tbSpawn">
+    <span class="tbSpawnL">资源 · 点类型后在画面点击放置</span><span id="tbResTypes"></span>
+    <span class="tbSpawnL">怪物</span><span id="tbFoeTypes"></span>
+  </div>
+  <div id="tbSceneList"></div>
+</div>
+<div id="tbPool">
+  <div class="tbHead">卡池 <em id="tbPoolCount"></em></div>
+  <input id="tbSearch" type="search" placeholder="搜索卡牌…" autocomplete="off">
+  <div id="tbPoolList"></div>
+</div>
+<div id="tbHint">点击卡牌加入手牌 · 顶部切换武器 · 右上拖速度条 / 下一帧 · 左下回收区随时弃牌</div>
+
+<script src="js/00-core.js"></script>
+<script src="js/01-audio.js"></script>
+<script src="js/02-world.js"></script>
+<script src="js/03-data.js"></script>
+<script src="js/04-state.js"></script>
+<script src="js/05-input.js"></script>
+<script src="js/06-hand.js"></script>
+<script src="js/07-combat.js"></script>
+<script src="js/07b-spells.js"></script>
+<script src="js/08-progress.js"></script>
+<script src="js/09-render.js"></script>
+<script src="js/vendor/three.min.js"></script>
+<script src="js/09b-fx.js"></script>
+<script src="js/10-ui.js"></script>
+<script src="js/11-main.js"></script>
+<script src="js/testbed.js"></script>
+</body>
+</html>

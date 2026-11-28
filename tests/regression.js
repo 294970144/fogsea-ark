@@ -1843,6 +1843,87 @@ testCase('R35_cast', () => {
     assert.ok(out.desc.includes('左侧相邻'), '阵型文案要写明只修饰左侧相邻法术');
     assert.ok(out.desc.includes('总伤害'), '阵型文案要写明总伤害倍率');
   }
+  { // R36_curve_ballistics
+    // 通用曲线弹道层：出膛方向由传入偏角决定、贝塞尔弧线向目标汇聚、t=1 命中、途中碰撞生效。
+    // 直接调弹道层，不装任何刻印卡；偏角只是参数，不对应具体卡牌。
+    const env = makeEnv();
+    const out = j(env)(`(()=>{
+      const run=(angs,interceptor)=>{
+        initRun(); S.mode='play';
+        foes.length=0; nodes.length=0; spellShots.length=0;
+        const mk=(dx,dy)=>({type:'crawler',x:P.x+dx,y:P.y+dy,hp:99999,max:99999,spd:0,dmg:0,r:.32,
+          dead:false,xp:0,coreDmg:0,atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,
+          elite:false,boss:false,fireCd:99,spawnCd:99,stompCd:99,px:P.x+dx,py:P.y+dy,
+          stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
+        const tgt=mk(3,0); foes.push(tgt);
+        if(interceptor)foes.push(mk(interceptor[0],interceptor[1]));
+        rebuildFoeGrid();
+        const def={id:'ballistic_test',shape:'single',shotSpeed:16};
+        const hits=[];
+        for(const d of angs){
+          const a=d*Math.PI/180,bow=3*0.62;
+          spawnSpellShot(def,P.x,P.y,tgt.x,tgt.y,{
+            path:{cx:P.x+Math.cos(a)*bow,cy:P.y+Math.sin(a)*bow,target:tgt},
+            resolve:(dd,x,y,f)=>{hits.push({x:+(x-P.x).toFixed(2),y:+(y-P.y).toFixed(2),foe:!!f});return [];}
+          });
+        }
+        const shots=spellShots.slice();
+        const outAngs=shots.map(s=>+(Math.atan2(s.vy,s.vx)*180/Math.PI).toFixed(1));
+        const converged=shots.length>0&&shots.every(s=>s.path&&s.path.target===tgt
+          &&Math.abs(s.path.x1-tgt.x)<.01&&Math.abs(s.path.y1-tgt.y)<.01);
+        let midSpread=0;
+        for(let i=0;i<80&&spellShots.length;i++){
+          const ys=shots.filter(s=>s.path&&s.path.t>=.4&&s.path.t<=.6).map(s=>+(s.y-P.y).toFixed(2));
+          if(ys.length>1)midSpread=Math.max(midSpread,Math.max(...ys)-Math.min(...ys));
+          updateSpellShots(1/60);
+        }
+        return {outAngs,converged,midSpread:+midSpread.toFixed(2),hits};
+      };
+      return JSON.stringify({fan:run([-45,45],null),intercept:run([45],[1.4,0.65])});
+    })()`);
+    // 出膛方向=传入偏角，终点=目标，中段张开
+    assert.deepEqual(out.fan.outAngs, [-45,45]);
+    assert.equal(out.fan.converged, true);
+    assert.ok(out.fan.midSpread>1, '中段应张开到两路');
+    assert.equal(out.fan.hits.length, 2, '两发都在终点结算');
+    assert.ok(out.fan.hits.every(h=>h.foe), '终点命中目标');
+    // 途中碰到拦截者：在弧线中段结算，不再飞到终点
+    assert.equal(out.intercept.hits.length, 1);
+    assert.equal(out.intercept.hits[0].foe, true);
+    assert.ok(out.intercept.hits[0].y>0.3, '途中拦截应在弧线中段结算');
+  }
+  { // R36_emberburst_as_sigil
+    // 余烬爆发装槽时只当功能刻印：给左侧法术附范围火伤+灼烧，自己不射击（主动施放走手牌那条路）。
+    const env = makeEnv();
+    const out = j(env)(`(()=>{
+      const run=(sig)=>{
+        save.weapon='flame';initRun();S.mode='play';spellFxTime=__realSpellFxTime;weaponSpreadOffset=()=>0;
+        P.crit=0;P.atkSpd=1;P.cls='mage';P.maxEn=999;P.en=999;P.dmg=10;
+        const w=weaponDef(P.weapon),P0=P;
+        P.sigils=Array.from({length:w.slots},()=>null);
+        P.sigils[0]=mkCard('sig_flame');P.sigils[1]=mkCard(sig);
+        const plan=castPlan(0),slots=weaponCastSlots().map(i=>CDEFS[P.sigils[i].id].id);
+        foes.length=0;nodes.length=0;spellShots.length=0;
+        const mk=(dx,dy)=>({type:'crawler',x:P0.x+dx,y:P0.y+dy,hp:99999,max:99999,spd:0,dmg:0,r:.32,
+          dead:false,xp:0,coreDmg:0,atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,
+          elite:false,boss:false,fireCd:99,spawnCd:99,stompCd:99,px:P0.x+dx,py:P0.y+dy,
+          stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
+        foes.push(mk(3,0),mk(3,1.2));rebuildFoeGrid();
+        P.atkCd=0;autoAttack();
+        for(let i=0;i<80&&spellShots.length;i++)updateSpellShots(1/60);
+        return {ember:plan.ember,slots,dmg:foes.map(f=>+(99999-f.hp).toFixed(2)),burn:foes.map(f=>f.burnStacks||0)};
+      };
+      return JSON.stringify({ember:run('sp_emberburst'),plain:run('keen')});
+    })()`);
+    // 挂余烬爆发：castPlan 带 ember 标记，但它装槽后不进射击序列（只修饰左侧法术）
+    assert.equal(out.ember.ember, true);
+    assert.ok(!out.ember.slots.includes('sp_emberburst'), '余烬爆发装槽后不自己射击');
+    assert.ok(out.plain.ember===false);
+    // 范围火伤波及旁边那只：两只都吃到额外伤害与灼烧，明显高于对照
+    assert.ok(out.ember.dmg[0] > out.plain.dmg[0] * 1.5, '被瞄准目标应吃到余烬附加伤害');
+    assert.ok(out.ember.dmg[1] > out.plain.dmg[1] * 1.5, '范围内另一只也应吃到余烬附加伤害');
+    assert.ok(out.ember.burn[0] > out.plain.burn[0], '灼烧层数应叠加');
+  }
   { // R36_sigils_apply_to_resource_nodes
     const env = makeEnv();
     const out = j(env)(`(()=>{
