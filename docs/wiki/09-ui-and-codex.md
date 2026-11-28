@@ -132,6 +132,18 @@ try {
 
 武器选择器是下拉式：`#weaponDrop` 位置由 `positionWeaponDrop()` 按按钮矩形动态计算；键盘焦点被 `trapWeaponFocus` 限制在弹层内（Tab 循环）。
 
+### 排版皮肤（2026-11-28）
+
+主菜单、暂停、二级确认框统一成左侧编辑排版：无面板裸排、编号 + 中文的行列表、衬线标题、网格与扫描线背景。
+
+- 配色变量以 `#menu,#pauseOv,#codexOv,#confirmOv,#slotOv` 为作用域覆盖（`style.css` 末尾「全局菜单皮肤」段），局内 HUD 不受影响；
+- 入口契约不变：`startBtn` / `btnContinue` / `btnCodexMenu` 与原暂停按钮的 ID 全部保留，`11-main.js` 既有事件绑定无需改动；
+- `setMenuView` 末尾调用 `menuSkinOnView(view)`，`pauseGo` 末尾调用 `pauseSkinOnPage(pg)`；两个变量由 `initMenuSkin()` 赋值，测试桩的 `querySelectorAll` 返回空数组时钩子自然空转；
+- 首次进入播 2.3 秒全套入场，之后回到标题只播 0.9 秒快入；
+- 确认框、存档位、暂停内的存档页/确认页都是同一套行式按钮（`.mBtn` 在这些作用域内被改写成整宽细线行），不再使用居中弹窗；
+- 暂停菜单只有「暂停」标题和五条编号项，行内不再挂描述——自动存档之类的信息由二次确认的正文承担；
+- 不要再用 `#startBtn` 这类 ID 选择器写尺寸或间距——ID 优先级会压过 `.menuRow`，在小屏断点尤其容易踩到。
+
 ## 输入：守卫链
 
 `keydown` 处理器是一串**有序守卫**（`05-input:22-90`），顺序不能乱：

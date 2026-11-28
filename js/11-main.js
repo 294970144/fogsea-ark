@@ -2,6 +2,7 @@
 /* ---------------- 流程 ---------------- */
 let weaponPicker=null;
 const OVERLAYS=['menu','codexOv','endOv','pauseOv','dawnOv','slotOv','confirmOv'];
+var menuSkinOnView=null,pauseSkinOnPage=null;
 function showOv(id,on){$(id).classList.toggle('show',on);}
 function closeOverlays(except){
   OVERLAYS.forEach(id=>{if(id!==except)showOv(id,false);});
@@ -28,6 +29,7 @@ function setMenuView(view,focus=true){
   el.classList.toggle('needs-scroll',naturalHeight>maxHeight);
   panel.style.height=Math.min(naturalHeight,maxHeight)+'px';
   if(focus)$(view==='prep'?'launchBtn':view==='load'?'btnLoadBack':'startBtn').focus({preventScroll:true});
+  if(menuSkinOnView)menuSkinOnView(view);
 }
 function openPrep(){
   const needsFreshRun=S.mode!=='menu'&&S.mode!=='prep';
@@ -91,6 +93,7 @@ function pauseGo(pg){
   pausePage=pg;
   const i=['main','slots','confirm'].indexOf(pg);
   $('pausePages').style.transform=`translateX(-${i*100/3}%)`;
+  if(pauseSkinOnPage)pauseSkinOnPage(pg);
 }
 function pauseConfirm(title,sub,onYes,danger){
   pauseCfm=onYes;pauseBack=pausePage;
@@ -523,4 +526,144 @@ initRun();S.nightAmt=.55;refreshPrep();refreshStacks();setMenuView('title',false
 const resizeMenu=()=>{setMenuView($('menuPanel').dataset.view||'title',false);positionWeaponDrop();};
 addEventListener('resize',resizeMenu);
 document.fonts?.addEventListener('loadingdone',resizeMenu);
+
+/* ---------------- 菜单皮肤：入场编排与指针反馈 ---------------- */
+(function initMenuSkin(){
+  const menuOv=$('menu'),list=$('menuList'),cursor=$('menuCursor'),glow=$('menuGlow');
+  if(!menuOv||!list)return;
+  const reduced=()=>!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const rows=()=>Array.from(list.querySelectorAll('.menuRow'));
+  let active=-1,booted=false,bootTimer=0;
+
+  /* 描述逐字落位 */
+  const split=el=>{
+    if(!el||el.dataset.split)return;
+    const t=el.textContent||'';
+    el.textContent='';
+    Array.from(t).forEach((ch,i)=>{
+      const s=document.createElement('span');
+      s.textContent=ch;s.style.setProperty('--k',i);el.appendChild(s);
+    });
+    el.dataset.split='1';
+  };
+  list.querySelectorAll('.mrDesc').forEach(split);
+
+  function spark(el){
+    const r=el.getBoundingClientRect();
+    for(let k=0;k<5;k++){
+      const s=document.createElement('i');
+      s.className='spark';
+      s.style.left=(r.left+8)+'px';
+      s.style.top=(r.top+r.height*(.25+Math.random()*.5))+'px';
+      s.style.animationDelay=(k*.035)+'s';
+      s.style.setProperty('--dx',(34+Math.random()*80)+'px');
+      s.style.setProperty('--dy',(-10+Math.random()*20)+'px');
+      menuOv.appendChild(s);
+      s.addEventListener('animationend',()=>s.remove());
+    }
+  }
+  function ripple(x,y){
+    const s=document.createElement('i');
+    s.className='ripple';s.style.left=x+'px';s.style.top=y+'px';
+    menuOv.appendChild(s);
+    s.addEventListener('animationend',()=>s.remove());
+  }
+  function setActive(i){
+    const rs=rows();
+    if(i===active||i<0||i>=rs.length)return;
+    active=i;
+    rs.forEach((el,k)=>el.classList.toggle('is-active',k===i));
+    if(cursor){
+      const r=rs[i].getBoundingClientRect(),pr=list.getBoundingClientRect();
+      cursor.style.top=(r.top-pr.top+(r.height-34)/2)+'px';
+      cursor.style.height='34px';
+    }
+    list.classList.add('has-cursor');
+    if(booted&&!reduced())spark(rs[i]);
+  }
+  function clearActive(){
+    active=-1;list.classList.remove('has-cursor');
+    rows().forEach(el=>el.classList.remove('is-active'));
+  }
+  function boot(full){
+    clearTimeout(bootTimer);
+    menuOv.classList.remove('is-settled');
+    menuOv.classList.toggle('is-booting',!!full);
+    menuOv.classList.toggle('is-fast',!full);
+    booted=false;
+    bootTimer=setTimeout(()=>{
+      menuOv.classList.remove('is-booting','is-fast');
+      menuOv.classList.add('is-settled');
+      booted=true;
+      if(active<0){const rs=rows();if(rs.length)setActive(0);}
+    },reduced()?0:(full?2300:900));
+  }
+
+  rows().forEach((el,i)=>{
+    el.addEventListener('mouseenter',()=>setActive(i));
+    el.addEventListener('focus',()=>setActive(i));
+    el.addEventListener('click',e=>{if(!reduced())ripple(e.clientX||0,e.clientY||0);});
+  });
+  list.addEventListener('mouseleave',clearActive);
+  addEventListener('mousemove',e=>{
+    if(!menuOv.classList.contains('show'))return;
+    if(active<0&&rows().length)setActive(0);
+  });
+
+  /* 跟随指针的孤灯光晕 */
+  let gx=innerWidth*.33,gy=innerHeight*.42,tx=gx,ty=gy;
+  addEventListener('mousemove',e=>{tx=e.clientX;ty=e.clientY;});
+  (function follow(){
+    requestAnimationFrame(follow);
+    gx+=(tx-gx)*.06;gy+=(ty-gy)*.06;
+    if(glow){glow.style.left=gx+'px';glow.style.top=gy+'px';}
+  })();
+
+  boot(true);
+
+  menuSkinOnView=view=>{
+    if(!menuOv.classList.contains('show'))return;
+    if(view==='title'){boot(false);return;}
+    clearTimeout(bootTimer);
+    menuOv.classList.remove('is-booting','is-fast');
+    menuOv.classList.add('is-settled');
+    booted=true;clearActive();
+  };
+
+  /* ---- 暂停面板：与主菜单同构 ---- */
+  const pauseOv=$('pauseOv'),pauseList=$('pauseList'),pauseCursor=$('pauseCursor');
+  if(!pauseOv||!pauseList)return;
+  const pRows=()=>Array.from(pauseList.querySelectorAll('.pauseRow'));
+  let pActive=-1;
+  function pSetActive(i){
+    const rs=pRows();
+    if(i===pActive||i<0||i>=rs.length)return;
+    pActive=i;
+    rs.forEach((el,k)=>el.classList.toggle('is-active',k===i));
+    if(pauseCursor){
+      const r=rs[i].getBoundingClientRect(),pr=pauseList.getBoundingClientRect();
+      pauseCursor.style.top=(r.top-pr.top+(r.height-30)/2)+'px';
+      pauseCursor.style.height='30px';
+    }
+    pauseList.classList.add('has-cursor');
+  }
+  pRows().forEach((el,i)=>{
+    el.addEventListener('mouseenter',()=>pSetActive(i));
+    el.addEventListener('focus',()=>pSetActive(i));
+  });
+  pauseList.addEventListener('mouseleave',()=>{
+    pActive=-1;pauseList.classList.remove('has-cursor');
+    pRows().forEach(el=>el.classList.remove('is-active'));
+  });
+  pauseSkinOnPage=pg=>{
+    if(pg!=='main')return;
+    pauseOv.classList.remove('pause-in');
+    void pauseOv.offsetWidth;
+    pauseOv.classList.add('pause-in');
+    pActive=-1;
+    pauseList.classList.remove('has-cursor');
+    pRows().forEach(el=>el.classList.remove('is-active'));
+  };
+})();
+
 requestAnimationFrame(loop);

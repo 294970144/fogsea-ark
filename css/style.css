@@ -6,7 +6,7 @@
   --violet:#a06bff; --danger:#ff4d6d; --leaf:#6fe08a; --warn:#ffd166;
   --text:#eef7f2; --dim:#9db8b4; --dim2:#6f8a87;
   --wood:#e0b070; --stone:#b9c4c9; --crys:#57e6ff;
-  --disp:'Ma Shan Zheng','Noto Serif SC',serif;
+  --disp:'Noto Serif SC','Songti SC',STSong,'SimSun',serif;
   --body:'Noto Sans SC',system-ui,sans-serif;
   --cw:128px; --ch:179.2px;
 }
@@ -330,11 +330,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .scrim{position:absolute;inset:0;background:rgba(4,9,15,.74);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 
 #menu{justify-content:flex-start;align-items:flex-start}
-#menu .scrim{background:linear-gradient(100deg,rgba(5,11,18,.94) 0%,rgba(5,11,18,.86) 34%,rgba(5,11,18,.35) 62%,rgba(5,11,18,.1) 100%);backdrop-filter:none}
-#menuPanel{position:relative;width:min(470px,94vw);max-height:94vh;height:0;margin:6vh 0 0 4vw;
+#menu .scrim{background:linear-gradient(100deg,rgba(4,9,14,.965) 0%,rgba(4,9,14,.945) 30%,rgba(4,9,14,.86) 45%,rgba(4,9,14,.55) 60%,rgba(4,9,14,.2) 78%,rgba(4,9,14,.05) 100%);backdrop-filter:none}
+#menuPanel{position:relative;width:min(700px,90vw);max-height:94vh;height:0;margin:8vh 0 0 7vw;
   overflow:hidden;transition:height .3s cubic-bezier(.2,.8,.2,1);
-  background:var(--panel2);border:1px solid var(--line);border-radius:18px;box-shadow:0 20px 70px rgba(0,0,0,.6)}
-#menuPanel::before{content:'';position:absolute;top:0;left:24px;right:24px;height:2px;background:linear-gradient(90deg,transparent,var(--amber),var(--ember),transparent);z-index:2}
+  background:none;border:0;border-radius:0;box-shadow:none}
+#menuPanel::before{content:none}
 .menuView{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;padding:22px 26px 18px;
   opacity:0;transform:translateX(100%);pointer-events:none;visibility:hidden;
   transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.2,1),visibility 0s .3s}
@@ -364,9 +364,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .menuScroll::-webkit-scrollbar{width:6px}
 .menuScroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--amber),var(--ember));border-radius:8px}
 .menuFoot,.prepFoot{flex:none;display:flex;flex-direction:column}
-#gameTitle{font-family:var(--disp);font-size:clamp(42px,7vw,58px);line-height:1.05;color:var(--amber);letter-spacing:6px;
-  text-shadow:0 0 30px rgba(255,180,84,.55),0 3px 6px rgba(0,0,0,.8)}
-#gameSub{font-family:var(--disp);font-size:16px;color:var(--mist);letter-spacing:4px;margin-top:2px}
+#gameTitle{font-family:var(--disp);font-size:clamp(44px,6.2vw,84px);font-weight:500;line-height:1.04;color:#dfe7e9;
+  letter-spacing:.16em;text-shadow:none;display:flex;margin:0}
+#gameSub{display:flex;align-items:center;gap:14px;margin-top:14px;
+  font-family:"SF Mono",Consolas,Menlo,monospace;font-size:10px;letter-spacing:.32em;color:var(--dim)}
+#gameSub .bar{width:52px;height:1px;flex:none;background:linear-gradient(to right,var(--amber),transparent)}
 .prepHead h2{font-family:var(--disp);font-size:30px;letter-spacing:5px;color:var(--amber);margin:0}
 .secT{font-size:12px;font-weight:900;letter-spacing:3px;color:var(--dim);margin:15px 0 8px;display:flex;align-items:center;gap:8px}
 .secT::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
@@ -406,13 +408,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 #ctrlGrid{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px;font-size:12px;color:var(--dim)}
 #ctrlGrid div{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;white-space:nowrap}
 #ctrlGrid div .kb+.kb{margin-left:-3px}
-#startBtn,#launchBtn{width:100%;margin-top:16px;padding:14px;border-radius:13px;font-size:19px;font-weight:900;letter-spacing:8px;color:#1a0e04;
-  background:linear-gradient(135deg,var(--amber),var(--ember));box-shadow:0 6px 26px rgba(255,138,61,.4);transition:all .15s;position:relative;overflow:hidden}
-#startBtn:hover,#launchBtn:hover{transform:translateY(-2px);box-shadow:0 10px 34px rgba(255,138,61,.6)}
-#btnContinue{width:100%;margin-top:10px;padding:12px;border-radius:12px;font-size:16px;font-weight:900;letter-spacing:5px;
-  color:var(--amber);background:rgba(255,180,84,.08);border:1px solid rgba(255,180,84,.5);transition:all .15s}
-#btnContinue:hover{transform:translateY(-1px);border-color:var(--amber);background:rgba(255,180,84,.16);box-shadow:0 0 18px rgba(255,180,84,.22)}
-#btnContinue.noSave{opacity:.5}
+#launchBtn{width:100%;margin-top:16px;padding:14px;border-radius:2px;font-size:15px;font-weight:700;letter-spacing:.5em;color:#1a0e04;
+  background:linear-gradient(135deg,var(--amber),var(--ember));box-shadow:0 6px 26px rgba(255,138,61,.3);transition:all .15s;position:relative;overflow:hidden}
+#launchBtn:hover{transform:translateY(-2px);box-shadow:0 10px 34px rgba(255,138,61,.45)}
 .saveWarn{margin-top:14px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,77,109,.5);
   background:rgba(255,77,109,.1);font-size:12px;line-height:1.65;color:#ffc9d2;display:flex;
   flex-direction:column;gap:5px;align-items:flex-start}
@@ -421,7 +419,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .saveWarn button{align-self:flex-end;padding:4px 14px;border-radius:8px;border:1px solid rgba(255,77,109,.5);
   color:var(--danger);font-size:11px;font-weight:900}
 .saveWarn button:hover{background:rgba(255,77,109,.18)}
-#startBtn::after,#launchBtn::after{content:'';position:absolute;top:0;left:-80%;width:50%;height:100%;transform:skewX(-25deg);
+#launchBtn::after{content:'';position:absolute;top:0;left:-80%;width:50%;height:100%;transform:skewX(-25deg);
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:shine 2.8s infinite}
 @keyframes shine{0%,60%{left:-80%}100%{left:130%}}
 
@@ -652,30 +650,24 @@ body.touch .kb-hint{display:none}
 @media (max-height:880px){
   .weaponDrop{padding:8px 10px}
   .menuView{padding:18px 26px 16px}
-  #gameTitle{font-size:clamp(34px,5.4vw,44px);letter-spacing:4px}
-  #gameSub{font-size:14px;letter-spacing:3px}
   .prepHead h2{font-size:26px;letter-spacing:4px}
   .secT{margin:10px 0 6px}
   .blessRow{padding:5px 10px;margin-bottom:5px}
   .blessInfo span{font-size:10px}
-  #startBtn,#launchBtn,#btnContinue{margin-top:12px;padding:11px;font-size:17px;letter-spacing:6px}
+  #launchBtn{margin-top:12px;padding:11px;font-size:14px;letter-spacing:.4em}
   .mBtn{padding:9px;margin-top:7px;font-size:14px}
 }
 @media (max-height:720px){
-  #gameTitle{font-size:clamp(30px,4.6vw,38px)}
-  #gameSub{font-size:13px}
   .prepHead h2{font-size:23px;letter-spacing:3px}
   .secT{margin:8px 0 5px}
   .blessRow{padding:4px 9px;margin-bottom:4px}
   .blessInfo b{font-size:12px}
   #ctrlGrid{font-size:11px;gap:3px 10px}
-  #startBtn,#launchBtn,#btnContinue{padding:9px;font-size:16px}
+  #launchBtn{padding:9px;font-size:13px}
   .mBtn{padding:7px;font-size:13px}
 }
 @media (max-height:640px){
   .menuView{padding:12px 20px 12px}
-  #gameTitle{font-size:26px;letter-spacing:3px}
-  #gameSub{font-size:12px;letter-spacing:2px}
   .secT{font-size:11px;margin:7px 0 4px}
   .diffBtn{padding:5px 4px;font-size:12px}
   .blessRow{padding:3px 8px;margin-bottom:3px;gap:8px}
@@ -686,7 +678,7 @@ body.touch .kb-hint{display:none}
   #ctrlGrid{font-size:10.5px;gap:2px 8px}
   #ctrlGrid div{gap:5px}
   .kb{font-size:9px;min-width:14px;padding:0 3px}
-  #startBtn,#launchBtn,#btnContinue{padding:7px;font-size:15px;letter-spacing:4px;margin-top:8px}
+  #launchBtn{padding:7px;font-size:12px;letter-spacing:.35em;margin-top:8px}
   .mBtn{padding:6px;font-size:12.5px;margin-top:5px;letter-spacing:2px}
 }
 @media (max-height:520px){
@@ -695,8 +687,6 @@ body.touch .kb-hint{display:none}
   .weaponIcon{width:36px;height:28px}
   .weaponCardBody p{font-size:10px}
   .menuView{padding:9px 16px 9px}
-  #gameTitle{font-size:21px;letter-spacing:2px}
-  #gameSub{font-size:11px}
   .secT{font-size:10px;margin:5px 0 3px;letter-spacing:2px}
   .diffBtn{padding:3px 4px;font-size:11px}
   .diffBtn small{font-size:9px}
@@ -709,13 +699,11 @@ body.touch .kb-hint{display:none}
   #emberCount{font-size:14px}
   #ctrlGrid{font-size:10px;gap:1px 8px}
   .kb{font-size:8.5px;min-width:13px;padding:0 3px}
-  #startBtn,#launchBtn,#btnContinue{padding:6px;font-size:14px;letter-spacing:3px;margin-top:6px}
+  #launchBtn{padding:6px;font-size:11px;letter-spacing:.3em;margin-top:6px}
   .mBtn{padding:5px;font-size:11.5px;margin-top:4px}
 }
 @media (max-height:460px){
   .menuView{padding:6px 12px 6px}
-  #gameTitle{font-size:18px;letter-spacing:2px}
-  #gameSub{font-size:10px;letter-spacing:1px}
   .prepHead h2{font-size:18px;letter-spacing:2px}
   .secT{font-size:9px;margin:4px 0 2px;letter-spacing:1px}
   .diffBtn{padding:2px 3px;font-size:10px;border-radius:7px}
@@ -729,7 +717,7 @@ body.touch .kb-hint{display:none}
   .blessInfo span{font-size:8px}
   #ctrlGrid{font-size:9px;gap:0 6px}
   .kb{font-size:8px;min-width:12px;padding:0 2px}
-  #startBtn,#launchBtn,#btnContinue{padding:5px;font-size:13px;letter-spacing:2px;margin-top:4px;border-radius:9px}
+  #launchBtn{padding:5px;font-size:10px;letter-spacing:.2em;margin-top:4px;border-radius:2px}
   .mBtn{padding:4px;font-size:11px;margin-top:3px;border-radius:8px}
 }
 @media (max-width:900px){
@@ -773,3 +761,242 @@ body.touch .kb-hint{display:none}
   .prepWeaponBtn em{margin-left:auto}
 }
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01s !important}}
+
+/* ============================================================
+   全局菜单皮肤：编辑排版
+   范围：主菜单三视图 / 暂停三层 / 图鉴换皮
+   只改遮罩层配色与排版，局内 HUD 不受影响
+   ============================================================ */
+#menu,#pauseOv,#codexOv{
+  --ink:#060e14;--deep:#0a1822;--sea:#0f2530;
+  --panel:rgba(9,20,28,.82);--panel2:rgba(11,26,35,.94);
+  --line:rgba(150,178,186,.16);--line2:rgba(150,178,186,.30);
+  --mist:#93a8ab;--cyan:#7ab6be;--amber:#e0a267;--ember:#c98553;
+  --violet:#9186b5;--danger:#cf6272;--leaf:#7eb394;--warn:#cfb277;
+  --text:#e2e9ea;--dim:#9aa9ad;--dim2:#6f8187;
+  --e-lamp:#e0a267;--e-lamp-hi:#f0cb9b;
+  --e-expo:cubic-bezier(.16,1,.3,1);
+  --e-slam:cubic-bezier(.18,1.12,.32,1);
+  --e-accel:cubic-bezier(.55,0,.8,.2);
+  --mono:"SF Mono",Consolas,Menlo,monospace;
+}
+
+/* ---------- 背景：经纬网格 / 扫描线 / 跟随光晕 ---------- */
+.uiField{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.uiGrid{position:absolute;inset:0;opacity:.55;
+  background-image:
+    linear-gradient(to right,var(--line) 1px,transparent 1px),
+    linear-gradient(to bottom,var(--line) 1px,transparent 1px);
+  background-size:56px 56px;background-position:7vw 0;
+  -webkit-mask-image:linear-gradient(to right,#000,#000 46%,transparent 82%);
+  mask-image:linear-gradient(to right,#000,#000 46%,transparent 82%);
+  animation:uiGridDrift 72s linear infinite}
+.uiGrid::after{content:"";position:absolute;inset:0;
+  background-image:linear-gradient(to right,rgba(224,162,103,.07) 1px,transparent 1px);
+  background-size:280px 280px}
+.uiField.compact .uiGrid{opacity:.22;background-size:48px 48px;background-position:0 0;
+  -webkit-mask-image:radial-gradient(ellipse at 26% 44%,#000,transparent 78%);
+  mask-image:radial-gradient(ellipse at 26% 44%,#000,transparent 78%)}
+@keyframes uiGridDrift{from{background-position:7vw 0}to{background-position:calc(7vw + 56px) 56px}}
+
+.uiScan{position:absolute;top:0;bottom:0;left:0;width:2px;opacity:0;
+  background:linear-gradient(to bottom,transparent,var(--e-lamp-hi) 42%,var(--e-lamp) 58%,transparent);
+  box-shadow:0 0 24px 6px rgba(224,162,103,.14);
+  animation:uiScan 1.1s var(--e-expo) both}
+@keyframes uiScan{
+  0%{transform:translateX(-8px);opacity:0}
+  8%{opacity:.85}
+  82%{opacity:.55}
+  100%{transform:translateX(102vw);opacity:0}
+}
+
+.uiGlow{position:absolute;left:0;top:0;width:44vw;height:44vw;border-radius:50%;
+  background:radial-gradient(circle,rgba(224,162,103,.1) 0%,rgba(224,162,103,.04) 40%,transparent 70%);
+  transform:translate(-50%,-50%);will-change:left,top;opacity:0;transition:opacity 1.2s ease}
+#menu.is-settled .uiGlow{opacity:1}
+
+/* ---------- 标题区 ---------- */
+#gameTitle .glyph{display:inline-block;transform:translateX(-40px);clip-path:inset(0 100% 0 0)}
+#menu.is-booting #gameTitle .glyph,
+#menu.is-fast #gameTitle .glyph{
+  animation:uiGlyph .7s var(--e-expo) calc(var(--uiGlyphDelay,0s) + var(--j,0)*.058s) both}
+#menu.is-booting{--uiGlyphDelay:.42s}
+#menu.is-fast{--uiGlyphDelay:.04s}
+#menu.is-settled #gameTitle .glyph{transform:none;clip-path:none}
+@keyframes uiGlyph{
+  0%{transform:translateX(-40px);clip-path:inset(0 100% 0 0)}
+  100%{transform:translateX(0);clip-path:inset(0 0 0 0)}
+}
+
+/* ---------- 主菜单列表 ---------- */
+.menuList{position:relative;display:block;margin-top:clamp(28px,5vh,54px)}
+.cursorMark{position:absolute;left:-18px;top:0;width:2px;height:34px;z-index:2;
+  background:var(--amber);box-shadow:0 0 12px 2px rgba(224,162,103,.26);
+  transform:scaleY(0);transform-origin:top;opacity:0;
+  transition:transform .34s var(--e-expo),top .34s var(--e-expo),height .34s var(--e-expo),opacity .2s}
+.menuList.has-cursor .cursorMark,.pauseList.has-cursor .cursorMark{transform:scaleY(1);opacity:1}
+
+.menuRow{position:relative;display:flex;align-items:baseline;width:100%;height:56px;padding:0;
+  border:0;border-radius:0;background:none;text-align:left;color:inherit;
+  translate:0 0;transition:translate .5s var(--e-expo),opacity .3s}
+.menuRow::before{content:"";position:absolute;left:-2px;right:-2vw;top:-4px;bottom:-4px;
+  background:linear-gradient(90deg,rgba(224,162,103,.11),rgba(224,162,103,.03) 52%,transparent 92%);
+  clip-path:inset(0 100% 0 0);transition:clip-path .58s var(--e-expo);pointer-events:none}
+.menuRow.is-active::before,.menuRow:hover::before{clip-path:inset(0 0 0 0)}
+.menuRow.is-active,.menuRow:hover{translate:22px 0}
+
+.mrNo{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--dim2);width:34px;flex:none;transition:color .3s}
+.mrRule{width:24px;height:1px;background:var(--line2);flex:none;margin-right:20px;align-self:center;
+  transition:transform .45s var(--e-expo),background .3s}
+.mrZh{font-family:var(--disp);font-size:clamp(20px,2.2vw,27px);font-weight:500;letter-spacing:.14em;
+  color:var(--dim);min-width:150px;transition:color .3s,letter-spacing .45s var(--e-expo)}
+.mrDesc{margin-left:auto;padding-right:10px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  color:var(--amber);white-space:nowrap;clip-path:inset(0 100% 0 0);translate:-10px 0;
+  transition:clip-path .5s var(--e-expo),translate .5s var(--e-expo)}
+.mrDesc span{display:inline-block;opacity:0;translate:-6px 0}
+.menuRow.is-active .mrDesc span,.menuRow:hover .mrDesc span{
+  animation:uiCharLand .34s var(--e-expo) calc(var(--k,0)*.022s) both}
+@keyframes uiCharLand{from{opacity:0;translate:-6px 0}to{opacity:1;translate:0 0}}
+
+.menuRow.is-active .mrNo,.menuRow:hover .mrNo{color:var(--amber)}
+.menuRow.is-active .mrRule,.menuRow:hover .mrRule{transform:scaleX(2.1);background:var(--amber)}
+.menuRow.is-active .mrZh,.menuRow:hover .mrZh{color:var(--e-lamp-hi);letter-spacing:.18em}
+.menuRow.is-active .mrDesc,.menuRow:hover .mrDesc{clip-path:inset(0 0 0 0);translate:0 0}
+.menuRow.primary .mrZh{color:var(--e-lamp-hi)}
+.menuRow.primary .mrRule{background:var(--amber)}
+.menuRow.sub .mrZh{font-size:clamp(17px,1.8vw,21px);color:var(--dim2)}
+.menuRow.sub.is-active .mrZh,.menuRow.sub:hover .mrZh{color:var(--mist)}
+.menuRow.noSave{opacity:.45}
+.menuRow.noSave .mrDesc{color:var(--dim2)}
+.menuRow:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
+
+/* ---------- 入场编排：首次全套，之后快入 ---------- */
+#menu.is-booting .menuRow,#menu.is-fast .menuRow{
+  animation:uiRowIn var(--uiRowDur,.95s) var(--e-slam)
+    calc(var(--uiRowBase,.62s) + var(--i,0)*var(--uiRowStep,.1s)) both}
+#menu.is-booting{--uiRowDur:.95s;--uiRowBase:.62s;--uiRowStep:.1s}
+#menu.is-fast{--uiRowDur:.34s;--uiRowBase:.04s;--uiRowStep:.05s}
+@keyframes uiRowIn{from{transform:translateX(-112vw)}to{transform:translateX(0)}}
+#menu.is-settled .menuRow{animation:none}
+
+/* 遮罩收起时逐项退场 */
+#menu:not(.show) .menuRow{opacity:0;translate:-70px 0;
+  transition:opacity .26s,translate .3s var(--e-accel)}
+#pauseOv:not(.show) .pauseRow{opacity:0;translate:-40px 0;
+  transition:opacity .24s,translate .26s var(--e-accel)}
+
+/* ---------- 暂停面板：与主菜单同一条左侧排版线 ---------- */
+#pauseOv{justify-content:flex-start;align-items:flex-start}
+#pauseOv .scrim{background:linear-gradient(100deg,rgba(4,9,14,.95) 0%,rgba(4,9,14,.92) 30%,rgba(4,9,14,.8) 45%,rgba(4,9,14,.5) 60%,rgba(4,9,14,.18) 78%,rgba(4,9,14,.05) 100%);backdrop-filter:none}
+.pausePanel{width:min(700px,90vw);height:420px;margin:8vh 0 0 7vw;
+  background:none;border:0;border-radius:0;box-shadow:none;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+.pausePage{justify-content:flex-start}
+.pauseHead{flex:none;margin-bottom:10px;text-align:left}
+.pausePage h2{font-family:var(--disp);font-weight:500;letter-spacing:.18em;color:var(--text);text-shadow:none}
+/* 子页收窄，避免整宽按钮与卡片在左侧版面里被拉长 */
+.pausePage[data-pg="slots"] h2,.pausePage[data-pg="slots"] .msub,
+.pausePage[data-pg="slots"] #pauseSlotList,.pausePage[data-pg="slots"] .mBtn.ghost{max-width:440px}
+.pausePage[data-pg="confirm"] .confirmPage{max-width:340px}
+.pauseList{position:relative;display:flex;flex-direction:column}
+.pauseRow{position:relative;display:flex;align-items:baseline;width:100%;height:46px;padding:0;
+  border:0;border-radius:0;background:none;text-align:left;color:inherit;
+  translate:0 0;transition:translate .42s var(--e-expo),opacity .3s}
+.pauseRow::before{content:"";position:absolute;left:-2px;right:-8px;top:-3px;bottom:-3px;
+  background:linear-gradient(90deg,rgba(224,162,103,.1),transparent 88%);
+  clip-path:inset(0 100% 0 0);transition:clip-path .5s var(--e-expo);pointer-events:none}
+.pauseRow.is-active::before,.pauseRow:hover::before{clip-path:inset(0 0 0 0)}
+.pauseRow.is-active,.pauseRow:hover{translate:14px 0}
+.prNo{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--dim2);width:26px;flex:none;transition:color .3s}
+.prRule{width:16px;height:1px;background:var(--line2);flex:none;margin-right:14px;align-self:center;
+  transition:transform .4s var(--e-expo),background .3s}
+.prZh{font-family:var(--disp);font-size:18px;font-weight:500;letter-spacing:.14em;color:var(--dim);
+  min-width:88px;transition:color .3s,letter-spacing .4s var(--e-expo)}
+.pauseRow.is-active .prNo,.pauseRow:hover .prNo{color:var(--amber)}
+.pauseRow.is-active .prRule,.pauseRow:hover .prRule{transform:scaleX(1.8);background:var(--amber)}
+.pauseRow.is-active .prZh,.pauseRow:hover .prZh{color:var(--e-lamp-hi);letter-spacing:.18em}
+.pauseRow.primary .prZh{color:var(--e-lamp-hi)}
+.pauseRow:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
+#pauseOv.pause-in .pauseRow{animation:uiRowIn .42s var(--e-slam) calc(var(--i,0)*.055s) both}
+
+/* ---------- 出航准备：随皮肤收紧圆角与装饰 ---------- */
+#menu .prepHead h2{font-family:var(--disp);font-weight:500;letter-spacing:.18em;color:var(--text);text-shadow:none}
+#menu .secT{font-family:var(--mono);font-size:10px;letter-spacing:.24em;font-weight:400}
+#menu .prepWeaponBtn,#menu .diffBtn,#menu .blessRow,#menu .buyBtn,#menu .mBtn,#menu .weaponCard,#menu .weaponDrop{border-radius:2px}
+#menu .prepWeaponBtn{background:rgba(9,20,28,.5)}
+#menu .diffBtn.sel{background:rgba(224,162,103,.1);box-shadow:0 0 12px rgba(224,162,103,.16)}
+
+/* ---------- 图鉴：只换皮，保留窗口与布局 ---------- */
+#codexOv .cxHead h2{letter-spacing:.18em;text-shadow:none}
+#codexOv #cxName{letter-spacing:.06em;font-weight:500}
+#codexOv .cxCat.on{background:rgba(224,162,103,.1)}
+#codexOv #codexPanel::before{opacity:.45}
+
+/* ---------- 桌面端收尾：窄屏只做可用性兜底 ---------- */
+@media (max-width:900px){
+  #menuPanel{width:min(640px,92vw);margin:6vh 0 0 5vw}
+  .pausePanel{width:min(640px,92vw);margin:6vh 0 0 5vw}
+  .mrDesc{display:none}
+  .menuRow.is-active,.menuRow:hover,.pauseRow.is-active,.pauseRow:hover{translate:10px 0}
+  .cursorMark{left:-12px}
+}
+
+/* ---------- 指针反馈：悬停粒子 / 点击涟漪 ---------- */
+.spark{position:fixed;width:4px;height:1px;background:var(--e-lamp-hi,#f0cb9b);
+  box-shadow:0 0 7px #e0a267;pointer-events:none;z-index:40;
+  animation:sparkFly .72s var(--e-expo,cubic-bezier(.16,1,.3,1)) forwards}
+@keyframes sparkFly{
+  0%{transform:translate(0,0) scaleX(1);opacity:.95}
+  100%{transform:translate(var(--dx,40px),var(--dy,0)) scaleX(.15);opacity:0}
+}
+.ripple{position:fixed;width:8px;height:8px;border-radius:50%;
+  border:1px solid rgba(240,203,155,.7);box-shadow:0 0 14px rgba(224,162,103,.25);
+  transform:translate(-50%,-50%);pointer-events:none;z-index:40;
+  animation:rippleOut .95s var(--e-expo,cubic-bezier(.16,1,.3,1)) forwards}
+@keyframes rippleOut{
+  0%{width:8px;height:8px;opacity:.9}
+  100%{width:280px;height:280px;opacity:0}
+}
+
+/* 矮屏：收紧标题与行高，避免整套排版溢出 */
+@media (max-height:780px){
+  #gameTitle{font-size:clamp(38px,5vw,62px)}
+  .menuList{margin-top:22px}
+  .menuRow{height:50px}
+}
+
+/* ============================================================
+   二级菜单：确认框 / 存档位 / 暂停内确认页
+   与主菜单同一条左侧排版线，不再居中弹窗
+   ============================================================ */
+#confirmOv,#slotOv{justify-content:flex-start;align-items:flex-start}
+#confirmOv .scrim,#slotOv .scrim{background:linear-gradient(100deg,rgba(4,9,14,.95) 0%,rgba(4,9,14,.92) 30%,rgba(4,9,14,.8) 45%,rgba(4,9,14,.5) 60%,rgba(4,9,14,.18) 78%,rgba(4,9,14,.05) 100%);backdrop-filter:none}
+#confirmOv .modalBox,#slotOv .modalBox{width:min(560px,90vw);margin:8vh 0 0 7vw;padding:22px 26px;
+  background:none;border:0;border-radius:0;box-shadow:none;text-align:left}
+#confirmOv .confirmBox h2,#slotOv .slotBox h2{font-family:var(--disp);font-weight:500;font-size:32px;
+  letter-spacing:.14em;color:var(--text);text-shadow:none}
+#confirmOv .confirmBox h2{color:var(--e-lamp-hi)}
+#confirmOv .confirmBox.danger h2{color:var(--danger)}
+#confirmOv .msub,#slotOv .msub{color:var(--dim);line-height:1.9;text-align:left;margin-left:0}
+#slotOv .slotBox h2{margin-bottom:14px}
+#slotOv #slotList{gap:8px}
+.pausePage[data-pg="confirm"] .confirmPage{max-width:420px}
+
+/* 行式按钮：确认 / 取消 / 删除 / 返回 */
+#confirmOv .mBtn,#slotOv .mBtn,
+.pausePage[data-pg="confirm"] .mBtn,.pausePage[data-pg="slots"] .mBtn{
+  width:100%;height:46px;margin:0;padding:0;justify-content:flex-start;text-align:left;
+  background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;
+  color:var(--dim);font-family:var(--disp);font-weight:500;font-size:18px;letter-spacing:.14em;
+  translate:0 0;transition:color .3s,translate .4s var(--e-expo),border-color .3s}
+#confirmOv .mBtn:hover,#slotOv .mBtn:hover,
+.pausePage[data-pg="confirm"] .mBtn:hover,.pausePage[data-pg="slots"] .mBtn:hover{
+  color:var(--e-lamp-hi);translate:12px 0;border-color:var(--line2);box-shadow:none}
+#confirmOv .mBtn.primary,#slotOv .mBtn.primary,
+.pausePage[data-pg="confirm"] .mBtn.primary{color:var(--e-lamp-hi)}
+#confirmOv .mBtn.primary.danger,.pausePage[data-pg="confirm"] .mBtn.primary.danger{
+  color:var(--danger);background:none}
+#confirmOv .mBtn.primary.danger:hover,.pausePage[data-pg="confirm"] .mBtn.primary.danger:hover{
+  color:#f19aa6;box-shadow:none}
+#slotOv #slotDelete:hover{color:var(--danger);border-color:rgba(207,98,114,.5);box-shadow:none}
+#slotOv #slotDelete{margin-top:0}

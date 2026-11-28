@@ -6,7 +6,7 @@
 <title>雾海方舟</title>
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;500;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -96,22 +96,30 @@
 
 <div class="overlay show" id="menu">
   <div class="scrim"></div>
+  <div class="uiField" aria-hidden="true"><div class="uiGrid"></div><div class="uiScan"></div><div class="uiGlow" id="menuGlow"></div></div>
   <div id="menuPanel" data-view="title">
     <section class="menuView" data-view="title">
       <div class="menuHead">
-        <h1 id="gameTitle">雾海方舟</h1>
-        <div id="gameSub">孤灯不灭</div>
+        <h1 id="gameTitle" aria-label="雾海方舟"><span class="glyph" style="--j:0">雾</span><span class="glyph" style="--j:1">海</span><span class="glyph" style="--j:2">方</span><span class="glyph" style="--j:3">舟</span></h1>
+        <div class="subtitle" id="gameSub"><span class="bar"></span><span>FOGSEA ARK</span></div>
       </div>
       <div id="saveWarn" class="saveWarn" hidden>
         <b>存档异常</b>
         <span id="saveWarnText"></span>
         <button id="saveWarnAck" aria-label="知道了">知道了</button>
       </div>
-      <div class="menuFoot">
-        <button id="startBtn">开始</button>
-        <button id="btnContinue">继续</button>
-        <button class="mBtn book" id="btnCodexMenu">图鉴</button>
-      </div>
+      <nav class="menuFoot menuList" id="menuList" aria-label="主菜单">
+        <span class="cursorMark" id="menuCursor" aria-hidden="true"></span>
+        <button class="menuRow primary" id="startBtn" style="--i:0">
+          <span class="mrNo">01</span><span class="mrRule"></span><span class="mrZh">开始</span><span class="mrDesc">选择武器与雾潮强度，开始新的一局</span>
+        </button>
+        <button class="menuRow" id="btnContinue" style="--i:1">
+          <span class="mrNo">02</span><span class="mrRule"></span><span class="mrZh">继续</span><span class="mrDesc">读取存档位，回到上次停泊的坐标</span>
+        </button>
+        <button class="menuRow sub" id="btnCodexMenu" style="--i:2">
+          <span class="mrNo">03</span><span class="mrRule"></span><span class="mrZh">图鉴</span><span class="mrDesc">查阅角色、卡牌、雾裔与刻印</span>
+        </button>
+      </nav>
     </section>
     <section class="menuView" data-view="prep">
       <div class="prepHead"><h2>出航准备</h2></div>
@@ -169,15 +177,31 @@
 
 <div class="overlay" id="pauseOv" role="dialog" aria-modal="true">
   <div class="scrim"></div>
+  <div class="uiField compact" aria-hidden="true"><div class="uiGrid"></div><div class="uiScan"></div></div>
   <div class="modalBox pausePanel">
     <div class="pausePages" id="pausePages">
       <section class="pausePage" data-pg="main">
-        <h2>暂停</h2>
-        <button class="mBtn primary" id="btnResume">继续</button>
-        <button class="mBtn" id="btnSave">存档</button>
-        <button class="mBtn" id="btnCodexPause">图鉴</button>
-        <button class="mBtn" id="btnRestart">重新开始</button>
-        <button class="mBtn" id="btnToTitle">返回标题</button>
+        <div class="pauseHead">
+          <h2>暂停</h2>
+        </div>
+        <div class="pauseList" id="pauseList">
+          <span class="cursorMark" id="pauseCursor" aria-hidden="true"></span>
+          <button class="pauseRow primary" id="btnResume" style="--i:0">
+            <span class="prNo">01</span><span class="prRule"></span><span class="prZh">继续</span>
+          </button>
+          <button class="pauseRow" id="btnSave" style="--i:1">
+            <span class="prNo">02</span><span class="prRule"></span><span class="prZh">存档</span>
+          </button>
+          <button class="pauseRow" id="btnCodexPause" style="--i:2">
+            <span class="prNo">03</span><span class="prRule"></span><span class="prZh">图鉴</span>
+          </button>
+          <button class="pauseRow" id="btnRestart" style="--i:3">
+            <span class="prNo">04</span><span class="prRule"></span><span class="prZh">重新开始</span>
+          </button>
+          <button class="pauseRow" id="btnToTitle" style="--i:4">
+            <span class="prNo">05</span><span class="prRule"></span><span class="prZh">返回标题</span>
+          </button>
+        </div>
       </section>
       <section class="pausePage" data-pg="slots">
         <h2>存档位</h2>
@@ -215,6 +239,7 @@
 
 <div class="overlay" id="slotOv" role="dialog" aria-modal="true" aria-label="存档位">
   <div class="scrim"></div>
+  <div class="uiField compact" aria-hidden="true"><div class="uiGrid"></div></div>
   <div class="modalBox slotBox">
     <h2 id="slotTitle">存档位</h2>
     <div id="slotList"></div>
@@ -225,6 +250,7 @@
 
 <div class="overlay" id="confirmOv" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
   <div class="scrim"></div>
+  <div class="uiField compact" aria-hidden="true"><div class="uiGrid"></div></div>
   <div class="modalBox confirmBox">
     <h2 id="confirmTitle"></h2>
     <div class="msub" id="confirmSub"></div>
