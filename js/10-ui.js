@@ -432,7 +432,7 @@ function cxRenderList(){
   if(!cxFiltered.some(e=>e.id===cxSel))cxSelect(cxFiltered.length?cxFiltered[0].id:null,false);
   else cxSelect(cxSel,false);
   const track=Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length+SIGIL_IDS.length,got=cxSeenCount();
-  $('cxCount').textContent=`共 ${CODEX.length} 条 · 显示 ${cxFiltered.length} 条 · 已记录 ${got}/${track}`;
+  $('cxCount').textContent=`${CODEX.length} 条 · 当前显示 ${cxFiltered.length} · 收集 ${got}/${track}`;
   $('cxProgFill').style.width=clamp(got/track,0,1)*100+'%';
 }
 function cxSelect(id,scroll){

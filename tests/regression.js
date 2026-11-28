@@ -1217,7 +1217,7 @@ testCase('R22_weapon', () => {
     assert.equal(out.cards, out.cardsLen-out.pureSigils);
     assert.equal(out.sigilCat, out.sLen);
     assert.ok(!out.labelAll.includes('已选'));
-    assert.ok(/已记录 \d+\/\d+/.test(out.labelAll));
+    assert.ok(/收集 \d+\/\d+/.test(out.labelAll));
     assert.ok(out.hit > 0);
     // 8) 详情页标签：有标签才显示小节标题，无标签整块隐藏
     assert.equal((out.etHtml.match(/cxETag/g) || []).length, 5);
