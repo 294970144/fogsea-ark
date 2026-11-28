@@ -333,6 +333,8 @@ const sigilMeta=id=>{
   return null;
 };
 const isSigilId=id=>!!(SIGILS[id]||(CDEFS[id]&&CDEFS[id].sigil));
+/* 全部能装武器槽的刻印卡：数值刻印 + 法术刻印 + 双形态刻印，统一从卡的身份派生。 */
+const ALL_SIGIL_IDS=CIDS.filter(isSigilId);
 for(const id of SIGIL_IDS){CDEFS[id].desc=sigilDesc(id);CDEFS[id].brief=sigilDesc(id);}
 // 手牌短文案：一次性注入到卡牌自身，显示层只读 def.brief，不再依赖独立表
 const CARD_BRIEF={

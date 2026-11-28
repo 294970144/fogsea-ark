@@ -299,10 +299,11 @@ const CODEX=[
     stats:()=>[['稀有度',RARNAME[b.rar]],['叠加上限',b.max?b.max+' 层':'无上限'],
       ['本局叠加','×'+(P.stacks[b.id]||0)],['累计选用',save.seen.card[b.id]||0]],
     rel:['dawn','keeper','hand']})),
-  ...SIGIL_IDS.map(id=>{const s=SIGILS[id];
-    return {id:'s_'+id,cat:'sigil',name:s.n,icon:s.icon,color:s.color,
-      desc:sigilDesc(id)+'。卡牌从牌库抽到后拖入武器槽位，同种可叠装但受牌库张数限制；纯数值刻印不能拖地释放。',
-      tags:sigilTags(s),badge:()=>{const n=cardTotal(id);return n?'×'+n:'';},
+  ...ALL_SIGIL_IDS.map(id=>{const m=sigilMeta(id),c=CDEFS[id];
+    const usage=c.sigilOnly?'纯数值刻印不能拖地释放。':'这张牌也能拿在手里拖到地上释放。';
+    return {id:'s_'+id,cat:'sigil',name:m.n,icon:m.icon,color:m.color,
+      desc:sigilDesc(id)+'。卡牌从牌库抽到后拖入武器槽位，同种可叠装但受牌库张数限制；'+usage,
+      tags:sigilTags(m.spell?c:SIGILS[id]),badge:()=>{const n=cardTotal(id);return n?'×'+n:'';},
       stats:()=>[['效果',sigilDesc(id)],
         ['牌库中',cardTotal(id)+' 张'],
         ['本局持有',(P.sigils||[]).filter(x=>x&&x.id===id).length+' 份'],
@@ -330,7 +331,7 @@ const CODEX=[
   {id:'dawn',cat:'term',name:'黎明回合',icon:'sun',color:'#ffb454',
    desc:'每次天亮进入两步选择：拾获卡牌、灯芯祝福，各 3 选 1，均可跳过；随后抽满手牌。刻印已改为卡牌，从牌库抽到后拖入武器槽位。',
    stats:()=>[['白昼时长',DAY_LEN+' 秒'],['当前日数',S.day],['额外抽牌',P.bonusDraw+' 张'],
-     ['核心自愈',TUNE.core.regen+' /秒'],['刻印卡',SIGIL_IDS.length+SIGIL_SPELL_IDS.length+' 种'],
+     ['核心自愈',TUNE.core.regen+' /秒'],['刻印卡',ALL_SIGIL_IDS.length+' 种'],
      ['刻印槽位',(P.sigils||[]).filter(Boolean).length+' / '+sigilCap()]],rel:['hand','deck','b_blade']},
   {id:'tide',cat:'term',name:'雾潮',icon:'fog',color:'#a06bff',
    desc:'夜间敌潮，自岛缘分批刷新。夜晚构筑牌封存，只能打瞬发牌——白天没铺好，晚上就得靠操作。',
@@ -396,7 +397,7 @@ function sizeCodexCv(){
   cxCv.width=Math.floor(cxW*DPR);cxCv.height=Math.floor(cxH*DPR);
 }
 function cxSeenCount(){
-  const groups={foe:Object.keys(FOES),card:BLESSINGS.map(b=>b.id),play:CARD_IDS,sigil:SIGIL_IDS};
+  const groups={foe:Object.keys(FOES),card:BLESSINGS.map(b=>b.id),play:CARD_IDS,sigil:ALL_SIGIL_IDS};
   let n=0;
   for(const k in groups)for(const id of groups[k])if(save.seen[k][id]>0)n++;
   return n;
@@ -431,7 +432,7 @@ function cxRenderList(){
   }
   if(!cxFiltered.some(e=>e.id===cxSel))cxSelect(cxFiltered.length?cxFiltered[0].id:null,false);
   else cxSelect(cxSel,false);
-  const track=Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length+SIGIL_IDS.length,got=cxSeenCount();
+  const track=Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length+ALL_SIGIL_IDS.length,got=cxSeenCount();
   $('cxCount').textContent=`${CODEX.length} 条 · 当前显示 ${cxFiltered.length} · 收集 ${got}/${track}`;
   $('cxProgFill').style.width=clamp(got/track,0,1)*100+'%';
 }

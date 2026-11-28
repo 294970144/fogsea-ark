@@ -423,9 +423,9 @@ testCase('R1_settlement', () => {
       for(const id of ids)save.seen.foe[id]=1;
       for(const b of BLESSINGS)save.seen.card[b.id]=1;
       for(const id of CARD_IDS)save.seen.play[id]=1;
-      for(const id of SIGIL_IDS)save.seen.sigil[id]=1;
+      for(const id of ALL_SIGIL_IDS)save.seen.sigil[id]=1;
       cxRenderList();
-      const track=ids.length+BLESSINGS.length+CARD_IDS.length+SIGIL_IDS.length;
+      const track=ids.length+BLESSINGS.length+CARD_IDS.length+ALL_SIGIL_IDS.length;
       return JSON.stringify({ids,count:entries.length,metaOk,statsOk,track,
         label:document.getElementById('cxCount').textContent});
     })()`);
@@ -706,10 +706,10 @@ testCase('R9_codex', () => {
       for(const id of Object.keys(FOES))save.seen.foe[id]=1;
       for(const b of BLESSINGS)save.seen.card[b.id]=1;
       for(const id of CARD_IDS)save.seen.play[id]=1;
-      for(const id of SIGIL_IDS)save.seen.sigil[id]=1;
+      for(const id of ALL_SIGIL_IDS)save.seen.sigil[id]=1;
       save.seen.play.unknown=1;const full=cxSeenCount();cxRenderList();const label=document.getElementById('cxCount').textContent;
       save.seen.play={};S.day=2;S.mode='dawn';S.dawnStep=0;S.dawnCards=['wall','class_mage','rain'];pickDawn(1);
-      return JSON.stringify({bad,full,label,classSeen:save.seen.play.class_mage,played:S.stats.played,track:Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length+SIGIL_IDS.length});
+      return JSON.stringify({bad,full,label,classSeen:save.seen.play.class_mage,played:S.stats.played,track:Object.keys(FOES).length+BLESSINGS.length+CARD_IDS.length+ALL_SIGIL_IDS.length});
     })()`);
     assert.deepEqual(out.bad, []);
     assert.equal(out.full, out.track);
@@ -1173,13 +1173,13 @@ testCase('R22_weapon', () => {
   }
   { // R23_codex_sigil_and_seen_source
     const env = makeEnv();
-    // 1) 图鉴刻印条目完全由 SIGILS 派生：新增刻印只需在 03-data.js 登记一次
+    // 1) 图鉴刻印条目由全部刻印卡派生：给 CDEFS 标 sigil 即自动收录，无需改图鉴
     const derived = j(env)(`(()=>{
-      const ids=SIGIL_IDS;
-      const entries=CODEX.filter(x=>x.id.startsWith('s_'));
+      const ids=ALL_SIGIL_IDS;
+      const entries=CODEX.filter(x=>x.cat==='sigil');
       const metaOk=ids.every(id=>{
-        const e=CODEX.find(x=>x.id==='s_'+id),d=SIGILS[id];
-        return e&&e.name===d.n&&e.icon===d.icon&&e.color===d.color;
+        const e=CODEX.find(x=>x.id==='s_'+id),m=sigilMeta(id);
+        return e&&e.name===m.n&&e.icon===m.icon&&e.color===m.color;
       });
       const descOk=ids.every(id=>{
         const e=CODEX.find(x=>x.id==='s_'+id);
@@ -1191,10 +1191,14 @@ testCase('R22_weapon', () => {
       SIGILS.keen.dmg=.2;
       return JSON.stringify({ids,count:entries.length,metaOk,descOk,before,after,
         catOk:CX_CATS.some(c=>c.id==='sigil'),
-        inSigil:entries.every(e=>e.cat==='sigil')});
+        inSigil:entries.every(e=>e.cat==='sigil'),
+        dual:ids.includes('siphon')&&ids.includes('sp_emberburst')&&ids.includes('sig_flame'),
+        noExtra:ids.every(id=>isSigilId(id))});
     })()`);
-    assert.deepEqual([derived.ids, derived.count, derived.metaOk, derived.descOk, derived.catOk, derived.inSigil],
-      [['keen', 'swift', 'echo', 'burst', 'scatter', 'trident'], 6, true, true, true, true]);
+    assert.equal(derived.count, derived.ids.length);
+    assert.ok(derived.metaOk && derived.descOk && derived.catOk && derived.inSigil);
+    assert.ok(derived.dual, '双形态与法术刻印都自动进刻印页');
+    assert.ok(derived.noExtra, '刻印页名单里的每一项都是刻印');
     assert.notEqual(derived.before, derived.after);
     assert.ok(derived.after.includes('50%'));
 
@@ -1202,11 +1206,11 @@ testCase('R22_weapon', () => {
     const dawn = j(env)(`(()=>{
       const e=CODEX.find(x=>x.id==='dawn');
       return JSON.stringify({desc:e.desc,steps:e.desc.includes('两步'),
-        pool:e.stats().find(x=>x[0]==='刻印卡')[1]});
+        pool:e.stats().find(x=>x[0]==='刻印卡')[1],count:ALL_SIGIL_IDS.length});
     })()`);
     assert.equal(dawn.steps, true);
     assert.ok(dawn.desc.includes('牌库'));
-    assert.equal(dawn.pool, '9 种');
+    assert.equal(dawn.pool, dawn.count+' 种');
 
     // 3) 武器条目带槽位
     const wp = j(env)(`(()=>{
@@ -1255,6 +1259,7 @@ testCase('R22_weapon', () => {
       const titleOff=document.getElementById('cxTagT').style.display;
       cxSelect('w_flame',false);
       return JSON.stringify({cats,tagIds,cover,untagged,s,deadTag,ownW,ownS,wLen:WEAPON_IDS.length,sLen:SIGIL_IDS.length,
+        allSigils:ALL_SIGIL_IDS.length,
         sigilCards:CARD_IDS.filter(id=>CDEFS[id].sigil).length,
         pureSigils:CARD_IDS.filter(id=>CDEFS[id].sigilOnly).length,
         tplInCodex,unknown,dup,all,cards,cardsLen:CARD_IDS.length,labelAll,hit,etHtml,titleOn,etNone,titleOff,
@@ -1270,9 +1275,9 @@ testCase('R22_weapon', () => {
     // 条目上的标签必须能在字典里查到，且同一标签不重复挂
     assert.deepEqual(out.unknown, []);
     assert.deepEqual(out.dup, []);
-    // 归属标签：武器只命中武器；sigil 命中所有可装槽的卡与数值刻印
+    // 归属标签：武器只命中武器；sigil 命中刻印页全部条目与卡牌页里的非纯刻印
     assert.equal(out.ownW, out.wLen);
-    assert.equal(out.ownS, out.sLen+out.sigilCards-out.pureSigils);
+    assert.equal(out.ownS, out.allSigils+out.sigilCards-out.pureSigils);
     // 3) 每张卡牌都挂了 tags（白名单与具体数量交给新牌体检）
     assert.equal(out.cover, true);
     // 4) 派生规则：单体优先于范围；元素/法力/范围/状态四条链路
@@ -1291,7 +1296,7 @@ testCase('R22_weapon', () => {
     assert.equal(out.tplInCodex, false);
     // 7) 标签只做展示，不再参与筛选：分类与搜索仍是唯二过滤条件
     assert.equal(out.cards, out.cardsLen-out.pureSigils);
-    assert.equal(out.sigilCat, out.sLen);
+    assert.equal(out.sigilCat, out.allSigils);
     assert.ok(!out.labelAll.includes('已选'));
     assert.ok(/收集 \d+\/\d+/.test(out.labelAll));
     assert.ok(out.hit > 0);
@@ -2176,10 +2181,16 @@ testCase('C0_new_card_wiring', () => {
   })()`);
   const badFx = out.fxes.filter(s => !fxIds.has(s.split(':')[1]));
 
+  // 图鉴刻印页必须从卡的刻印身份派生，新增刻印才不用手改名单
+  const sigilListFromCards = /ALL_SIGIL_IDS\s*=\s*CIDS\.filter\(isSigilId\)/.test(src);
+  const codexUsesDerived = /ALL_SIGIL_IDS\.map\(/.test(src);
+
   assert.deepEqual(missingSfx, [], '音效调用必须在音频表有登记');
   assert.deepEqual(missingFx, [], '特效调用必须在特效层有分派');
   assert.deepEqual(badFx, [], '卡牌 fx 别名必须指向已登记特效');
   assert.deepEqual([out.malformed, out.noIcon, out.noSource], [[], [], []]);
+  assert.ok(sigilListFromCards, '刻印名单必须由 CDEFS 的 sigil 身份派生');
+  assert.ok(codexUsesDerived, '图鉴刻印页必须遍历派生名单，不得手写刻印清单');
 });
 
 

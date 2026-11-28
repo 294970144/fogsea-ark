@@ -294,7 +294,7 @@ function engraveCard(uid,targetSlot,dragRect){
   if(displaced)addHandCard(displaced,idx,toRect);
   if(typeof syncSlotEls==='function')syncSlotEls();
   pulseSlot(slot,true);
-  if(def.sigilOnly)bumpSeen('sigil',card.id);else bumpSeen('play',card.id);
+  if(isSigilId(card.id))bumpSeen('sigil',card.id);else bumpSeen('play',card.id);
   toast(displaced?'替换 '+def.name:'已刻印 '+def.name,'good');sfx('level');
   return true;
 }
