@@ -181,7 +181,7 @@ function banner(title,sub,cls){
 }
 
 /* ---------------- 图鉴 ---------------- */
-const CX_CATS=[{id:'all',name:'全部'},{id:'role',name:'角色'},{id:'res',name:'资源'},{id:'card',name:'卡牌'},
+const CX_CATS=[{id:'all',name:'全部'},{id:'role',name:'角色'},{id:'sigil',name:'刻印'},{id:'res',name:'资源'},{id:'card',name:'卡牌'},
   {id:'foe',name:'雾裔'},{id:'bless',name:'祝福'},{id:'legacy',name:'传承'},{id:'term',name:'术语'}];
 const foeNow=t=>Math.round(FOES[t].hp*DIFFS[save.diff].hp*dayScale(Math.max(1,S.day)));
 // 刻印摘要：图鉴多处引用同一份持有情况
@@ -236,7 +236,7 @@ const CODEX=[
           ([['来源',name+' · '+hits+' 次挥刃'],['单次产出',y[0]+'–'+y[1]],['用途',use]]))];
       return {id,cat:'res',name,icon,color:RESCOL[id],sprite,desc,stats,rel};
     }),
-  ...CARD_IDS.map(id=>{
+  ...CARD_IDS.filter(id=>!CDEFS[id].sigilOnly).map(id=>{
     const d=CDEFS[id];
     return {id:'c_'+id,cat:'card',name:d.name,icon:d.icon,color:d.color,
       sprite:d.kind==='build'?d.build:null,
@@ -300,10 +300,11 @@ const CODEX=[
       ['本局叠加','×'+(P.stacks[b.id]||0)],['累计选用',save.seen.card[b.id]||0]],
     rel:['dawn','keeper','hand']})),
   ...SIGIL_IDS.map(id=>{const s=SIGILS[id];
-    return {id:'s_'+id,cat:'role',name:s.n,icon:s.icon,color:s.color,
+    return {id:'s_'+id,cat:'sigil',name:s.n,icon:s.icon,color:s.color,
       desc:sigilDesc(id)+'。卡牌从牌库抽到后拖入武器槽位，同种可叠装但受牌库张数限制；纯数值刻印不能拖地释放。',
-      tags:sigilTags(s),badge:()=>{const n=(save.seen.sigil||{})[id]||0;return n?'×'+n:'';},
+      tags:sigilTags(s),badge:()=>{const n=cardTotal(id);return n?'×'+n:'';},
       stats:()=>[['效果',sigilDesc(id)],
+        ['牌库中',cardTotal(id)+' 张'],
         ['本局持有',(P.sigils||[]).filter(x=>x&&x.id===id).length+' 份'],
         ['累计铭刻',((save.seen.sigil||{})[id]||0)+' 枚']],
       rel:['keeper','dawn','w_sword']};}),

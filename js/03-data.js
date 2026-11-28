@@ -122,32 +122,32 @@ const CDEFS={
     status:{kind:'chill',n:2}},
   sp_arcbolt:{id:'sp_arcbolt',shape:'single',elem:'arcane',weaponAttack:true,dmg:10,
     status:{kind:'mark',n:1}},
-  sp_kindling:{id:'sp_kindling',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,fx:'sp_fireball',
+  sp_kindling:{id:'sp_kindling',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,sigil:true,fx:'sp_fireball',
     name:'引火术',icon:'flame',color:ELEMCOL.fire,cost:{},mana:15,radius:1.35,dmg:8,spreadFire:true,
     status:{kind:'burn',n:1},desc:'1.35 格内造成 8 点火伤并附加灼烧，可引燃邻近敌人与树木。',w:10,wNonMage:7},
-  sp_frostpatch:{id:'sp_frostpatch',kind:'instant',target:'point',shape:'point',elem:'frost',cls:'mage',basic:true,fx:'sp_frostbolt',
+  sp_frostpatch:{id:'sp_frostpatch',kind:'instant',target:'point',shape:'point',elem:'frost',cls:'mage',basic:true,sigil:true,fx:'sp_frostbolt',
     name:'霜痕',icon:'snow',color:ELEMCOL.frost,cost:{},mana:15,radius:1.9,dmg:8,
     status:{kind:'chill',n:2},desc:'1.9 格内造成 8 点冰伤并附加 2 层冰缓。',w:10,wNonMage:7},
-  sp_arcaneneedle:{id:'sp_arcaneneedle',kind:'instant',target:'point',shape:'single',elem:'arcane',cls:'mage',basic:true,fx:'sp_arcbolt',
+  sp_arcaneneedle:{id:'sp_arcaneneedle',kind:'instant',target:'point',shape:'single',elem:'arcane',cls:'mage',basic:true,sigil:true,fx:'sp_arcbolt',
     name:'奥术针',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,radius:1.1,dmg:24,
     status:{kind:'mark',n:1},desc:'命中落点 1.1 格内最近的敌人，造成 24 点奥术伤害并附加标记。',w:10,wNonMage:7},
-  sp_emberburst:{id:'sp_emberburst',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,
+  sp_emberburst:{id:'sp_emberburst',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,sigil:true,
     name:'余烬爆发',icon:'emberburst',color:ELEMCOL.fire,cost:{},mana:30,radius:2.2,dmg:30,
     status:{kind:'burn',n:2},desc:'指定区域 2.2 格内 30 火焰伤害，附加 2 层灼烧。',w:10,wNonMage:5},
   // 烈焰冲击是天降：落点固定、垂直落下，没有水平弹道可拦，故不标 proj
-  sp_flameimpact:{id:'sp_flameimpact',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',core:true,
+  sp_flameimpact:{id:'sp_flameimpact',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',core:true,sigil:true,
     name:'烈焰冲击',icon:'flame',color:ELEMCOL.fire,cost:{},mana:45,radius:1.9,dmg:55,
     status:{kind:'burn',n:3},desc:'核心火系法术：1.9 格内 55 火焰伤害，附加 3 层灼烧。',w:0},
-  sp_flamedetonate:{id:'sp_flamedetonate',kind:'instant',target:'point',shape:'consume',elem:'fire',cls:'mage',core:true,
+  sp_flamedetonate:{id:'sp_flamedetonate',kind:'instant',target:'point',shape:'consume',elem:'fire',cls:'mage',core:true,sigil:true,
     name:'火焰引爆',icon:'emberburst',color:ELEMCOL.fire,cost:{},mana:30,radius:2.6,dmg:12,
     desc:'引爆目标身上所有灼烧层数，每层造成 12 火焰伤害。',w:0},
-  sp_blizzard:{id:'sp_blizzard',kind:'instant',target:'self',shape:'global',elem:'frost',cls:'mage',core:true,
+  sp_blizzard:{id:'sp_blizzard',kind:'instant',target:'self',shape:'global',elem:'frost',cls:'mage',core:true,sigil:true,
     name:'暴风雪',icon:'snow',color:ELEMCOL.frost,cost:{},mana:45,dmg:26,
     status:{kind:'chill',n:2},desc:'核心冰系法术：对所有敌人造成 26 冰霜伤害，附加 2 层冰缓。',w:0},
-  sp_frostring:{id:'sp_frostring',kind:'instant',target:'self',shape:'self',elem:'frost',cls:'mage',core:true,
+  sp_frostring:{id:'sp_frostring',kind:'instant',target:'self',shape:'self',elem:'frost',cls:'mage',core:true,sigil:true,
     name:'冰封之环',icon:'snow',color:ELEMCOL.frost,cost:{},mana:30,radius:3.2,dmg:18,
     status:{kind:'freeze',n:1},desc:'核心冰系法术：冻结周围 3.2 格内敌人 1 秒并造成 18 冰霜伤害。',w:0},
-  sp_magicmissile:{id:'sp_magicmissile',kind:'instant',target:'self',shape:'multi',elem:'arcane',cls:'mage',core:true,proj:true,
+  sp_magicmissile:{id:'sp_magicmissile',kind:'instant',target:'self',shape:'multi',elem:'arcane',cls:'mage',core:true,sigil:true,proj:true,
     name:'魔法飞弹',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,dmg:14,missiles:3,
     status:{kind:'mark',n:1},desc:'核心奥术法术：向最近 3 个敌人各发射 1 枚 14 伤害飞弹。',w:0},
   manawell:{id:'manawell',kind:'build',build:'manawell',cls:'mage',
@@ -156,15 +156,15 @@ const CDEFS={
   class_mage:{id:'class_mage',kind:'class',target:'self',cls:'class',name:'法师',icon:'mage',color:'#b48cff',cost:{},mana:0,
     desc:'职业启动器：转职为法师，以法力施法。生命上限降低，手牌上限提高。',w:0},
   /* ---- 熔铸产物：只能由熔铸获得，不进奖励池，也不能再次作为熔铸源 ---- */
-  fuse_steam:{id:'fuse_steam',kind:'instant',target:'point',shape:'point',elem:'fire',elem2:'frost',fuseOut:true,q:2,fx:'sp_emberburst',
+  fuse_steam:{id:'fuse_steam',kind:'instant',target:'point',shape:'point',elem:'fire',elem2:'frost',fuseOut:true,q:2,sigil:true,fx:'sp_emberburst',
     name:'霜火交攻',icon:'steam',color:'#9ad7e8',cost:{},mana:30,radius:2.0,dmg:34,
     status:{kind:'burn',n:2},status2:{kind:'chill',n:2},
     desc:'指定区域 2 格内 34 点火焰伤害，附加 2 层灼烧与 2 层冰缓。霜火相激，可引爆蒸汽爆炸。',w:0},
-  fuse_ember:{id:'fuse_ember',kind:'instant',target:'point',shape:'point',elem:'fire',elem2:'arcane',fuseOut:true,q:2,fx:'sp_emberburst',
+  fuse_ember:{id:'fuse_ember',kind:'instant',target:'point',shape:'point',elem:'fire',elem2:'arcane',fuseOut:true,q:2,sigil:true,fx:'sp_emberburst',
     name:'烬纹',icon:'emberburst',color:'#ff9d5c',cost:{},mana:30,radius:1.8,dmg:30,
     status:{kind:'burn',n:2},status2:{kind:'mark',n:1},
     desc:'指定区域 1.8 格内 30 点火焰伤害，附加 2 层灼烧与 1 层奥术标记。火与奥术共鸣，可引发共鸣扩散。',w:0},
-  fuse_frostarc:{id:'fuse_frostarc',kind:'instant',target:'point',shape:'point',elem:'frost',elem2:'arcane',fuseOut:true,q:2,fx:'sp_frostbolt',
+  fuse_frostarc:{id:'fuse_frostarc',kind:'instant',target:'point',shape:'point',elem:'frost',elem2:'arcane',fuseOut:true,q:2,sigil:true,fx:'sp_frostbolt',
     name:'霜纹',icon:'snow',color:'#9ecbff',cost:{},mana:30,radius:1.8,dmg:28,
     status:{kind:'chill',n:2},status2:{kind:'mark',n:1},
     desc:'指定区域 1.8 格内 28 点冰霜伤害，附加 2 层冰缓与 1 层奥术标记。冰与奥术共鸣，可引发共鸣扩散。',w:0},
@@ -182,9 +182,9 @@ const CDEFS={
   keen:{id:'keen',kind:'utility',sigil:true,sigilOnly:true,name:'锋锐刻印',icon:'crit',color:'#ffb454',cost:{},desc:'',brief:'',w:6,wNonMage:6},
   swift:{id:'swift',kind:'utility',sigil:true,sigilOnly:true,name:'迅捷刻印',icon:'bolt',color:'#8fe3d0',cost:{},desc:'',brief:'',w:6,wNonMage:6},
   echo:{id:'echo',kind:'utility',sigil:true,sigilOnly:true,name:'回响刻印',icon:'wave',color:'#c9a8ff',cost:{},desc:'',brief:'',w:6,wNonMage:6},
-  burst:{id:'burst',kind:'utility',sigil:true,sigilOnly:true,name:'二重法术',icon:'burst',color:'#ffd166',cost:{},desc:'',brief:'',w:6,wNonMage:6},
-  scatter:{id:'scatter',kind:'utility',sigil:true,sigilOnly:true,name:'二叉',icon:'wind',color:'#ffb454',cost:{},desc:'',brief:'',w:6,wNonMage:6},
-  trident:{id:'trident',kind:'utility',sigil:true,sigilOnly:true,name:'三叉',icon:'thorn',color:'#c9a8ff',cost:{},desc:'',brief:'',w:6,wNonMage:6}
+  burst:{id:'burst',kind:'utility',sigil:true,sigilOnly:true,name:'二重法术',icon:'sigBurst',color:'#ffd166',cost:{},desc:'',brief:'',w:6,wNonMage:6},
+  scatter:{id:'scatter',kind:'utility',sigil:true,sigilOnly:true,name:'二叉',icon:'sigScatter',color:'#ffb454',cost:{},desc:'',brief:'',w:6,wNonMage:6},
+  trident:{id:'trident',kind:'utility',sigil:true,sigilOnly:true,name:'三叉',icon:'sigTrident',color:'#c9a8ff',cost:{},desc:'',brief:'',w:6,wNonMage:6}
 };
 /* 法术刻印：带 sigil 标记的卡 —— 既能装入法杖槽自动施放，也能当瞬发牌拖地释放。
    效果数值从武器攻击模板派生，避免同一份数值写两处。 */
@@ -205,12 +205,6 @@ for(const s of SIGIL_SPELLS){
 const SIGIL_SPELL_IDS=SIGIL_SPELLS.map(s=>s.id);
 const CIDS=Object.keys(CDEFS);
 const CARD_IDS=CIDS.filter(id=>!CDEFS[id].weaponAttack);
-/* 法术卡天然带刻印标签：只要是可打出的元素瞬发牌，就能装进法杖槽。
-   数值刻印卡由 sigilOnly 挡住，不能拖地释放。 */
-for(const id of CARD_IDS){
-  const d=CDEFS[id];
-  if(d.kind==='instant'&&d.elem&&!d.sigilOnly)d.sigil=true;
-}
 /* 品质默认「普通」：q 为档位号，1 普通 / 2 稀有 / 3 史诗 */
 for(const id in CDEFS)if(CDEFS[id].q==null)CDEFS[id].q=1;
 /* ---------------- 起始牌库 ----------------
@@ -300,9 +294,9 @@ const SIGILS={
   swift:{id:'swift',n:'迅捷刻印',short:'迅捷',icon:'bolt',color:'#8fe3d0',spd:.15,mana:3},
   echo:{id:'echo',n:'回响刻印',short:'回响',icon:'wave',color:'#c9a8ff',echo:.25,mana:3},
   // 功能类：op 指定它怎样改写施放链（算子表 SIGIL_OPS 在 07-combat.js），copies/spread/dmgB 是参数
-  burst:{id:'burst',n:'二重法术',short:'二重',icon:'burst',color:'#ffd166',op:'repeat',copies:2,dmgB:.7,mana:5},
-  scatter:{id:'scatter',n:'二叉',short:'二叉',icon:'wind',color:'#ffb454',op:'fan',copies:2,spread:90,dmgB:.55,mana:5},
-  trident:{id:'trident',n:'三叉',short:'三叉',icon:'thorn',color:'#c9a8ff',op:'fan',copies:3,spread:20,dmgB:.45,mana:5}
+  burst:{id:'burst',n:'二重法术',short:'二重',icon:'sigBurst',color:'#ffd166',op:'repeat',copies:2,dmgB:.7,mana:5},
+  scatter:{id:'scatter',n:'二叉',short:'二叉',icon:'sigScatter',color:'#ffb454',op:'fan',copies:2,spread:90,dmgB:.55,mana:5},
+  trident:{id:'trident',n:'三叉',short:'三叉',icon:'sigTrident',color:'#c9a8ff',op:'fan',copies:3,spread:20,dmgB:.45,mana:5}
 };
 const SIGIL_IDS=Object.keys(SIGILS);
 // 文案实时派生：改数值即改描述，避免与表漂移

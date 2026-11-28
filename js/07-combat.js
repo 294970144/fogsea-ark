@@ -17,7 +17,8 @@ function weaponRechargeTime(w=weaponDef(P.weapon),casts=1){
   return Math.max(0,rc-cycle*(1-1/spd));
 }
 function weaponCastCost(w,cast){
-  return cast.last?weaponRechargeTime(w,cast.n):weaponCastDelay(w);
+  const extra=((cast.def&&cast.def.castDelay)||0)/P.atkSpd;
+  return (cast.last?weaponRechargeTime(w,cast.n):weaponCastDelay(w))+extra;
 }
 /* 原生散布：每次施放在瞄准角上抖动 ±TUNE.weapon.spread 度，避免连发弹道完全重合。
    走独立随机流，不消耗 Math.random——否则会连带位移刷怪与掉落的随机序列。 */

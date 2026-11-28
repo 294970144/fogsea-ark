@@ -1114,10 +1114,10 @@ testCase('R22_weapon', () => {
       const after=CODEX.find(x=>x.id==='s_keen').stats().find(x=>x[0]==='效果')[1];
       SIGILS.keen.dmg=.2;
       return JSON.stringify({ids,count:entries.length,metaOk,descOk,before,after,
-        catOk:!CX_CATS.some(c=>c.id==='sigil')&&CX_CATS.some(c=>c.id==='role'),
-        inRole:entries.every(e=>e.cat==='role')});
+        catOk:CX_CATS.some(c=>c.id==='sigil'),
+        inSigil:entries.every(e=>e.cat==='sigil')});
     })()`);
-    assert.deepEqual([derived.ids, derived.count, derived.metaOk, derived.descOk, derived.catOk, derived.inRole],
+    assert.deepEqual([derived.ids, derived.count, derived.metaOk, derived.descOk, derived.catOk, derived.inSigil],
       [['keen', 'swift', 'echo', 'burst', 'scatter', 'trident'], 6, true, true, true, true]);
     assert.notEqual(derived.before, derived.after);
     assert.ok(derived.after.includes('50%'));
@@ -1155,8 +1155,9 @@ testCase('R22_weapon', () => {
     const out = j(env)(`(()=>{
       const byId=id=>CODEX.find(e=>e.id===id);
       const cats=CX_CATS.map(c=>c.id),tagIds=CX_TAGS.map(t=>t.id);
-      const cover=CARD_IDS.every(id=>Array.isArray(byId('c_'+id).tags));
-      const untagged=CARD_IDS.filter(id=>!byId('c_'+id).tags.length);
+      const listed=CARD_IDS.filter(id=>!CDEFS[id].sigilOnly);
+      const cover=listed.every(id=>Array.isArray(byId('c_'+id).tags));
+      const untagged=listed.filter(id=>!byId('c_'+id).tags.length);
       const s={kindling:byId('c_sp_kindling').tags,arcneedle:byId('c_sp_arcaneneedle').tags,
         mine:byId('c_mine').tags,tactic:byId('c_tactic').tags,wall:byId('c_wall').tags,
         flame:byId('w_flame').tags,sword:byId('w_sword').tags,keen:byId('s_keen').tags};
@@ -1179,11 +1180,13 @@ testCase('R22_weapon', () => {
       cxSelect('w_flame',false);
       return JSON.stringify({cats,tagIds,cover,untagged,s,deadTag,ownW,ownS,wLen:WEAPON_IDS.length,sLen:SIGIL_IDS.length,
         sigilCards:CARD_IDS.filter(id=>CDEFS[id].sigil).length,
+        pureSigils:CARD_IDS.filter(id=>CDEFS[id].sigilOnly).length,
         tplInCodex,unknown,dup,all,cards,cardsLen:CARD_IDS.length,labelAll,hit,etHtml,titleOn,etNone,titleOff,
-        badge:typeof byId('s_keen').badge,catOfSigil:byId('s_keen').cat});
+        badge:typeof byId('s_keen').badge,catOfSigil:byId('s_keen').cat,
+        sigilCat:CODEX.filter(e=>e.cat==='sigil').length});
     })()`);
-    // 1) 分类恢复 8 项，刻印不再单独成类
-    assert.deepEqual([out.cats, out.catOfSigil, out.badge], [['all', 'role', 'res', 'card', 'foe', 'bless', 'legacy', 'term'], 'role', 'function']);
+    // 1) 分类 9 项，刻印独立成类
+    assert.deepEqual([out.cats, out.catOfSigil, out.badge], [['all', 'role', 'sigil', 'res', 'card', 'foe', 'bless', 'legacy', 'term'], 'sigil', 'function']);
     // 2) 18 个标签（16 能力 + 2 归属）、无重复、无死标签
     assert.equal(out.tagIds.length, 18);
     assert.equal(new Set(out.tagIds).size, 18);
@@ -1193,7 +1196,7 @@ testCase('R22_weapon', () => {
     assert.deepEqual(out.dup, []);
     // 归属标签：武器只命中武器；sigil 命中所有可装槽的卡与数值刻印
     assert.equal(out.ownW, out.wLen);
-    assert.equal(out.ownS, out.sLen+out.sigilCards);
+    assert.equal(out.ownS, out.sLen+out.sigilCards-out.pureSigils);
     // 3) 每张卡牌都挂了 tags（白名单与具体数量交给新牌体检）
     assert.equal(out.cover, true);
     // 4) 派生规则：单体优先于范围；元素/法力/范围/状态四条链路
@@ -1211,7 +1214,8 @@ testCase('R22_weapon', () => {
     // 6) 武器攻击模板不进图鉴
     assert.equal(out.tplInCodex, false);
     // 7) 标签只做展示，不再参与筛选：分类与搜索仍是唯二过滤条件
-    assert.equal(out.cards, out.cardsLen);
+    assert.equal(out.cards, out.cardsLen-out.pureSigils);
+    assert.equal(out.sigilCat, out.sLen);
     assert.ok(!out.labelAll.includes('已选'));
     assert.ok(/已记录 \d+\/\d+/.test(out.labelAll));
     assert.ok(out.hit > 0);
@@ -1993,7 +1997,7 @@ testCase('C0_new_card_wiring', () => {
 
   // 黄金值只在新牌体检里维护，日常回归不再重复
   assert.deepEqual([out.total, out.wall, out.tower, out.rain, out.spring, out.tactic, out.sigils, out.salvage, out.recipes, out.recipeQ, out.untagged, out.codexAll],
-    [143, 30, 24, 10, 10, 10, [6, 6, 6, 4, 4, 4], [4, 2, 1], 6, [2, 2, 2, 2, 3, 3], ['surge', 'salvage5', 'salvage10', 'salvage20', 'class_mage'], 119]);
+    [143, 30, 24, 10, 10, 10, [6, 6, 6, 4, 4, 4], [4, 2, 1], 6, [2, 2, 2, 2, 3, 3], ['surge', 'salvage5', 'salvage10', 'salvage20', 'class_mage'], 113]);
 });
 
 
