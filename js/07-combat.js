@@ -613,7 +613,13 @@ function enterNextDay(){
   });
   if(regrew){rebuildSolids();rebuildTileCost();fieldDirty=true;}
   auPhase(false);sfx('dawn');
-  openDawn();
+  const grown=expandField();
+  if(grown){
+    S.mode='dawn';S.dawnStep=-1;
+    banner(`第 ${S.day} 日 · 雾海退潮`,`陆地向外延伸 ${grown.r-grown.oldR} 格`,'good');
+    toast('旧滩涂化为陆地，外侧生出新的海岸','good');
+    if(!startReveal(grown,openDawn))openDawn();
+  }else openDawn();
 }
 function dawn(){
   if(S.mode!=='play')return;
@@ -628,7 +634,7 @@ function updateFoes(dt){
   rebuildFoeGrid();
   if(fieldDirty){rebuildTileCost();computeField(coreField,core.x,core.y);fieldDirty=false;plyFieldT=0;}
   plyFieldT-=dt;
-  const pt=(P.y|0)*GRID+(P.x|0);
+  const pt=tileIndex(P.x,P.y);
   let needPly=false;for(const f of foes)if(f.target==='player'){needPly=true;break;}
   if(!P.downed&&(needPly||S.phase==='night')&&(plyFieldT<=0||pt!==plyTile)){
     computeField(plyField,P.x,P.y);plyTile=pt;plyFieldT=.2;

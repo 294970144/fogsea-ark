@@ -3,7 +3,21 @@
    雾海方舟
    资源即费用 / 拖拽或点选落地 / 白红预览 / 黎明抽牌与祝福
 ========================================================== */
-const TAU=Math.PI*2,TW=64,TH=32,GRID=40,CEN=GRID/2,NN=GRID*GRID;
+const TAU=Math.PI*2,TW=64,TH=32;
+// 场地半径的唯一配置真源：所有地形阈值、出生点、节点密度与扩张规则都从这里推导
+const FIELD={
+  baseLand:15.6,sandWidth:1.7,coreSafe:4.5,edgeInset:3.3,edgeFallbackInset:6.6,minEdgeSpawns:8,
+  noiseScale:.33,noiseAmp:2.6,nodeSpacing:1.8,nodeTries:1200,
+  nodeCounts:{tree:24,rock:14,crys:10},nodeMinD:{tree:4.2,rock:4.6,crys:7},
+  period:14,delta:2,maxRadius:100,margin:2,chunk:32,maxNodes:3000,revealTime:1.5
+};
+const maxLevel=()=>Math.ceil((FIELD.maxRadius-FIELD.baseLand)/FIELD.delta);
+const levelForDay=d=>clamp(Math.floor((d-1)/FIELD.period),0,maxLevel());
+const radiusForLevel=l=>Math.min(FIELD.maxRadius,FIELD.baseLand+l*FIELD.delta);
+const BASE_GRID=2*Math.ceil(FIELD.baseLand+FIELD.sandWidth+FIELD.margin),CEN=BASE_GRID/2;
+const gridFor=r=>Math.max(BASE_GRID,2*Math.ceil(r+FIELD.sandWidth+FIELD.margin));
+const offFor=r=>gridFor(r)/2-CEN;
+let GRID=BASE_GRID,NN=GRID*GRID,OFF=0;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t;
 const rand=(a=1,b)=>b===undefined?Math.random()*a:a+Math.random()*(b-a);
 const irand=(a,b)=>Math.floor(rand(a,b+1));
@@ -115,6 +129,8 @@ function validateSlot(s){
   if(!Number.isInteger(n.seed))return false;
   if(!n.S||typeof n.S!=='object'||!n.P||typeof n.P!=='object'||!n.res||typeof n.res!=='object')return false;
   if(!n.S.stats||typeof n.S.stats!=='object'||!n.P.aff||typeof n.P.aff!=='object'||!n.P.stacks||typeof n.P.stacks!=='object')return false;
+  // fieldLevel 是后加字段：缺失视为旧档，存在时必须合法，避免坏档绕过半径重建
+  if(n.S.fieldLevel!==undefined&&(!Number.isInteger(n.S.fieldLevel)||n.S.fieldLevel<0||n.S.fieldLevel>maxLevel()))return false;
   if(![n.P.hp,n.P.maxHp,n.P.en,n.P.maxEn,n.S.timeLeft,n.S.day].every(Number.isFinite))return false;
   const d=n.DECK;
   if(!d||typeof d!=='object'||!['draw','hand','discard'].every(k=>Array.isArray(d[k])&&d[k].every(_slotCardOK)))return false;
@@ -122,7 +138,7 @@ function validateSlot(s){
   if(!Array.isArray(n.P.sigils)||n.P.sigils.length>weaponDef(n.P.weapon).slots||!n.P.sigils.every(c=>c===null||_slotCardOK(c)))return false;
   if(!Number.isInteger(d.max)||!Number.isInteger(d.uid))return false;
   if(!['nodes','fogBlobs','builds','foes','warns','shots'].every(k=>Array.isArray(n[k])))return false;
-  if(n.foes.length>SLOT_FOE_CAP||n.shots.length>240||n.warns.length>80||n.nodes.length>240)return false;
+  if(n.foes.length>SLOT_FOE_CAP||n.shots.length>240||n.warns.length>80||n.nodes.length>FIELD.maxNodes)return false;
   if(!n.core||typeof n.core!=='object'||!Number.isFinite(n.core.hp)||!Number.isFinite(n.core.max))return false;
   return true;
 }

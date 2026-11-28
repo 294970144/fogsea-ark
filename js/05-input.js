@@ -21,6 +21,7 @@ function cheatKey(k){
 function clearHold(){if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}}
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
+  if(fieldReveal){e.preventDefault();finishReveal();return;}
   if(weaponPicker){
     if(e.ctrlKey||e.metaKey||e.altKey)return;
     if(k==='escape'){
@@ -111,6 +112,7 @@ addEventListener('pointermove',e=>{
 },{passive:true});
 cv.addEventListener('pointerdown',e=>{
   auInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();
+  if(fieldReveal){finishReveal();return;}
   mouseX=e.clientX;mouseY=e.clientY;mouseActive=true;updateMouseWorld();
   if(S.mode!=='play'||codexOpen)return;
   if(S.dragUid&&e.pointerId!==S.dragPointerId)return;

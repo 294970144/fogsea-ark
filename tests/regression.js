@@ -180,6 +180,77 @@ testCase('R0_seven_nights_and_save_baseline', () => {
   assert.deepEqual(captureSaves(), GOLDEN.saves);
 });
 
+testCase('R36_field_expansion', () => {
+  const FIELD_DELTA = 2;
+  const snap = env => env.run(`JSON.stringify({day:S.day,level:S.fieldLevel,r:radiusForLevel(S.fieldLevel),
+    grid:GRID,off:OFF,nn:NN,tiles:tiles.length,cost:tileCost.length,solids:solidGrid.length,
+    edges:edgeSpawns.length,nodes:nodes.length,mode:S.mode,dawnStep:S.dawnStep,reveal:!!fieldReveal})`);
+  const land = env => env.run(`JSON.stringify((()=>{const a=[];
+    for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){const t=tiles[iy*GRID+ix];
+      if(t.land)a.push([ix-OFF,iy-OFF,t.sand?1:0]);}
+    return a.sort((p,q)=>p[0]-q[0]||p[1]-q[1]);})())`);
+  const env = makeEnv();
+  env.run(`initRun();S.endless=true;S.day=13;S.mode='play';enterNextDay();`);
+  const d14 = JSON.parse(snap(env));
+  assert.equal(d14.day, 14); assert.equal(d14.level, 0); assert.equal(d14.grid, 40); assert.equal(d14.off, 0);
+  assert.equal(d14.reveal, false);
+  const beforeLand = JSON.parse(land(env));
+  const beforeNodes = env.run('JSON.stringify(nodes)');
+
+  env.run(`S.day=14;enterNextDay();`);
+  const d15 = JSON.parse(snap(env));
+  assert.equal(d15.day, 15); assert.equal(d15.level, 1);
+  assert.ok(Math.abs(d15.r - (d14.r + FIELD_DELTA)) < 1e-9, '每次扩张半径 +2');
+  assert.equal(d15.grid, 44); assert.equal(d15.off, 2);
+  assert.equal(d15.tiles, d15.nn); assert.equal(d15.cost, d15.nn);
+  assert.equal(d15.reveal, true); assert.equal(d15.dawnStep, -1);
+  assert.ok(d15.edges >= 8);
+
+  const afterLand = JSON.parse(land(env));
+  const beforeMap = new Map(beforeLand.map(v => [v[0] + ',' + v[1], v[2]]));
+  const afterMap = new Map(afterLand.map(v => [v[0] + ',' + v[1], v[2]]));
+  let grew = 0, sandGone = 0, newSand = 0;
+  for (const [k, sand] of beforeMap) {
+    assert.ok(afterMap.has(k), '旧陆地不能被吞掉: ' + k);
+    if (sand && afterMap.get(k) === 0) sandGone++;
+  }
+  for (const [k, sand] of afterMap) if (!beforeMap.has(k)) { grew++; if (sand) newSand++; }
+  assert.ok(grew > 0 && sandGone > 0 && newSand > 0, '旧沙变陆、外侧长新沙');
+
+  const afterNodes = JSON.parse(env.run('JSON.stringify(nodes)'));
+  assert.deepEqual(afterNodes.slice(0, JSON.parse(beforeNodes).length), JSON.parse(beforeNodes), '旧节点原样保留');
+  assert.ok(afterNodes.length > JSON.parse(beforeNodes).length, '新增区域按密度补放节点');
+
+  const randomCalls = env.run(`(()=>{const orig=Math.random;let n=0;Math.random=()=>{n++;return .5;};
+    S.day=28;enterNextDay();Math.random=orig;return n;})()`);
+  assert.equal(randomCalls, 0, '扩张演出与节点追加不得消耗随机数');
+
+  const d29 = JSON.parse(snap(env));
+  assert.equal(d29.day, 29); assert.equal(d29.level, 2);
+  assert.equal(d29.reveal, true);
+  env.run('finishReveal()');
+  const afterSkip = JSON.parse(snap(env));
+  assert.equal(afterSkip.reveal, false); assert.equal(afterSkip.dawnStep, 0);
+
+  const cap = makeEnv();
+  const capped = cap.run(`initRun();S.endless=true;S.fieldLevel=maxLevel();S.day=14*60+1;
+    JSON.stringify({r:radiusForLevel(S.fieldLevel),lv:S.fieldLevel,max:maxLevel(),grown:!!expandField()})`);
+  const c = JSON.parse(capped);
+  assert.equal(c.r, 100, '半径上限为 100');
+  assert.equal(c.lv, c.max);
+  assert.equal(c.grown, false, '到达上限后不再触发扩张');
+
+  const round = env.run(`(()=>{const s=captureSnapshot();initRun();restoreSnapshot(s);
+    return JSON.stringify({level:S.fieldLevel,r:radiusForLevel(S.fieldLevel),grid:GRID,off:OFF,nodes:nodes.length});})()`);
+  const rr = JSON.parse(round);
+  assert.equal(rr.level, 2); assert.equal(rr.grid, d29.grid); assert.equal(rr.off, d29.off);
+  assert.equal(rr.nodes, d29.nodes);
+
+  const legacy = env.run(`(()=>{const s=captureSnapshot();delete s.S.fieldLevel;initRun();restoreSnapshot(s);
+    return JSON.stringify({level:S.fieldLevel,grid:GRID,off:OFF});})()`);
+  assert.deepEqual(JSON.parse(legacy), { level: 0, grid: 40, off: 0 }, '旧档按 0 级恢复');
+});
+
 testCase('R1_settlement', () => {
   { // R1_settlement_and_endless
     const env = makeEnv();

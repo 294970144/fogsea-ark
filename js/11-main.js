@@ -431,6 +431,7 @@ let lastT=performance.now();
 function loop(now){
   requestAnimationFrame(loop);
   const dt=Math.min((now-lastT)/1000,1/30);lastT=now;
+  if(fieldReveal)advanceReveal(dt);
   if(codexOpen){S.elapsed+=dt*.35;render();cxDrawPreview(dt);return;}
   if(S.mode==='menu'||S.mode==='prep'){
     S.elapsed+=dt;

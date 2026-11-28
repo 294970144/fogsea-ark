@@ -119,6 +119,16 @@ render(); syncHUD();
 1. **启动期随机序列必须稳定**。`genWorld()` 默认走 `(Math.random()*1e9)|0`（`02-world:46`），牌库洗牌另开独立 xorshift 流（`04-state:68-77`），存档槽段「不得调用 rand/irand/Math.random」（`00-core:90`）。原因是前 7 夜基线要求逐值可复现。
 2. **`hash/vnoise` 与 tile 生成不得引入随机**（`02-world:44`）。地形恢复只靠 seed，一旦掺随机，读档地形就会变。
 3. **`FX.*` 特效入口统一保护**：后端未就绪时静默 return，不回退 Canvas 2D（`09b-fx:1420-1423`）。所以业务代码可以直接 `FX.cast(...)`，不需要判断后端。
+4. **世界坐标与数组下标分离**：实体坐标以固定中心 `CEN` 为原点；扩图只增大 `GRID` 并把偏移 `OFF` 推入网格访问口 `tileIndex/toCell`（`02-world`），不在战斗/UI 代码里散落 `OFF`。地面按 `FIELD.chunk` 懒烘焙分块，避免大半径时生成巨幅画布。
+
+## 场地扩张
+
+`FIELD`（`00-core:6`）是半径语义的唯一配置源：陆地、沙滩、出生边缘、节点密度、触发周期、每次增量与上限全部由它推导。`radiusForLevel(level)` 是半径唯一计算路径；`levelForDay(day)` 在第 15、29、43…… 天给出新等级。
+
+- `expandField()` 只在无尽模式执行，用 `reallocWorld → fillTerrain → rebuildEdgeSpawns` 按 `(seed, 世界坐标, 半径)` 纯函数重算地形：旧陆地不变、旧沙变陆、外侧长新沙。
+- 新环带的节点用 `hash` 派生，扩张全程不调用 `Math.random`；旧节点原样保留。
+- `S.fieldLevel` 是唯一持久化状态（`S_SAVE_FIELDS`），读档时按它重建地形；旧档缺字段按 0 处理。
+- 演出状态 `fieldReveal` 只活内存：`enterNextDay` 先冻结玩法并播潮线/噪声侵蚀动画，结束或跳过后才调用 `openDawn()`；`prefers-reduced-motion` 直接跳过。
 
 ## 下一步
 

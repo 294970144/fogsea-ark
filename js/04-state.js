@@ -6,7 +6,7 @@ const S={mode:'menu',phase:'day',day:1,timeLeft:70,toSpawn:0,nightTotal:0,nightK
   speed:1,hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,stats:null,hints:{},elapsed:0,combatT:0,
   aimUid:null,dragUid:null,dragMoved:false,dragStart:[0,0],dragPointerId:null,
   endless:false,endlessBase:null,settled:null,handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],dawnSigils:[],
-  overflowWarned:false};
+  fieldLevel:0,overflowWarned:false};
 const DAY_LEN=70,MAX_NIGHT=7,HAND_CAP=10,REC_CAP=50,FOE_CAP=44;
 /* 个人测试作弊码（仅个人测试用，不在页面呈现任何入口或文案）
    暂停时键入 l3131 切换：雾爆伤害 ×10（提升至 1000%）、范围 ×10（提升 1000%）。 */
@@ -32,6 +32,7 @@ function resetPlayer(){
     stacks:{},anim:0,hurtT:0,swingT:0});
 }
 function initRun(){
+  S.fieldLevel=0;fieldReveal=null;
   genWorld();
   builds=[];foes=[];shots=[];picks=[];parts=[];floats=[];slashes=[];ghosts=[];warns=[];
   spellShots.length=0;pendingHits.length=0;weaponRepeats.length=0;
@@ -42,7 +43,7 @@ function initRun(){
   Object.assign(S,{phase:'day',day:1,timeLeft:DAY_LEN,toSpawn:0,nightTotal:0,nightKilled:0,spawnT:0,
     hitstop:0,launchT:0,overT:0,win:false,nightAmt:0,elapsed:0,combatT:0,hints:{},aimUid:null,dragUid:null,
     dragMoved:false,dragStart:[0,0],dragPointerId:null,endless:false,endlessBase:null,settled:null,
-    handDirty:true,dawnStep:0,dawnSigils:[],
+    handDirty:true,dawnStep:0,dawnCards:[],dawnBless:[],dawnSigils:[],fieldLevel:0,
     stats:{kills:0,gathered:0,dmg:0,nights:0,level:1,played:0}});
   DECK.draw=[];DECK.hand=[];DECK.discard=[];DECK.max=5;DECK.recycle=0;DECK.uid=1;
   // 法杖开局：一张实体法术刻印卡直接进首槽，牌库不再生成同款
@@ -162,7 +163,7 @@ function rollRewards(n){
    const 对象只能原地恢复，禁止对 S/P/DECK/res 重新赋值。 */
 const S_SAVE_FIELDS=['mode','phase','day','timeLeft','toSpawn','nightTotal','nightKilled','spawnT','speed',
   'nightAmt','win','elapsed','combatT','stats','hints','endless','endlessBase','settled',
-  'dawnStep','dawnCards','dawnBless','dawnSigils'];
+  'dawnStep','dawnCards','dawnBless','dawnSigils','fieldLevel'];
 function _pickFields(src,keys){const out={};for(const k of keys)if(k in src)out[k]=src[k];return out;}
 function _clone(v){return JSON.parse(JSON.stringify(v));}
 
@@ -180,7 +181,7 @@ function captureSnapshot(){
   const cards=a=>a.map(c=>({uid:c.uid,id:c.id})).slice(0,400);
   const plain=(a,cap)=>a.map(o=>_clone(o)).slice(0,cap);
   return _clone({
-    seed,nodes:plain(nodes,240),fogBlobs:plain(fogBlobs,40),
+    seed,nodes:plain(nodes,FIELD.maxNodes),fogBlobs:plain(fogBlobs,40),
     S:sd,P:pd,res:_clone(res),
     DECK:{draw:cards(DECK.draw),hand:cards(DECK.hand),discard:cards(DECK.discard),
       max:DECK.max,recycle:DECK.recycle,uid:DECK.uid},
@@ -193,8 +194,11 @@ function _putArr(dst,src){dst.length=0;for(const x of src)dst.push(x);}
 function restoreSnapshot(s){
   if(!s||typeof s!=='object')return false;
   const d=_clone(s);
-  // 地形由 seed 完全决定；nodes/fogBlobs 含随机摆放，必须覆盖 genWorld 重新掷出的结果
-  genWorld(d.seed);
+  // 地形由 seed + 半径等级决定；nodes/fogBlobs 含随机摆放，必须覆盖 genWorld 重新掷出的结果
+  const lv=Number.isInteger(d.S&&d.S.fieldLevel)?clamp(d.S.fieldLevel,0,maxLevel()):0;
+  if(!d.S||typeof d.S!=='object')d.S={};
+  d.S.fieldLevel=lv;fieldReveal=null;
+  genWorld(d.seed,lv);
   _putArr(nodes,d.nodes.map(n=>_clone(n)));
   _putArr(fogBlobs,d.fogBlobs.map(b=>_clone(b)));
   rebuildSolids();rebuildTileCost();fieldDirty=true;

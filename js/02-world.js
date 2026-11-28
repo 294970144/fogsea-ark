@@ -28,7 +28,18 @@ function resize(){
 addEventListener('resize',resize);
 
 /* ---------------- 世界 ---------------- */
-let tiles=[],groundCv=null,mmMask=null,edgeSpawns=[];
+let tiles=[],mmMask=null,edgeSpawns=[];
+const groundChunks=new Map(); // 地面分块缓存：只烘焙视口内块，避免大半径时生成巨幅画布
+let fieldReveal=null; // 扩图演出状态：只活在内存里，不进存档
+// 世界坐标 ↔ 数组下标的唯一转换口：实体始终用世界坐标，只有访问网格时才加 OFF
+const toCell=(x,y)=>[(x+OFF)|0,(y+OFF)|0];
+const cellCenterWorld=(ix,iy)=>[ix-OFF+.5,iy-OFF+.5];
+const tileIndex=(x,y)=>{
+  const ix=(x+OFF)|0,iy=(y+OFF)|0;
+  return ix<0||iy<0||ix>=GRID||iy>=GRID?-1:iy*GRID+ix;
+};
+const walk=(x,y)=>{const i=tileIndex(x,y);return i>=0&&tiles[i].land;};
+const tileAt=(x,y)=>{const i=tileIndex(x,y);return i<0?null:tiles[i];};
 let nodes=[],builds=[],foes=[],shots=[],picks=[],parts=[],floats=[],slashes=[],ghosts=[],warns=[],fogBlobs=[];
 let core={x:CEN+.5,y:CEN+.5,r:1.15,hp:600,max:600,flash:0,beam:0};
 let cam={x:CEN,y:CEN,z:1.35,tz:1.35,shake:0,sx:0,sy:0};
@@ -38,18 +49,27 @@ function vnoise(x,y){
   const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
   return lerp(lerp(hash(xi,yi),hash(xi+1,yi),u),lerp(hash(xi,yi+1),hash(xi+1,yi+1),u),v);
 }
-const walk=(x,y)=>{const ix=x|0,iy=y|0;if(ix<0||iy<0||ix>=GRID||iy>=GRID)return false;return tiles[iy*GRID+ix].land;};
-const tileAt=(x,y)=>{const ix=x|0,iy=y|0;if(ix<0||iy<0||ix>=GRID||iy>=GRID)return null;return tiles[iy*GRID+ix];};
 // forcedSeed 仅供读档重建；默认路径必须保持 (Math.random()*1e9)|0，以免改变启动期 RNG 序列
 // 契约：hash/vnoise 与下方 tile 生成不得引入随机，否则 seed-only 地形恢复会失效
-function genWorld(forcedSeed){
-  seed=forcedSeed===undefined?(Math.random()*1e9)|0:forcedSeed;tiles=[];
-  for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
-    const d=dist(x+.5,y+.5,CEN,CEN),n=vnoise(x*.33,y*.33)*2.6;
-    let land=d+n<15.6;if(d<4.5)land=true;
-    tiles.push({land,sand:false,v:hash(x*3,y*7)});
+const scoreAt=(wx,wy,ix,iy)=>dist(wx,wy,CEN,CEN)+vnoise(ix*FIELD.noiseScale,iy*FIELD.noiseScale)*FIELD.noiseAmp;
+// 网格扩容：坐标中心 CEN 固定，GRID 只向两侧扩，OFF 把世界坐标映射到新数组
+function reallocWorld(r){
+  GRID=gridFor(r);NN=GRID*GRID;OFF=offFor(r);
+  CW=Math.ceil(GRID/CELL);CN=CW*CW;
+  tiles=new Array(NN);
+  solidGrid=new Array(CN);foeGrid=new Array(CN);
+  for(let i=0;i<CN;i++){solidGrid[i]=[];foeGrid[i]=[];}
+  tileCost=new Float32Array(NN);coreField=new Float32Array(NN);plyField=new Float32Array(NN);
+  heapI=new Int32Array(NN*6);heapC=new Float32Array(NN*6);heapN=0;
+  fieldDirty=true;plyTile=-1;plyFieldT=0;
+  groundChunks.clear();
+}
+function fillTerrain(r){
+  for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
+    const c=cellCenterWorld(ix,iy),land=scoreAt(c[0],c[1],ix,iy)<r||dist(c[0],c[1],CEN,CEN)<FIELD.coreSafe;
+    tiles[iy*GRID+ix]={land,sand:false,v:hash(ix*3,iy*7)};
   }
-  const seen=new Uint8Array(NN),stack=[(CEN|0)*GRID+(CEN|0)];seen[stack[0]]=1;
+  const seen=new Uint8Array(NN),stack=[(CEN+OFF|0)*GRID+(CEN+OFF|0)];seen[stack[0]]=1;
   while(stack.length){
     const i=stack.pop(),x=i%GRID,y=(i/GRID)|0;
     for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){
@@ -58,55 +78,77 @@ function genWorld(forcedSeed){
     }
   }
   for(let i=0;i<NN;i++)if(!seen[i])tiles[i].land=false;
-  for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
-    const t=tiles[y*GRID+x];
-    if(t.land)t.sand=dist(x+.5,y+.5,CEN,CEN)+vnoise(x*.33,y*.33)*2.6>13.9;
+  for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
+    const t=tiles[iy*GRID+ix],c=cellCenterWorld(ix,iy);
+    if(t.land)t.sand=scoreAt(c[0],c[1],ix,iy)>r-FIELD.sandWidth;
   }
+}
+function rebuildEdgeSpawns(r){
   edgeSpawns=[];
-  for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++)
-    if(tiles[y*GRID+x].land&&dist(x+.5,y+.5,CEN,CEN)>12.3)edgeSpawns.push([x+.5,y+.5]);
-  if(edgeSpawns.length<8)
-    for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++)
-      if(tiles[y*GRID+x].land&&dist(x+.5,y+.5,CEN,CEN)>9)edgeSpawns.push([x+.5,y+.5]);
+  const add=dMin=>{
+    for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
+      if(!tiles[iy*GRID+ix].land)continue;
+      const c=cellCenterWorld(ix,iy);
+      if(dist(c[0],c[1],CEN,CEN)>dMin)edgeSpawns.push(c);
+    }
+  };
+  add(r-FIELD.edgeInset);
+  if(edgeSpawns.length<FIELD.minEdgeSpawns)add(r-FIELD.edgeFallbackInset);
+}
+// forcedSeed 仅供读档重建；默认路径必须保持 (Math.random()*1e9)|0，以免改变启动期 RNG 序列
+// 契约：hash/vnoise 与地形生成不得引入随机，否则 seed-only 地形恢复会失效
+function genWorld(forcedSeed,lvl=0){
+  seed=forcedSeed===undefined?(Math.random()*1e9)|0:forcedSeed;
+  const r=radiusForLevel(lvl);
+  reallocWorld(r);fillTerrain(r);rebuildEdgeSpawns(r);
   bakeGround();bakeMask();
   nodes=[];
+  // 基础节点永远在原 40×40 域内掷点：RNG 次数不随半径变化，保护前 7 夜基线与读档一致性
   const place=(type,count,minD)=>{
     let tries=0;
-    while(count>0&&tries++<1200){
-      const x=rand(3,GRID-3),y=rand(3,GRID-3),t=tileAt(x,y);
+    while(count>0&&tries++<FIELD.nodeTries){
+      const x=rand(3,BASE_GRID-3),y=rand(3,BASE_GRID-3),t=tileAt(x,y);
       if(!t||!t.land||t.sand)continue;
       if(dist(x,y,CEN,CEN)<minD)continue;
-      if(nodes.some(n=>dist(n.x,n.y,x,y)<1.8))continue;
+      if(nodes.some(n=>dist(n.x,n.y,x,y)<FIELD.nodeSpacing))continue;
       const hp=TUNE.node.hits[type];
       nodes.push({type,x,y,hp,max:hp,alive:true,shake:0,sway:rand(TAU),s:rand(.85,1.2)});count--;
     }
   };
-  place('tree',24,4.2);place('rock',14,4.6);place('crys',10,7);
+  place('tree',FIELD.nodeCounts.tree,FIELD.nodeMinD.tree);
+  place('rock',FIELD.nodeCounts.rock,FIELD.nodeMinD.rock);
+  place('crys',FIELD.nodeCounts.crys,FIELD.nodeMinD.crys);
   fogBlobs=[];
   for(let i=0;i<9;i++)fogBlobs.push({x:rand(-400,400),y:rand(-300,300),s:rand(180,420),vx:rand(4,12)*(Math.random()<.5?-1:1),a:rand(.05,.12),ph:rand(TAU)});
   rebuildSolids();rebuildTileCost();fieldDirty=true;
 }
-function bakeGround(){
-  const OX=GRID*TW/2,M=10;
-  groundCv=document.createElement('canvas');groundCv.width=GRID*TW;groundCv.height=GRID*TH+70;
-  const g=groundCv.getContext('2d');
-  const px=(x,y)=>{const p=proj(x,y);return[p[0]+OX,p[1]+M];};
-  for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
-    const t=tileAt(x+.5,y+.5);if(t.land)continue;
-    const near=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{const n=tileAt(x+dx+.5,y+dy+.5);return n&&n.land;});
+/* 地面分块烘焙：每块 CSS 像素独立，坐标只依赖世界坐标与 OFF，不依赖整图尺寸 */
+const CHUNK_PAD=40;
+function bakeChunk(cx,cy){
+  const S=FIELD.chunk,ox=cx*S-OFF,oy=cy*S-OFF,op=proj(ox,oy);
+  const Lx=CHUNK_PAD+S*TW/2,Ly=CHUNK_PAD+10;
+  const canvas=document.createElement('canvas');
+  canvas.width=S*TW+CHUNK_PAD*2;canvas.height=S*TH+CHUNK_PAD*2+10;
+  canvas.OX=op[0]-Lx;canvas.OY=op[1]-Ly;
+  const g=canvas.getContext('2d');
+  const px=(x,y)=>{const p=proj(x,y);return[p[0]-op[0]+Lx,p[1]-op[1]+Ly];};
+  const from=Math.max(0,cx*S),to=Math.min(GRID,(cx+1)*S),fromY=Math.max(0,cy*S),toY=Math.min(GRID,(cy+1)*S);
+  for(let iy=fromY;iy<toY;iy++)for(let ix=from;ix<to;ix++){
+    const wx=ix-OFF+.5,wy=iy-OFF+.5,t=tileAt(wx,wy);if(t.land)continue;
+    const near=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{const n=tileAt(wx+dx,wy+dy);return n&&n.land;});
     if(!near)continue;
-    const c=px(x+.5,y+.5);
+    const c=px(wx,wy);
     g.fillStyle='rgba(87,200,190,.10)';
     g.beginPath();g.moveTo(c[0],c[1]-TH/2);g.lineTo(c[0]+TW/2,c[1]);g.lineTo(c[0],c[1]+TH/2);g.lineTo(c[0]-TW/2,c[1]);g.closePath();g.fill();
   }
-  for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
-    const t=tileAt(x+.5,y+.5);if(!t.land)continue;
-    const c=px(x+.5,y+.5);
+  for(let iy=fromY;iy<toY;iy++)for(let ix=from;ix<to;ix++){
+    const wx=ix-OFF+.5,wy=iy-OFF+.5,t=tileAt(wx,wy);if(!t.land)continue;
+    const c=px(wx,wy);
     const dia=()=>{g.beginPath();g.moveTo(c[0],c[1]-TH/2);g.lineTo(c[0]+TW/2,c[1]);g.lineTo(c[0],c[1]+TH/2);g.lineTo(c[0]-TW/2,c[1]);g.closePath();};
     if(t.sand)g.fillStyle=t.v>.5?'#c4b28c':'#b8a67e';
     else g.fillStyle=t.v<.33?'#173f3c':t.v<.66?'#1a453f':'#1d4a42';
     dia();g.fill();g.strokeStyle='rgba(8,18,24,.25)';g.lineWidth=1;dia();g.stroke();
-    const CH=17,rN=tileAt(x+1.5,y+.5),lN=tileAt(x+.5,y+1.5);
+    const CH=17,rN=tileAt(wx+1,wy),lN=tileAt(wx,wy+1);
     if(!rN||!rN.land){
       g.fillStyle='#0d2830';g.beginPath();g.moveTo(c[0]+TW/2,c[1]);g.lineTo(c[0],c[1]+TH/2);g.lineTo(c[0],c[1]+TH/2+CH);g.lineTo(c[0]+TW/2,c[1]+CH);g.closePath();g.fill();
       g.strokeStyle='rgba(143,227,208,.35)';g.beginPath();g.moveTo(c[0]+TW/2,c[1]+2);g.lineTo(c[0],c[1]+TH/2+2);g.stroke();
@@ -117,30 +159,120 @@ function bakeGround(){
     }
     if(!t.sand){
       if(t.v>.82){g.strokeStyle='rgba(111,224,138,.4)';g.lineWidth=1.2;
-        for(let i=0;i<3;i++){const ox=c[0]+(hash(x*9+i,y)-.5)*30,oy=c[1]+(hash(x,y*9+i)-.5)*12;
+        for(let i=0;i<3;i++){const ox=c[0]+(hash(ix*9+i,iy)-.5)*30,oy=c[1]+(hash(ix,iy*9+i)-.5)*12;
           g.beginPath();g.moveTo(ox,oy);g.lineTo(ox+2,oy-5);g.stroke();}}
       else if(t.v<.1){g.fillStyle='rgba(87,230,255,.35)';g.beginPath();g.arc(c[0]+(t.v-.05)*180,c[1],1.5,0,TAU);g.fill();}
       else if(t.v>.45&&t.v<.5){g.fillStyle='rgba(120,140,145,.5)';g.beginPath();g.ellipse(c[0]-8,c[1]+3,3.5,2,0,0,TAU);g.fill();}
     }
   }
-  groundCv.OX=OX;groundCv.M=M;
+  groundChunks.set(cx+','+cy,canvas);
+}
+function bakeGround(){groundChunks.clear();}
+function drawGround(){
+  const S=FIELD.chunk,cp=proj(cam.x,cam.y);
+  const toWorld=(sx,sy)=>unproj((sx-W/2-cam.sx)/cam.z+cp[0],(sy-H/2-cam.sy)/cam.z+cp[1]);
+  let ax=Infinity,bx=-Infinity,ay=Infinity,by=-Infinity;
+  for(const[sx,sy]of[[0,0],[W,0],[0,H],[W,H]]){
+    const p=toWorld(sx,sy);ax=Math.min(ax,p[0]);bx=Math.max(bx,p[0]);ay=Math.min(ay,p[1]);by=Math.max(by,p[1]);
+  }
+  const c0=toCell(ax,ay),c1=toCell(bx,by);
+  const x0=Math.floor(c0[0]/S)-1,x1=Math.floor(c1[0]/S)+1,y0=Math.floor(c0[1]/S)-1,y1=Math.floor(c1[1]/S)+1;
+  for(let cy=y0;cy<=y1;cy++)for(let cx=x0;cx<=x1;cx++){
+    const key=cx+','+cy;let cv=groundChunks.get(key);
+    if(!cv){bakeChunk(cx,cy);cv=groundChunks.get(key);}
+    if(cv)ctx.drawImage(cv,cv.OX,cv.OY);
+  }
 }
 function bakeMask(){
   mmMask=document.createElement('canvas');mmMask.width=124;mmMask.height=124;
   const g=mmMask.getContext('2d'),k=124/GRID;
   g.fillStyle='rgba(10,26,36,.9)';g.fillRect(0,0,124,124);
-  for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
-    const t=tiles[y*GRID+x];if(!t.land)continue;
-    g.fillStyle=t.sand?'#8a7d5e':'#2a5a50';g.fillRect(x*k,y*k,k+.5,k+.5);
+  for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
+    const t=tiles[iy*GRID+ix];if(!t.land)continue;
+    g.fillStyle=t.sand?'#8a7d5e':'#2a5a50';g.fillRect(ix*k,iy*k,k+.5,k+.5);
   }
 }
 
+/* ---------------- 场地扩张 ---------------- */
+// 潮线延迟由半径进度 + 噪声决定，不用逐行淡入这类通用动画
+const revealDelay=(wx,wy,ix,iy,oldR,r)=>clamp((dist(wx,wy,CEN,CEN)-oldR)/Math.max(.001,r-oldR)*.9,0,.9)+hash(ix*17+3,iy*23+7)*.1;
+function expandField(){
+  if(!S.endless)return null;
+  const lv=levelForDay(S.day);
+  if(lv<=S.fieldLevel)return null;
+  const oldR=radiusForLevel(S.fieldLevel),r=radiusForLevel(lv);
+  const prevTiles=new Map();
+  for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
+    const t=tiles[iy*GRID+ix];prevTiles.set((ix-OFF)+','+(iy-OFF),{land:t.land,sand:t.sand});
+  }
+  reallocWorld(r);fillTerrain(r);rebuildEdgeSpawns(r);
+  const cells=[];
+  for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
+    const t=tiles[iy*GRID+ix];if(!t.land)continue;
+    const prev=prevTiles.get((ix-OFF)+','+(iy-OFF));
+    const kind=prev&&prev.sand&&!t.sand?'sandToLand':(!prev||!prev.land)?(t.sand?'newSand':'newLand'):null;
+    if(!kind)continue;
+    const c=cellCenterWorld(ix,iy);
+    cells.push({wx:c[0],wy:c[1],ix,iy,kind,delay:revealDelay(c[0],c[1],ix,iy,oldR,r),noise:hash(ix*7+1,iy*13+3)});
+  }
+  appendRingNodes(oldR,r,lv);
+  bakeGround();bakeMask();
+  rebuildSolids();rebuildTileCost();rebuildFoeGrid();
+  fieldDirty=true;plyTile=-1;plyFieldT=0;
+  S.fieldLevel=lv;
+  return {oldR,r,cells};
+}
+function appendRingNodes(oldR,r,lv){
+  const area=Math.PI*FIELD.baseLand*FIELD.baseLand,density={};
+  for(const t in FIELD.nodeCounts)
+    density[t]=FIELD.nodeCounts[t]/Math.max(1,area-Math.PI*FIELD.nodeMinD[t]*FIELD.nodeMinD[t]);
+  if(nodes.length>=FIELD.maxNodes)return;
+  for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
+    const t=tiles[iy*GRID+ix];if(!t.land||t.sand)continue;
+    const c=cellCenterWorld(ix,iy);
+    if(dist(c[0],c[1],CEN,CEN)<oldR-FIELD.sandWidth)continue;
+    if(nodes.some(n=>dist(n.x,n.y,c[0],c[1])<FIELD.nodeSpacing))continue;
+    if(builds.some(b=>dist(b.x,b.y,c[0],c[1])<.9))continue;
+    for(const type in FIELD.nodeCounts){
+      if(hash(ix+lv*101,iy-lv*37)>=density[type])continue;
+      const hp=TUNE.node.hits[type];
+      nodes.push({type,x:c[0],y:c[1],hp,max:hp,alive:true,shake:0,
+        sway:hash(ix+lv*11,iy+lv*7)*TAU,s:.85+hash(ix-lv*5,iy+lv*3)*.35,
+        spawnDelay:revealDelay(c[0],c[1],ix,iy,oldR,r)});
+      break;
+    }
+    if(nodes.length>=FIELD.maxNodes)return;
+  }
+}
+function startReveal(info,onDone){
+  const reduced=reduceMotion||(typeof reducedMotion==='function'&&reducedMotion());
+  if(reduced||!info)return false;
+  const old=document.createElement('canvas');old.width=124;old.height=124;
+  old.getContext('2d').drawImage(mmMask,0,0);
+  fieldReveal={t:0,dur:FIELD.revealTime,cells:info.cells,oldR:info.oldR,r:info.r,done:onDone,oldMask:old,tzPrev:cam.tz};
+  // 镜头退到能看见整条新海岸的距离，演出结束后由主循环拉回
+  cam.tz=clamp(Math.min(W/(2*info.r*TW*1.05),H/(2*info.r*TH*1.15)),.45,1.05);
+  return true;
+}
+function advanceReveal(dt){
+  if(!fieldReveal)return;
+  fieldReveal.t+=dt;
+  cam.x=lerp(cam.x,CEN+.5,Math.min(1,dt*3));cam.y=lerp(cam.y,CEN+.5,Math.min(1,dt*3));
+  cam.z=lerp(cam.z,cam.tz,Math.min(1,dt*3));
+  if(fieldReveal.t>=fieldReveal.dur)finishReveal();
+}
+function finishReveal(){
+  if(!fieldReveal)return;
+  const done=fieldReveal.done;cam.tz=fieldReveal.tzPrev;fieldReveal=null;
+  if(done)done();
+}
+
 /* ---------------- 网格 & 流场 ---------------- */
-const CELL=2,CW=Math.ceil(GRID/CELL),CN=CW*CW;
-const solidGrid=new Array(CN),foeGrid=new Array(CN);
+const CELL=2;let CW=Math.ceil(GRID/CELL),CN=CW*CW;
+let solidGrid=new Array(CN),foeGrid=new Array(CN);
 for(let i=0;i<CN;i++){solidGrid[i]=[];foeGrid[i]=[];}
 let solids=[];
-const cellIdx=(x,y)=>clamp(y/CELL|0,0,CW-1)*CW+clamp(x/CELL|0,0,CW-1);
+const cellIdx=(x,y)=>clamp((y+OFF)/CELL|0,0,CW-1)*CW+clamp((x+OFF)/CELL|0,0,CW-1);
 function rebuildSolids(){
   solids=[{x:core.x,y:core.y,r:core.r,kind:2,obj:core}];
   for(const n of nodes)if(n.alive)solids.push({x:n.x,y:n.y,r:.36,kind:0,obj:n});
@@ -162,9 +294,9 @@ function forFoes(x,y,r,cb){
   const y0=clamp((y-r)/CELL|0,0,CW-1),y1=clamp((y+r)/CELL|0,0,CW-1);
   for(let cy=y0;cy<=y1;cy++)for(let cx=x0;cx<=x1;cx++){const a=foeGrid[cy*CW+cx];for(let i=0;i<a.length;i++)cb(a[i]);}
 }
-const tileCost=new Float32Array(NN),coreField=new Float32Array(NN),plyField=new Float32Array(NN);
+let tileCost=new Float32Array(NN),coreField=new Float32Array(NN),plyField=new Float32Array(NN);
 let fieldDirty=true,plyFieldT=0,plyTile=-1;
-const heapI=new Int32Array(NN*6),heapC=new Float32Array(NN*6);let heapN=0;
+let heapI=new Int32Array(NN*6),heapC=new Float32Array(NN*6),heapN=0;
 function hPush(i,c){
   if(heapN>=heapI.length)return;
   let n=heapN++;heapI[n]=i;heapC[n]=c;
@@ -183,12 +315,12 @@ function hPop(){
 }
 function rebuildTileCost(){
   for(let i=0;i<NN;i++)tileCost[i]=tiles[i].land?1:Infinity;
-  for(const n of nodes)if(n.alive)tileCost[(n.y|0)*GRID+(n.x|0)]=Infinity;
-  for(const b of builds){const i=(b.y|0)*GRID+(b.x|0);if(tileCost[i]!==Infinity)tileCost[i]=26+b.hp/b.max*10;}
+  for(const n of nodes)if(n.alive){const i=tileIndex(n.x,n.y);if(i>=0)tileCost[i]=Infinity;}
+  for(const b of builds){const i=tileIndex(b.x,b.y);if(i>=0&&tileCost[i]!==Infinity)tileCost[i]=26+b.hp/b.max*10;}
 }
 const DIRS=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]];
 function computeField(out,gx,gy){
-  out.fill(Infinity);gx=clamp(gx|0,0,GRID-1);gy=clamp(gy|0,0,GRID-1);
+  out.fill(Infinity);const c=toCell(gx,gy);gx=clamp(c[0],0,GRID-1);gy=clamp(c[1],0,GRID-1);
   let gi=gy*GRID+gx;
   if(!isFinite(tileCost[gi])){
     let best=-1,bd=1e9;
@@ -210,7 +342,7 @@ function computeField(out,gx,gy){
   }
 }
 function fieldDir(field,x,y,out){
-  const ix=x|0,iy=y|0;if(ix<0||iy<0||ix>=GRID||iy>=GRID)return false;
+  const c=toCell(x,y),ix=c[0],iy=c[1];if(ix<0||iy<0||ix>=GRID||iy>=GRID)return false;
   const i=iy*GRID+ix,cur=field[i];let bi=-1,bc=cur,bx=0,by=0;
   for(let k=0;k<8;k++){
     const dx=DIRS[k][0],dy=DIRS[k][1],nx=ix+dx,ny=iy+dy;
@@ -220,7 +352,7 @@ function fieldDir(field,x,y,out){
     bc=field[j];bi=j;bx=dx;by=dy;
   }
   if(bi<0)return false;
-  const dx=ix+bx+.5-x,dy=iy+by+.5-y,m=Math.hypot(dx,dy)||1;
+  const dx=ix-OFF+bx+.5-x,dy=iy-OFF+by+.5-y,m=Math.hypot(dx,dy)||1;
   out[0]=dx/m;out[1]=dy/m;return true;
 }
 
@@ -257,11 +389,11 @@ function moveCircle(e,dx,dy,r,ignoreNodes){
     depenetrate(e,r,ignoreNodes);
   }
   if(!walk(e.x,e.y)){
-    const ix=clamp(e.x|0,0,GRID-1),iy=clamp(e.y|0,0,GRID-1);let best=null,bd=1e9;
+    const c=toCell(e.x,e.y),ix=c[0],iy=c[1];let best=null,bd=1e9;
     for(let oy=-2;oy<=2;oy++)for(let ox=-2;ox<=2;ox++){
       const tx=ix+ox,ty=iy+oy;if(tx<0||ty<0||tx>=GRID||ty>=GRID)continue;
       if(!tiles[ty*GRID+tx].land)continue;
-      const d=dist(e.x,e.y,tx+.5,ty+.5);if(d<bd){bd=d;best=[tx+.5,ty+.5];}
+      const d=dist(e.x,e.y,tx-OFF+.5,ty-OFF+.5);if(d<bd){bd=d;best=[tx-OFF+.5,ty-OFF+.5];}
     }
     if(best){e.x=best[0];e.y=best[1];depenetrate(e,r,true);}
   }
