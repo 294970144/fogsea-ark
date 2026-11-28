@@ -1968,6 +1968,41 @@ testCase('R35_cast', () => {
     // 统一落点结算能采集节点
     assert.equal(out.gathered, true);
   }
+  { // R36b_mana_siphon_signature
+    const env = makeEnv();
+    const out = j(env)(`(()=>{
+      save.weapon='flame';initRun();S.mode='play';spellFxTime=()=>0;
+      weaponSpreadOffset=()=>0;
+      const w=weaponDef(P.weapon);
+      P.sigils=Array.from({length:w.slots},()=>null);
+      P.sigils[0]=mkCard('sig_flame');P.sigils[1]=mkCard('siphon');
+      P.crit=0;P.atkSpd=1;P.cls='mage';P.maxEn=200;P.en=100;
+      foes.length=0;nodes.length=0;spellShots.length=0;weaponRepeats.length=0;
+      foes.push({type:'crawler',x:P.x+2,y:P.y,hp:9999,max:9999,spd:0,dmg:0,r:.32,xp:0,coreDmg:0,
+        atkCd:99,retarget:99,target:'core',kx:0,ky:0,flash:0,anim:0,elite:false,boss:false,dead:false,
+        fireCd:99,spawnCd:99,stompCd:99,px:P.x+2,py:P.y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
+      rebuildFoeGrid();
+      // 纯功能刻印：不进施放槽位，不自己射击，也不耗雾能
+      const slots=weaponCastSlots(w).map(i=>P.sigils[i].id);
+      const cost=weaponManaCost();
+      // 挂左侧法术：施放一次回能
+      P.atkCd=0;const e0=P.en;autoAttack();const castGain=P.en-e0;
+      // 叠装两枚：沿链累加，一次回 16
+      P.sigils[2]=mkCard('siphon');
+      P.atkCd=0;const e1=P.en;autoAttack();const stackGain=P.en-e1;
+      // 拖地释放：按卡面 manaGain 回一大管
+      P.en=100;
+      const card=mkCard('siphon');DECK.hand=[card];DECK.draw=[];DECK.discard=[];
+      const played=playCard(card.uid,P.x,P.y);const dropGain=P.en-100;
+      return JSON.stringify({slots,cost,castGain,stackGain,played,dropGain});
+    })()`);
+    assert.deepEqual(out.slots, ['sig_flame'], '汲能刻印不自己射击');
+    assert.equal(out.cost, 0, '汲能刻印自身不耗雾能');
+    assert.equal(out.castGain, 8, '挂左侧法术每次施放回 8');
+    assert.equal(out.stackGain, 16, '两枚叠装回 16');
+    assert.equal(out.played, true, '汲能刻印可拖地释放');
+    assert.equal(out.dropGain, 50, '拖地释放回 50');
+  }
   { // R37_sigil_mana_cost_and_native_spread
     const env = makeEnv();
     const out = j(env)(`(()=>{

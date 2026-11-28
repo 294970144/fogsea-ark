@@ -107,6 +107,10 @@ const CDEFS={
     draw:2,fx:'tactic',desc:'立刻抽 2 张牌。循环牌库的关键。',w:14},
   surge:{id:'surge',kind:'instant',target:'self',name:'雾能充盈',icon:'surge',color:'#57e6ff',cost:{crys:3},
     fx:'surge',refill:true,dashReset:true,desc:'当前资源立即回满，冲刺冷却清零。',w:9},
+  siphon:{id:'siphon',kind:'instant',target:'self',sigil:true,name:'汲能刻印',short:'汲能',icon:'surge',color:'#57e6ff',cost:{},
+    fx:'surge',manaGain:50,sigilGain:8,
+    sigilBrief:'挂在左侧法术上 · 每次施放回复 8 点雾能 · 不耗雾能',
+    desc:'拖地释放：立即回复 50 点雾能。装入法杖挂在法术右侧：每次施放额外回复 8 点雾能，不耗雾能。',w:11},
   expand:{id:'expand',kind:'utility',target:'self',name:'扩容',icon:'expand',color:'#ffb454',cost:{wood:10,stone:6},
     draw:1,desc:'手牌上限 +1（最高 10，法师 12），并立即抽 1 张。满上限后不再出现。',w:11},
   // 拆解牌：拖到任意一张手牌上（等同「融合」），按回收率返还目标牌造价，两牌回弃牌堆
@@ -303,12 +307,18 @@ const SIGILS={
 };
 /* 可当功能刻印的法术：本身是可主动施放的牌，挂在法术右侧时按 op 改写左侧法术。
    与 SIGILS 分开，避免污染刻印种类计数与卡面（两者保留）。数值读 CDEFS 自身。 */
-const SPELL_SIGIL_OPS={sp_emberburst:'ember'};
+const SPELL_SIGIL_OPS={sp_emberburst:'ember',siphon:'siphon'};
 const SIGIL_IDS=Object.keys(SIGILS);
 // 文案实时派生：改数值即改描述，避免与表漂移
 /* 刻印文案直接从 SIGILS 派生：迅捷只压整轮充能，换算成充能降幅展示（出手频率等效 +spd）。 */
 const sigilDesc=id=>{
-  const s=SIGILS[id];if(!s)return CDEFS[id]&&CDEFS[id].sigil?`武器攻击：${CDEFS[id].brief}`:'';
+  const s=SIGILS[id];
+  if(!s){
+    const d=CDEFS[id];
+    if(!d||!d.sigil)return '';
+    if(d.sigilBrief)return d.sigilBrief;   // 纯功能刻印：文案独立于主动法术描述
+    return `武器攻击：${d.brief}`;
+  }
   const fx=s.op==='fan'?`左侧相邻法术分裂 ${s.copies} 发，±${(s.copies-1)*s.spread/2}°，总伤害 ×${(1+(s.copies-1)*s.dmgB).toFixed(2)}`
     :s.op==='repeat'?`左侧相邻法术错峰补发 ${s.copies-1} 次，每次 ${Math.round(s.dmgB*100)}% 伤害`
     :s.dmg!=null?`武器伤害 +${Math.round(s.dmg*100)}%`

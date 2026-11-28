@@ -113,12 +113,18 @@ const SIGIL_OPS={
     return st;
   },
   /* 余烬爆发：给左侧法术的每一次命中附加范围火伤+灼烧，数值走 CDEFS.sp_emberburst。 */
-  ember:(st)=>{st.ember=true;return st;}
+  ember:(st)=>{st.ember=true;return st;},
+  /* 汲能刻印：给左侧法术的每一次施放附加回能，数值走 CDEFS.siphon。纯修饰，不产生弹道。
+     可叠装：多枚刻印沿链累加，施放一次合并回一次。 */
+  siphon:(st,s)=>{
+    const d=CDEFS[s.id];st.manaGain=(st.manaGain||0)+(d&&d.sigilGain||0);
+    return st;
+  }
 };
 /* 把一串功能刻印从左到右折进初始状态：
    shots = 每发的偏角与伤害系数；rep = 错峰补发次数与系数。 */
 function foldCast(chain){
-  const st={shots:[{off:0,mul:1}],rep:{n:1,mul:1},ember:false};
+  const st={shots:[{off:0,mul:1}],rep:{n:1,mul:1},ember:false,manaGain:0};
   for(const s of chain){const op=SIGIL_OPS[s.op];if(op)op(st,s);}
   st.shots.sort((a,b)=>a.off-b.off);   // 统一按角度从右到左出膛，读数与画面稳定
   return st;
@@ -205,11 +211,15 @@ function autoCastWeapon(w,tgt,cast,opts){
   const echo=!!(opts&&opts.echo);
   if(!echo&&!payWeaponMana())return false;   // 雾能不足：这一发不打，冷却也不推进
   P.face=Math.atan2(tgt.y-P.y,tgt.x-P.x);
+  const pl=castPlan(cast.slot);
+  // 汲能刻印：施放成功即按链回能（含回响这一发），与弹道命中无关。
+  // 不进 weaponManaCost，所以自身不耗雾能；二重补发不重复回。
+  if(pl.manaGain>0)gainMana(pl.manaGain);
   if(echo){fireWeaponCast(w,tgt,cast,1);return true;}
   setWeaponCd(w,cast);
   fireWeaponCast(w,tgt,cast,1);
   // 二重：只把刚施放的这个法术错峰再打一遍，不跨槽取下一个法术
-  const rp=castPlan(cast.slot).rep;
+  const rp=pl.rep;
   if(rp.n>1)for(let i=1;i<rp.n;i++)
     weaponRepeats.push({w,cast,tgt,mul:rp.mul,at:S.combatT+(TUNE.weapon.repeatDelay||0)*i});
   sigilEcho(w,tgt,cast);

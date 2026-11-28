@@ -475,8 +475,14 @@ function applyFuse(def,tx,ty){
     floater(P.x,P.y,'抽 '+n+' 张',q.c1,true);
   }
   if(def.refill){gainMana(P.maxEn-P.en);if(def.fx)FX.cast(def.fx,P.x,P.y);}
+  // 汲能刻印拖地释放：按卡面 manaGain 回一大管雾能（声明式，不写死卡名）
+  if(def.manaGain){
+    const got=gainMana(def.manaGain);
+    if(def.fx)FX.cast(def.fx,P.x,P.y);
+    if(got>0)floater(P.x,P.y,'+'+Math.round(got)+' '+manaLabel(),q.c1,true);
+  }
   if(def.dashReset)P.dashCd=0;
-  if(def.refill||def.dashReset)sfx(def.sfx||'nova');
+  if(def.refill||def.dashReset||def.manaGain)sfx(def.sfx||'nova');
   if(def.heal){
     healPlayer(def.heal);
     if(def.fx)FX.cast(def.fx,P.x,P.y);
