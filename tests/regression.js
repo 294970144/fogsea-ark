@@ -251,6 +251,79 @@ testCase('R36_field_expansion', () => {
   assert.deepEqual(JSON.parse(legacy), { level: 0, grid: 40, off: 0 }, '旧档按 0 级恢复');
 });
 
+testCase('R37_field_resize_reverse', () => {
+  const land = env => JSON.parse(env.run(`JSON.stringify((()=>{const a=[];
+    for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){const t=tiles[iy*GRID+ix];
+      if(t.land)a.push([ix-OFF,iy-OFF]);}
+    return a.sort((p,q)=>p[0]-q[0]||p[1]-q[1]);})())`));
+  const env = makeEnv();
+  env.run('initRun();');
+  const baseLand = land(env), baseNodes = JSON.parse(env.run('JSON.stringify(nodes)'));
+  const first = JSON.parse(env.run(`(()=>{const info=resizeField(S.fieldLevel+1);
+    return JSON.stringify({lv:S.fieldLevel,r:radiusForLevel(S.fieldLevel),grid:GRID,off:OFF,dir:info.dir,
+      viewR:info.viewR,states:info.cells.every(c=>c.from&&c.to&&c.from!==c.to)});})()`));
+  assert.equal(first.lv, 1); assert.equal(first.grid, 44); assert.equal(first.off, 2);
+  assert.equal(first.dir, 1); assert.equal(first.viewR, first.r);
+  assert.ok(first.states, '演出单元携带双向状态');
+  const grownLand = land(env), grownNodes = JSON.parse(env.run('JSON.stringify(nodes)'));
+  assert.ok(grownLand.length > baseLand.length);
+
+  const shrunk = JSON.parse(env.run(`(()=>{const orig=Math.random;let rand=0;Math.random=()=>{rand++;return .5;};
+    const info=shrinkField();const out={ok:!!info,dir:info&&info.dir,lv:S.fieldLevel,
+      r:radiusForLevel(S.fieldLevel),grid:GRID,off:OFF,rand,
+      cells:info&&info.cells.length,ghosts:info&&info.ghosts.length,viewR:info&&info.viewR};
+    Math.random=orig;return JSON.stringify(out);})()`));
+  assert.equal(shrunk.rand, 0, '缩小与裁剪不得消耗随机数');
+  assert.equal(shrunk.dir, -1); assert.equal(shrunk.lv, 0);
+  assert.equal(shrunk.grid, 40); assert.equal(shrunk.off, 0);
+  assert.ok(shrunk.cells > 0 && shrunk.ghosts > 0);
+  assert.equal(shrunk.viewR, first.r, '倒放演出用较大半径决定镜头距离');
+  assert.deepEqual(land(env), baseLand, '缩回 0 级后地形与基准一致');
+  assert.deepEqual(JSON.parse(env.run('JSON.stringify(nodes)')), baseNodes, '节点也回到基准集合');
+
+  const floor = JSON.parse(env.run(`(()=>{const before=JSON.stringify({n:nodes.length,g:GRID,o:OFF,lv:S.fieldLevel});
+    const r=shrinkField();return JSON.stringify({r,
+      same:before===JSON.stringify({n:nodes.length,g:GRID,o:OFF,lv:S.fieldLevel})});})()`));
+  assert.equal(floor.r, null, '0 级再缩无效'); assert.ok(floor.same);
+
+  env.run('resizeField(1);');
+  assert.deepEqual(land(env), grownLand, '再次扩张地形可复现');
+  assert.deepEqual(JSON.parse(env.run('JSON.stringify(nodes)')), grownNodes, '再次扩张节点可复现');
+
+  const purge = JSON.parse(env.run(`(()=>{var outside={x:CEN+radiusForLevel(1)+3,y:CEN+.5},inside={x:CEN+.5,y:CEN+.5};
+    nodes.push(outside,inside);builds.push({...outside,r:.4,hp:1,max:1},{...inside,r:.4,hp:1,max:1});
+    foes.push({...outside,dead:false},{...inside,dead:false});
+    shrinkField();
+    return JSON.stringify({nOut:nodes.includes(outside),nIn:nodes.includes(inside),
+      bOut:builds.some(b=>b.x===outside.x),bIn:builds.some(b=>b.x===inside.x),
+      fOut:foes.some(f=>f.x===outside.x),fIn:foes.some(f=>f.x===inside.x),
+      solid:solids.some(s=>s.obj===outside)});})()`));
+  assert.deepEqual(purge, { nOut: false, nIn: true, bOut: false, bIn: true, fOut: false, fIn: true, solid: false },
+    '统一谓词只裁剪外侧实体');
+
+  const waves = JSON.parse(env.run(`(()=>{initRun();resizeField(1);
+    const grow=resizeField(2),growD=grow.cells.map(c=>({d:dist(c.wx,c.wy,CEN,CEN),t:c.delay})).sort((a,b)=>a.d-b.d);
+    const back=shrinkField(),backD=back.cells.map(c=>({d:dist(c.wx,c.wy,CEN,CEN),t:c.delay})).sort((a,b)=>a.d-b.d);
+    return JSON.stringify({grow:growD,back:backD});})()`));
+  const avg = a => a.reduce((s, v) => s + v.t, 0) / Math.max(1, a.length);
+  const half = Math.floor(waves.grow.length / 2);
+  assert.ok(avg(waves.grow.slice(0, half)) < avg(waves.grow.slice(half)), '扩张内圈先出');
+  assert.ok(avg(waves.back.slice(0, half)) > avg(waves.back.slice(half)), '缩小外圈先退');
+
+  const reveal = JSON.parse(env.run(`(()=>{initRun();resizeField(1);var before=cam.tz,done=0;
+    const info=resizeField(2);startReveal(info,()=>{done++;});const during=cam.tz;
+    advanceReveal(100);
+    return JSON.stringify({before,during,after:cam.tz,done,reveal:!!fieldReveal});})()`));
+  assert.notEqual(reveal.during, reveal.before); assert.equal(reveal.after, reveal.before);
+  assert.equal(reveal.done, 1); assert.equal(reveal.reveal, false);
+
+  const round = JSON.parse(env.run(`(()=>{initRun();resizeField(1);shrinkField();
+    const snap=captureSnapshot();initRun();restoreSnapshot(snap);
+    return JSON.stringify({lv:S.fieldLevel,grid:GRID,off:OFF,nodes:nodes.length});})()`));
+  assert.equal(round.lv, 0); assert.equal(round.grid, 40); assert.equal(round.off, 0);
+  assert.equal(round.nodes, baseNodes.length);
+});
+
 testCase('R1_settlement', () => {
   { // R1_settlement_and_endless
     const env = makeEnv();

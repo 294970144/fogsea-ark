@@ -391,26 +391,30 @@ function drawReveal(){
     ctx.beginPath();ctx.moveTo(x,y-TH/2);ctx.lineTo(x+TW/2,y);ctx.lineTo(x,y+TH/2);ctx.lineTo(x-TW/2,y);ctx.closePath();
     if(fill)ctx.fill();else ctx.stroke();
   };
+  const stateCol=s=>s==='water'?'rgba(9,32,44,.96)':s==='sand'?'#c4b28c':'#1a453f';
   for(const c of rv.cells){
     const pos=proj(c.wx,c.wy);
     if(pos[0]<left||pos[0]>right||pos[1]<top||pos[1]>bottom)continue;
     const p=clamp((rv.t-c.delay)/.45,0,1);
-    if(p<=0||p<1&&c.noise>=p){
-      const water=c.kind==='newSand'||c.kind==='newLand';
-      ctx.fillStyle=water?'rgba(9,32,44,.96)':(c.wx*3%2<1?'#c4b28c':'#b8a67e');
-      dia(pos[0],pos[1],true);
-    }
+    if(p<=0||p<1&&c.noise>=p){ctx.fillStyle=stateCol(c.from);dia(pos[0],pos[1],true);}
     if(p>0&&p<1&&Math.abs(p-c.noise)<.12){
       ctx.save();ctx.globalAlpha=1-Math.abs(p-c.noise)/.12;
-      ctx.strokeStyle=c.kind==='newSand'?'rgba(240,252,255,.95)':'rgba(143,227,208,.9)';
+      ctx.strokeStyle=c.to==='sand'?'rgba(240,252,255,.95)':'rgba(143,227,208,.9)';
       ctx.lineWidth=1.8;dia(pos[0],pos[1],false);
-      if(c.kind==='newSand')for(let i=0;i<3;i++){
+      if(c.from==='water'&&c.to==='sand')for(let i=0;i<3;i++){
         const u=hash(c.ix*31+i*7,c.iy*29+i*11),v=hash(c.ix*17+i*13,c.iy*19+i*5);
         ctx.fillStyle='rgba(230,250,255,.9)';ctx.beginPath();
         ctx.arc(pos[0]+(u-.5)*TW*.7,pos[1]+(v-.5)*TH*.7,1.2,0,TAU);ctx.fill();
       }
       ctx.restore();
     }
+  }
+  for(const g of rv.ghosts){
+    const p=clamp((rv.t-g.despawnDelay)/.45,0,1);
+    if(p<=0)continue;
+    ctx.save();ctx.globalAlpha=1-p;ctx.translate(0,p*12);
+    g.type==='tree'?drawTree(g):g.type==='rock'?drawRock(g):drawCrys(g);
+    ctx.restore();
   }
   const prog=clamp(rv.t/rv.dur,0,1),r=lerp(rv.oldR,rv.r,prog);
   ctx.save();ctx.globalAlpha=(1-prog)*.85;ctx.strokeStyle='rgba(143,227,208,.9)';ctx.lineWidth=2;
@@ -562,10 +566,18 @@ function renderMinimap(){
   mctx.setTransform(DPR,0,0,DPR,0,0);mctx.clearRect(0,0,124,124);
   const k=124/GRID;
   mctx.drawImage(fieldReveal?fieldReveal.oldMask:mmMask,0,0,124,124);
-  if(fieldReveal)for(const c of fieldReveal.cells){
-    if(clamp((fieldReveal.t-c.delay)/.45,0,1)<1)continue;
-    mctx.fillStyle=c.kind==='newSand'?'#8a7d5e':'#2a5a50';
-    mctx.fillRect(c.ix*k,c.iy*k,k+.5,k+.5);
+  if(fieldReveal){
+    const rv=fieldReveal,kOld=124/rv.oldGrid;
+    for(const c of rv.cells){
+      if(clamp((rv.t-c.delay)/.45,0,1)<1)continue;
+      if(c.to==='water'){
+        mctx.fillStyle='rgba(10,26,36,.9)';
+        mctx.fillRect(c.oldIx*kOld,c.oldIy*kOld,kOld+.5,kOld+.5);
+      }else{
+        mctx.fillStyle=c.to==='sand'?'#8a7d5e':'#2a5a50';
+        mctx.fillRect(c.ix*k,c.iy*k,k+.5,k+.5);
+      }
+    }
   }
   const dot=(x,y,r,col)=>{mctx.fillStyle=col;mctx.beginPath();mctx.arc((x+OFF)*k,(y+OFF)*k,r,0,TAU);mctx.fill();};
   for(const b of builds)dot(b.x,b.y,1.6,'#57e6ff');

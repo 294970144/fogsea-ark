@@ -57,6 +57,7 @@ const SRC = ORDER.map(n => fs.readFileSync(...)).join('\n;\n');
 | --- | --- |
 | `R0_seven_nights_and_save_baseline` | 前 7 夜模拟结果与存档快照必须逐值等于 `GOLDEN.r0` |
 | `R36_field_expansion` | 场地扩张机制：第 15/29 天触发、每次 +2、上限 100、旧陆地单调、旧沙变陆与新沙出现、旧节点保留、零随机、动画状态机与存档往返/旧档兼容 |
+| `R37_field_resize_reverse` | 可逆场地：逐级扩张/缩小的半径与网格推导、地形与节点严格往返、0 级幂等、统一实体裁剪、零随机、双向潮线顺序、镜头与回调、存档自洽 |
 | `R1_settlement` | 结算、重复结算幂等、无尽增量、失败路径 |
 | `R3_deck` | 牌库循环、洗牌、抽牌上限 |
 | `R5_full` | 完整流程冒烟 |

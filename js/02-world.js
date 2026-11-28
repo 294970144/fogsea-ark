@@ -193,34 +193,67 @@ function bakeMask(){
   }
 }
 
-/* ---------------- 场地扩张 ---------------- */
-// 潮线延迟由半径进度 + 噪声决定，不用逐行淡入这类通用动画
-const revealDelay=(wx,wy,ix,iy,oldR,r)=>clamp((dist(wx,wy,CEN,CEN)-oldR)/Math.max(.001,r-oldR)*.9,0,.9)+hash(ix*17+3,iy*23+7)*.1;
+/* ---------------- 场地扩张 / 收缩 ---------------- */
+const tileState=t=>!t||!t.land?'water':(t.sand?'sand':'land');
+// 潮线延迟：按新旧半径的归一化距离排波，方向只决定「内圈先出」还是「外圈先退」
+const revealDelay=(wx,wy,ix,iy,oldR,r)=>{
+  const lo=Math.min(oldR,r)-FIELD.sandWidth,hi=Math.max(oldR,r);
+  const u=clamp((dist(wx,wy,CEN,CEN)-lo)/Math.max(.001,hi-lo),0,1);
+  return (r>=oldR?u:1-u)*.9+hash(ix*17+3,iy*23+7)*.1;
+};
 function expandField(){
   if(!S.endless)return null;
   const lv=levelForDay(S.day);
   if(lv<=S.fieldLevel)return null;
-  const oldR=radiusForLevel(S.fieldLevel),r=radiusForLevel(lv);
+  return resizeField(lv);
+}
+function shrinkField(opts){return resizeField(Math.max(0,S.fieldLevel-1),opts);}
+function resizeField(targetLv,opts={}){
+  if(!Number.isInteger(targetLv)||targetLv<0||targetLv>maxLevel()||targetLv===S.fieldLevel)return null;
+  const oldR=radiusForLevel(S.fieldLevel),r=radiusForLevel(targetLv),dir=Math.sign(r-oldR),oldOff=OFF;
   const prevTiles=new Map();
   for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
-    const t=tiles[iy*GRID+ix];prevTiles.set((ix-OFF)+','+(iy-OFF),{land:t.land,sand:t.sand});
+    prevTiles.set((ix-OFF)+','+(iy-OFF),{state:tileState(tiles[iy*GRID+ix]),ix,iy});
   }
   reallocWorld(r);fillTerrain(r);rebuildEdgeSpawns(r);
-  const cells=[];
+  const cells=[],revealGhosts=[];
+  const record=(c,prev)=>{
+    const from=prev?prev.state:'water',to=tileState(tiles[c.iy*GRID+c.ix]);
+    if(from===to)return;
+    cells.push({wx:c.wx,wy:c.wy,ix:c.ix,iy:c.iy,oldIx:prev?prev.ix:c.ix+OFF-oldOff,
+      oldIy:prev?prev.iy:c.iy+OFF-oldOff,from,to,delay:revealDelay(c.wx,c.wy,c.ix,c.iy,oldR,r),
+      noise:hash(c.ix*7+1,c.iy*13+3)});
+  };
   for(let iy=0;iy<GRID;iy++)for(let ix=0;ix<GRID;ix++){
-    const t=tiles[iy*GRID+ix];if(!t.land)continue;
-    const prev=prevTiles.get((ix-OFF)+','+(iy-OFF));
-    const kind=prev&&prev.sand&&!t.sand?'sandToLand':(!prev||!prev.land)?(t.sand?'newSand':'newLand'):null;
-    if(!kind)continue;
     const c=cellCenterWorld(ix,iy);
-    cells.push({wx:c[0],wy:c[1],ix,iy,kind,delay:revealDelay(c[0],c[1],ix,iy,oldR,r),noise:hash(ix*7+1,iy*13+3)});
+    record({wx:c[0],wy:c[1],ix,iy},prevTiles.get((ix-OFF)+','+(iy-OFF)));
   }
-  appendRingNodes(oldR,r,lv);
+  if(dir<0)for(const[key,prev]of prevTiles){
+    const ix=prev.ix+OFF-oldOff,iy=prev.iy+OFF-oldOff;
+    if(ix>=0&&iy>=0&&ix<GRID&&iy<GRID)continue;
+    const wx=prev.ix+.5,wy=prev.iy+.5,to='water';
+    if(prev.state===to)continue;
+    cells.push({wx,wy,ix,iy,oldIx:prev.ix,oldIy:prev.iy,from:prev.state,to,
+      delay:revealDelay(wx,wy,ix,iy,oldR,r),noise:hash(ix*7+1,iy*13+3)});
+  }
+  // 缩小前先给被裁掉的节点留一份纯渲染快照，节点沉没由演出层负责
+  const keep=typeof opts.keep==='function'?opts.keep:()=>false;
+  const outside=o=>{
+    if(keep(o))return false;
+    // 环带补放的对象带来源标记，收缩时一律回退；其余对象按新地形判定
+    if(dir<0&&o.spawnDelay!==undefined)return true;
+    const i=tileIndex(o.x,o.y);return i<0||!tiles[i].land;
+  };
+  if(dir<0)for(const n of nodes)if(outside(n))
+    revealGhosts.push({...n,despawnDelay:revealDelay(n.x,n.y,n.x|0,n.y|0,oldR,r)});
+  for(const arr of [nodes,builds,foes,picks,parts,floats,slashes,ghosts,warns,shots])
+    for(let i=arr.length-1;i>=0;i--)if(outside(arr[i]))arr.splice(i,1);
+  if(dir>0)appendRingNodes(oldR,r,targetLv);
   bakeGround();bakeMask();
   rebuildSolids();rebuildTileCost();rebuildFoeGrid();
   fieldDirty=true;plyTile=-1;plyFieldT=0;
-  S.fieldLevel=lv;
-  return {oldR,r,cells};
+  S.fieldLevel=targetLv;
+  return {oldR,r,dir,viewR:Math.max(oldR,r),cells,ghosts:revealGhosts};
 }
 function appendRingNodes(oldR,r,lv){
   const area=Math.PI*FIELD.baseLand*FIELD.baseLand,density={};
@@ -249,9 +282,10 @@ function startReveal(info,onDone){
   if(reduced||!info)return false;
   const old=document.createElement('canvas');old.width=124;old.height=124;
   old.getContext('2d').drawImage(mmMask,0,0);
-  fieldReveal={t:0,dur:FIELD.revealTime,cells:info.cells,oldR:info.oldR,r:info.r,done:onDone,oldMask:old,tzPrev:cam.tz};
-  // 镜头退到能看见整条新海岸的距离，演出结束后由主循环拉回
-  cam.tz=clamp(Math.min(W/(2*info.r*TW*1.05),H/(2*info.r*TH*1.15)),.45,1.05);
+  fieldReveal={t:0,dur:FIELD.revealTime,cells:info.cells,ghosts:info.ghosts||[],dir:info.dir||1,
+    oldR:info.oldR,r:info.r,viewR:info.viewR||Math.max(info.oldR,info.r),oldGrid:gridFor(info.oldR),done:onDone,oldMask:old,tzPrev:cam.tz};
+  // 镜头退到能看见整条海岸的距离，演出结束后由主循环拉回
+  cam.tz=clamp(Math.min(W/(2*fieldReveal.viewR*TW*1.05),H/(2*fieldReveal.viewR*TH*1.15)),.45,1.05);
   return true;
 }
 function advanceReveal(dt){

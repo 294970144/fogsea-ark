@@ -129,6 +129,9 @@ render(); syncHUD();
 - 新环带的节点用 `hash` 派生，扩张全程不调用 `Math.random`；旧节点原样保留。
 - `S.fieldLevel` 是唯一持久化状态（`S_SAVE_FIELDS`），读档时按它重建地形；旧档缺字段按 0 处理。
 - 演出状态 `fieldReveal` 只活内存：`enterNextDay` 先冻结玩法并播潮线/噪声侵蚀动画，结束或跳过后才调用 `openDawn()`；`prefers-reduced-motion` 直接跳过。
+- 可逆入口 `resizeField(targetLv, opts)` 同时服务扩张与缩小：`expandField()` 是正式流程包装，`shrinkField()` 每次降一级。演出单元用 `{from,to}` 地形状态而不是类型名；潮线延迟按方向归一化，缩小时外圈先退、节点沉没、小地图熄灭。
+- 缩小时按**新地形**统一裁剪外侧实体，环带补放对象带来源标记一并回退；被裁节点只留一份渲染快照做沉没动画，不进逻辑数组或存档。`opts.keep` 是通用例外入口（测试场用来保护测试桩），引擎不认识具体实体。
+- 测试场 `testbed.html` / `js/testbed.js` 的「扩张 / 缩小」按钮直接调用上述入口，不进黎明流程、不打断每秒兜底；演出推进随 `S.speed`，单帧按钮也能逐帧观察。
 
 ## 下一步
 

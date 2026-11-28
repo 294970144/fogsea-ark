@@ -20,6 +20,17 @@
   .tbWeap:hover{background:rgba(143,227,208,.16);border-color:rgba(143,227,208,.5);}
   .tbWeap.on{background:rgba(255,180,84,.18);border-color:#ffb454;color:#ffd9a0;}
   #tbWeap #tbReset{margin-left:4px;border-color:rgba(255,122,144,.35);color:#ffb3c0;background:rgba(255,122,144,.08);}
+  /* 场地扩张 / 缩小：紧跟武器条下方 */
+  #tbField{position:fixed;top:60px;left:320px;height:34px;z-index:40;display:flex;align-items:center;gap:6px;
+    padding:0 10px;border-radius:10px;background:rgba(8,20,24,.82);border:1px solid rgba(143,227,208,.22);
+    box-shadow:0 6px 20px rgba(0,0,0,.35);backdrop-filter:blur(6px);font-size:12px;color:#bfe8f5;white-space:nowrap;}
+  #tbField .lbl{color:#8fe3d0;letter-spacing:.06em;font-weight:700;}
+  #tbField button{border:1px solid rgba(143,227,208,.3);background:rgba(143,227,208,.08);color:#cfe9ee;
+    border-radius:8px;padding:4px 9px;font-size:12px;cursor:pointer;font-family:inherit;transition:.15s;}
+  #tbField button:hover:not(:disabled){background:rgba(143,227,208,.18);border-color:rgba(143,227,208,.55);}
+  #tbField button:disabled{opacity:.35;cursor:not-allowed;}
+  #tbField #tbShrink{border-color:rgba(255,122,144,.35);color:#ffb3c0;background:rgba(255,122,144,.08);}
+  #tbField .tbFieldVal{color:#ffd9a0;font-weight:700;min-width:74px;text-align:center;}
   /* 顶部速度控制：紧贴右上按钮组左侧（位置由 JS 量 topRight 后锚定） */
   #tbSpeed{position:fixed;top:14px;right:70px;height:42px;z-index:40;display:flex;align-items:center;gap:8px;
     padding:0 12px;border-radius:12px;background:rgba(8,20,24,.82);border:1px solid rgba(255,180,84,.26);
@@ -247,6 +258,7 @@
 
 <!-- 测试场专用 UI -->
 <div id="tbWeap"><b>测试场</b><span id="tbWeapons"></span><button class="tbWeap" id="tbReset">重置</button></div>
+<div id="tbField"><span class="lbl">场地</span><button id="tbExpand">扩张</button><button id="tbShrink">缩小</button><span class="tbFieldVal" id="tbFieldVal"></span></div>
 <div id="tbSpeed" title="游戏速度 0~1（0=冻结，1=正常）；可拖拽、可填写，也可单帧步进">
   <span class="lbl">速度</span>
   <input id="tbSpeedRange" type="range" min="0" max="1" step="0.1" value="1" aria-label="游戏速度">

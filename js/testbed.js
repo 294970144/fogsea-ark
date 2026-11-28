@@ -72,7 +72,7 @@
     const hud=el('hud');if(hud)hud.classList.remove('hidden');
     refreshRes();renderHand();renderWeaponSlots();
     if(typeof syncHUD==='function')syncHUD();
-    buildWeaponBar();refreshScene();
+    buildWeaponBar();refreshScene();refreshField();
   }
 
   /* ---------- 左上武器切换 ---------- */
@@ -98,8 +98,9 @@
 
   /* ---------- 顶部条带锚定：武器条贴 HUD 右、速度条贴右上按钮左 ---------- */
   function layoutTop(){
-    const tl=el('topLeft'),tr=el('topRight'),w=el('tbWeap'),sp=el('tbSpeed');
+    const tl=el('topLeft'),tr=el('topRight'),w=el('tbWeap'),f=el('tbField'),sp=el('tbSpeed');
     if(tl&&w){const r=tl.getBoundingClientRect();w.style.left=Math.round(r.right+12)+'px';w.style.top=Math.round(r.top)+'px';}
+    if(tl&&f){const r=tl.getBoundingClientRect();f.style.left=Math.round(r.right+12)+'px';f.style.top=Math.round(r.top+48)+'px';}
     if(tr&&sp){const r=tr.getBoundingClientRect();sp.style.right=Math.round(innerWidth-r.left+12)+'px';sp.style.top=Math.round(r.top)+'px';}
   }
 
@@ -118,7 +119,25 @@
     update(1/60);                    // 逻辑层推进一帧（内部含弹道/敌人/粒子）
     if(S.handDirty)renderHand();
     if(typeof FX!=='undefined'&&FX.time!=null)FX.time+=1/60;  // 视觉层同步一帧
+    if(fieldReveal)advanceReveal(1/60);                       // 场扩/倒放也可逐帧观察
     render();syncHUD();
+  }
+
+  /* ---------- 场地扩张 / 缩小：显式等级，不经过黎明流程 ---------- */
+  function refreshField(){
+    const val=el('tbFieldVal'),grow=el('tbExpand'),shrink=el('tbShrink');
+    if(val)val.textContent='Lv '+S.fieldLevel+' · 半径 '+radiusForLevel(S.fieldLevel).toFixed(1);
+    if(grow)grow.disabled=S.fieldLevel>=maxLevel();
+    if(shrink)shrink.disabled=S.fieldLevel<=0;
+  }
+  function stepField(dir){
+    if(fieldReveal)finishReveal();
+    const lv=clamp(S.fieldLevel+dir,0,maxLevel());
+    if(lv===S.fieldLevel)return;
+    const keep=o=>o===dummy,info=dir>0?resizeField(lv,{keep}):shrinkField({keep});
+    if(!info)return;
+    startReveal(info,()=>{});   // 测试场不进黎明，保持 play 与每秒兜底
+    refreshField();refreshScene();
   }
 
   /* ---------- 场景对象：默认空场，手动增删；类型/数值全部引用引擎定义 ---------- */
@@ -285,6 +304,9 @@
     if(search)search.addEventListener('input',buildCardPool);
     const reset=el('tbReset');
     if(reset)reset.addEventListener('click',()=>{resetWorld();buildCardPool();endPlace();toast('测试场已重置','good');});
+    const grow=el('tbExpand'),shrink=el('tbShrink');
+    if(grow)grow.addEventListener('click',()=>stepField(1));
+    if(shrink)shrink.addEventListener('click',()=>stepField(-1));
     const clear=el('tbSceneClear');
     if(clear)clear.addEventListener('click',()=>{
       nodes.length=0;
@@ -313,7 +335,7 @@
     addEventListener('pointerdown',e=>{
       if(!tbPlacing||e.button!==0)return;
       const t=e.target;
-      if(t&&t.closest&&t.closest('#tbScene,#tbWeap,#tbSpeed,#tbPool,#tbHint,#weaponHud,#playerPanel,#recycleZone,#topLeft,#topRight,#handArea,#rightBottom'))return;
+      if(t&&t.closest&&t.closest('#tbScene,#tbWeap,#tbField,#tbSpeed,#tbPool,#tbHint,#weaponHud,#playerPanel,#recycleZone,#topLeft,#topRight,#handArea,#rightBottom'))return;
       e.preventDefault();e.stopImmediatePropagation();
       mouseX=e.clientX;mouseY=e.clientY;updateMouseWorld();
       placeAt(mouseWorld[0],mouseWorld[1]);
