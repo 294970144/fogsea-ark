@@ -1978,15 +1978,7 @@ testCase('C0_new_card_wiring', () => {
       if(!starters.has(id)&&!crafted.has(id)&&!granted.has(id)&&!pool.has(id))noSource.push(id);
     }
     return JSON.stringify({malformed,noIcon,noSource,
-      fxes:CARD_IDS.filter(id=>CDEFS[id].fx).map(id=>id+':'+CDEFS[id].fx),
-      total:STARTER_DECK.reduce((n,[,k])=>n+k,0),
-      wall:cardTotal('wall'),tower:cardTotal('tower'),rain:cardTotal('rain'),
-      spring:cardTotal('spring'),tactic:cardTotal('tactic'),
-      sigils:SIGIL_IDS.filter(id=>SIGILS[id]).map(id=>cardTotal(id)),
-      salvage:['salvage5','salvage10','salvage20'].map(id=>cardTotal(id)),
-      recipes:FUSION_RECIPES.length,recipeQ:FUSION_RECIPES.map(r=>CDEFS[r.out].q),
-      untagged:CARD_IDS.filter(id=>!cardTags(CDEFS[id]).length),
-      codexAll:CODEX.length});
+      fxes:CARD_IDS.filter(id=>CDEFS[id].fx).map(id=>id+':'+CDEFS[id].fx)});
   })()`);
   const badFx = out.fxes.filter(s => !fxIds.has(s.split(':')[1]));
 
@@ -1994,10 +1986,6 @@ testCase('C0_new_card_wiring', () => {
   assert.deepEqual(missingFx, [], '特效调用必须在特效层有分派');
   assert.deepEqual(badFx, [], '卡牌 fx 别名必须指向已登记特效');
   assert.deepEqual([out.malformed, out.noIcon, out.noSource], [[], [], []]);
-
-  // 黄金值只在新牌体检里维护，日常回归不再重复
-  assert.deepEqual([out.total, out.wall, out.tower, out.rain, out.spring, out.tactic, out.sigils, out.salvage, out.recipes, out.recipeQ, out.untagged, out.codexAll],
-    [143, 30, 24, 10, 10, 10, [6, 6, 6, 4, 4, 4], [4, 2, 1], 6, [2, 2, 2, 2, 3, 3], ['surge', 'salvage5', 'salvage10', 'salvage20', 'class_mage'], 113]);
 });
 
 

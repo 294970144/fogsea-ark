@@ -385,45 +385,9 @@ function playCard(uid,tx,ty){
   return true;
 }
 function applyInstant(def,tx,ty,overflow){
+  if(def.kind!=='instant')return;
   if(def.elem)return castSpell(def,tx,ty,overflow);
-  if(def.fuseOut)return applyFuse(def,tx,ty);
-  if(def.kind==='class')return;
-  if(def.id==='rain'||def.id==='mine'){
-    const R=def.radius;
-    FX.cast(def.id,tx,ty,{radius:R});
-    for(const f of foes){
-      if(f.dead)continue;
-      if(dist(tx,ty,f.x,f.y)<R+f.r){
-        const a=Math.atan2(f.y-ty,f.x-tx);
-        if(def.knock){f.kx+=Math.cos(a)*7;f.ky+=Math.sin(a)*7;}
-        damageFoe(f,def.dmg*(1+(P.towerMult-1)*.5),a,false);
-      }
-    }
-    if(def.id==='mine')for(const n of nodes)if(n.alive&&dist(tx,ty,n.x,n.y)<R)hitNode(n);
-    sfx(def.id==='rain'?'arrow':'boom');shake(def.id==='mine'?7:3);
-  }else if(def.id==='spring'){
-    healPlayer(def.heal);
-    FX.cast('spring',P.x,P.y);
-    sfx('heal');
-  }else if(def.id==='mend'){
-    core.hp=Math.min(core.max,core.hp+def.coreHeal);
-    builds.forEach(b=>{b.hp=Math.min(b.max,b.hp+def.buildHeal);});
-    rebuildTileCost();fieldDirty=true;
-    floater(core.x,core.y,'+'+def.coreHeal,'#ffb454',true);
-    FX.cast('mend',core.x,core.y);
-    sfx('repair');
-  }else if(def.id==='ward'){
-    P.ifr=Math.max(P.ifr,def.ifr);
-    FX.cast('ward',P.x,P.y);
-    floater(P.x,P.y,'无敌 '+def.ifr+'s','#8fe3d0',true);sfx('heal');
-  }else if(def.id==='tactic'){
-    const n=drawN(def.draw);floater(P.x,P.y,'抽 '+n+' 张','#c9a8ff',true);
-    FX.cast('tactic',P.x,P.y);
-  }else if(def.id==='surge'){
-    gainMana(P.maxEn-P.en);P.dashCd=0;
-    FX.cast('surge',P.x,P.y);
-    sfx('nova');
-  }
+  return applyFuse(def,tx,ty);
 }
 /* ---------------- 熔铸 ----------------
    两张源牌回弃牌堆，产物进手牌、打出即消失。
@@ -496,20 +460,27 @@ function applyFuse(def,tx,ty){
         damageFoe(f,def.dmg*(1+(P.towerMult-1)*.5),a,false);
       }
     }
-    shake(6);sfx('boom');
+    if(def.hitNodes)for(const n of nodes)if(n.alive&&dist(tx,ty,n.x,n.y)<R)hitNode(n);
+    sfx(def.sfx||'boom');shake(def.shake||6);
   }
   if(def.ifr){
     P.ifr=Math.max(P.ifr,def.ifr);
+    if(def.fx)FX.cast(def.fx,P.x,P.y);
     ring(P.x,P.y,q.c1,.2,1.8,.5);puff(P.x,P.y,18,q.c2,2,.7,3);
     floater(P.x,P.y,'无敌 '+def.ifr+'s',q.c1,true);sfx('heal');
   }
   if(def.draw>0){
     const n=drawN(def.draw);
+    if(def.fx)FX.cast(def.fx,P.x,P.y);
     floater(P.x,P.y,'抽 '+n+' 张',q.c1,true);
   }
+  if(def.refill){gainMana(P.maxEn-P.en);if(def.fx)FX.cast(def.fx,P.x,P.y);}
+  if(def.dashReset)P.dashCd=0;
+  if(def.refill||def.dashReset)sfx(def.sfx||'nova');
   if(def.heal){
     healPlayer(def.heal);
     if(def.fx)FX.cast(def.fx,P.x,P.y);
+    if(def.sfx)sfx(def.sfx);
   }
   if(def.coreHeal||def.buildHeal){
     if(def.coreHeal){

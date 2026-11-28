@@ -78,11 +78,11 @@ const SPELL_FX_TIME={
   sp_fireball:.16,sp_frostbolt:.15,sp_arcbolt:.06,sp_flameimpact:.2,
   sp_magicmissile:.28,sp_emberburst:.1
 };
-function spellFxTime(def){return SPELL_FX_TIME[def&&(def.fx||def.id)]||0;}
+function spellFxTime(def){return SPELL_FX_TIME[def&&(def.fx||def.id)]||(def&&def.proj?0.12:0);}
 /* 投掷物固定弹速（格/秒）：飞行时间 = 距离 / 速度，不再「无论多远都飞同样久」。
    参照：玩家常速 4.3、冲刺 14.6。火球略慢于冲刺，看得见也躲得开。 */
 const SPELL_SHOT_SPEED={sp_fireball:13,sp_frostbolt:16,sp_magicmissile:20};
-function spellShotSpeed(def){return SPELL_SHOT_SPEED[def&&(def.fx||def.id)]||16;}
+function spellShotSpeed(def){return (def&&def.shotSpeed)||SPELL_SHOT_SPEED[def&&(def.fx||def.id)]||16;}
 const CDEFS={
   wall:{id:'wall',kind:'build',build:'wall',name:'木墙',icon:'wall',color:'#e0b070',cost:{wood:8},
     desc:'筑起木墙阻挡雾裔。打出后卡牌回到弃牌堆，可再次抽到。',w:26},
@@ -93,20 +93,20 @@ const CDEFS={
   cannon:{id:'cannon',kind:'build',build:'cannon',name:'雾晶炮',icon:'cannon',color:'#57e6ff',cost:{stone:10,crys:10},
     desc:'重炮溅射 1.5 格，26 点伤害，专治成群爬行者。',w:14},
   rain:{id:'rain',kind:'instant',target:'point',name:'箭雨',icon:'rain',color:'#ffd166',cost:{wood:6,stone:4},
-    radius:2.2,dmg:45,desc:'指定区域落下箭雨，2.2 格内 45 点伤害。夜晚可用。',w:15},
+    radius:2.2,dmg:45,fx:'rain',sfx:'arrow',shake:3,desc:'指定区域落下箭雨，2.2 格内 45 点伤害。夜晚可用。',w:15},
   mine:{id:'mine',kind:'instant',target:'point',name:'雾晶雷',icon:'mine',color:'#57e6ff',cost:{crys:6},
-    radius:2.6,dmg:70,knock:1,desc:'指定区域引爆雾晶，70 点伤害并强力击退。夜晚可用。',w:13},
+    radius:2.6,dmg:70,knock:1,fx:'mine',shake:7,hitNodes:true,desc:'指定区域引爆雾晶，70 点伤害并强力击退。夜晚可用。',w:13},
   spring:{id:'spring',kind:'instant',target:'self',name:'愈灵之泉',icon:'heal',color:'#6fe08a',cost:{wood:6,crys:2},
-    heal:45,desc:'立刻恢复 45 点生命。夜晚可用。',w:15},
+    heal:45,fx:'spring',sfx:'heal',desc:'立刻恢复 45 点生命。夜晚可用。',w:15},
   mend:{id:'mend',kind:'instant',target:'self',name:'修补术',icon:'mend',color:'#ffb454',cost:{wood:8,stone:5},
     coreHeal:90,buildHeal:40,
     desc:'方舟核心 +90，全部建筑 +40 耐久。夜晚可用。',w:13},
   ward:{id:'ward',kind:'instant',target:'self',name:'灯焰护盾',icon:'ward',color:'#8fe3d0',cost:{crys:5},
-    ifr:4,desc:'获得 4 秒无敌，穿过雾弹与包围。夜晚可用。',w:11},
+    ifr:4,fx:'ward',desc:'获得 4 秒无敌，穿过雾弹与包围。夜晚可用。',w:11},
   tactic:{id:'tactic',kind:'instant',target:'self',name:'战术重整',icon:'tactic',color:'#c9a8ff',cost:{wood:4},
-    draw:2,desc:'立刻抽 2 张牌。循环牌库的关键。',w:14},
+    draw:2,fx:'tactic',desc:'立刻抽 2 张牌。循环牌库的关键。',w:14},
   surge:{id:'surge',kind:'instant',target:'self',name:'雾能充盈',icon:'surge',color:'#57e6ff',cost:{crys:3},
-    desc:'当前资源立即回满，冲刺冷却清零。',w:9},
+    fx:'surge',refill:true,dashReset:true,desc:'当前资源立即回满，冲刺冷却清零。',w:9},
   expand:{id:'expand',kind:'utility',target:'self',name:'扩容',icon:'expand',color:'#ffb454',cost:{wood:10,stone:6},
     draw:1,desc:'手牌上限 +1（最高 10，法师 12），并立即抽 1 张。满上限后不再出现。',w:11},
   // 拆解牌：拖到任意一张手牌上（等同「融合」），按回收率返还目标牌造价，两牌回弃牌堆
@@ -150,6 +150,9 @@ const CDEFS={
   sp_magicmissile:{id:'sp_magicmissile',kind:'instant',target:'self',shape:'multi',elem:'arcane',cls:'mage',core:true,sigil:true,proj:true,
     name:'魔法飞弹',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,dmg:14,missiles:3,
     status:{kind:'mark',n:1},desc:'核心奥术法术：向最近 3 个敌人各发射 1 枚 14 伤害飞弹。',w:0},
+  sp_rock:{id:'sp_rock',kind:'instant',target:'point',shape:'single',sigil:true,proj:true,fx:'sp_rock',q:2,
+    name:'投石',icon:'stone',color:'#c8b89a',cost:{},radius:1.1,dmg:52,castDelay:.9,shotSpeed:9,
+    desc:'投出石块，命中造成 52 点物理伤害。单发高伤，施法延迟较长。',brief:'52 物理伤害',w:10,wNonMage:6},
   manawell:{id:'manawell',kind:'build',build:'manawell',cls:'mage',
     name:'法力之井',icon:'well',color:'#57e6ff',cost:{wood:10,crys:6},
     desc:'范围内每秒为守灯人回复 3 点法力，场上最多 3 座。',w:10},

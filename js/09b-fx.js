@@ -837,6 +837,7 @@ const TRAILS={
   arcane:{shape:0,shape2:3,col:'#b48cff',col2:'#e0ccff',size:6,life:.3},
   meteor:{shape:0,shape2:1,col:'#ff7a45',col2:'#ffb454',size:10,life:.4},
   crystal:{shape:2,col:'#57e6ff',col2:'#dffaff',size:6,life:.3},
+  rock:{shape:6,shape2:6,col:'#c8b89a',col2:'#7d6f5a',size:5,life:.22},
   sword:{shape:2,shape2:1,col:'#8fe3d0',col2:'#dffaff',size:6,life:.26}
 };
 function updateProj(pr){
@@ -961,7 +962,7 @@ function screenBurst(sx,sy,o){
 /* ---------------- 逐卡编排 ---------------- */
 const FIRE='#ff7a45',FIRE2='#ffd166',FROST='#6fd8ff',FROST2='#dffaff',
   ARC='#b48cff',ARC2='#e0ccff',CYAN='#57e6ff',MINT='#8fe3d0',LEAF='#6fe08a',
-  AMBER='#ffb454',WOOD='#e0b070',VIOLET='#a06bff',WARN='#ffd166',SWORD2='#ffe9c4';
+  AMBER='#ffb454',WOOD='#e0b070',VIOLET='#a06bff',WARN='#ffd166',SWORD2='#ffe9c4',ROCK='#c8b89a',ROCK2='#7d6f5a';
 
 function explodeFire(x,y,big){
   flashW(x,y,{col:FIRE2,size:big?70:44,life:.22});
@@ -1109,6 +1110,15 @@ FX.spell=function(def,tx,ty,elem,targets,shot){
       });
     });
     if(!ts.length)after(.1,()=>burstW(P.x,P.y,{n:20,col:ARC,spd:2,life:.4,size:4,shape:3}));
+  }else if(id==='sp_rock'){
+    projectile({from:[P.x,P.y,18],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:shot?6:18,trail:'rock',col:ROCK,
+      onArrive:(x,y)=>{
+        flashW(x,y,{col:'#e8dcc4',size:28,life:.16});
+        ringW(x,y,{r0:.2,r1:(def.radius||1)+.4,col:ROCK,life:.3,width:.1});
+        burstW(x,y,{n:sc(28),col:ROCK,col2:ROCK2,spd:2.8,life:.5,size:5,shape:6,z0:2,vz:20,grav:130});
+        stuckW(x,y,{n:6,r:.8,col:ROCK,col2:ROCK2,shape:6,size:6,life:1.1,z0:1});
+        impact(3,0);if(typeof sfx==='function')sfx('boom');
+      }});
   }
 };
 FX.detonate=function(x,y,stacks){
@@ -1221,6 +1231,12 @@ FX.cast=function(id,x,y,o){
       mistW(x,y,{n:8,col:'#9fd8e8',spread:2.4,life:1.7,stagger:.8});
       impact(0,.05);
     });
+  }else if(id==='sp_rock'){
+    const R2=o.radius||1.1;
+    ringW(x,y,{r0:.2,r1:R2+.4,col:ROCK,life:.32,width:.1});
+    burstW(x,y,{n:nq(34),col:ROCK,col2:ROCK2,spd:2.6,life:.55,size:5,shape:6,z0:2,vz:22,grav:130});
+    stuckW(x,y,{n:7,r:R2,col:ROCK,col2:ROCK2,shape:6,size:7,life:1.3,z0:1});
+    decalW(x,y,{col:ROCK2,r:R2*.9,life:1.1,a:.28});
   }else if(id==='spring'){
     ringW(x,y,{r0:.2,r1:1.4,col:LEAF,life:.4});
     riseW(x,y,{n:nq(60),col:LEAF,col2:'#b8f5c8',r:.8,life:1.1,vz:52,size:4.5,swirl:1.8,stagger:.4});
