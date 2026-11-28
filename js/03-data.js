@@ -17,7 +17,7 @@ const TUNE={
   ember:{perNight:3,killsDiv:8,winBonus:12},
   resourceDrop:{tree:'wood',rock:'stone',crys:'crys'},
   fusion:{crys:5}, // 熔铸手续费：两张源牌回弃牌堆，产物打出后不再回收
-  weapon:{repeatDelay:.14}, // 二重错峰：同一法术补发之间的间隔（秒）
+  weapon:{repeatDelay:.14,spread:2}, // 补发间隔（秒）；原生散布：每次施放在瞄准角上随机 ±spread 度
   deck:{shuffleFloor:8}, // 抽牌堆降到 8 张就把弃牌堆并回来重洗
   statusNames:{burn:'灼烧',chill:'冰缓',freeze:'冻结',mark:'奥术标记',shock:'感电'}
 };
@@ -294,28 +294,27 @@ const WEAPONS={
 const WEAPON_IDS=Object.keys(WEAPONS);
 const normalizeWeaponId=id=>Object.prototype.hasOwnProperty.call(WEAPONS,id)?id:'sword';
 const weaponDef=id=>WEAPONS[normalizeWeaponId(id)];
-// 武器刻印：装入武器槽位，同种可叠装至 SIGIL_COPIES 份
+// 武器刻印：装入武器槽位，同种可重复装，上限只由槽位数决定。mana = 每次施放的雾能开销。
 const SIGILS={
-  keen:{id:'keen',n:'锋锐刻印',short:'锋锐',icon:'crit',color:'#ffb454',dmg:.20},
-  swift:{id:'swift',n:'迅捷刻印',short:'迅捷',icon:'bolt',color:'#8fe3d0',spd:.15},
-  echo:{id:'echo',n:'回响刻印',short:'回响',icon:'wave',color:'#c9a8ff',echo:.25},
-  // 多重类：copies=一次施放的份数，spread=相邻两发的夹角(度)，repeat=同一法术错峰补发，dmgB=复制体伤害系数
-  // 阵型类（formation）：只修饰左侧紧邻的那一个法术槽，不作用于整把武器
-  burst:{id:'burst',n:'二重法术',short:'二重',icon:'burst',color:'#ffd166',copies:2,spread:0,repeat:true,dmgB:.7},
-  scatter:{id:'scatter',n:'二叉',short:'二叉',icon:'wind',color:'#ffb454',copies:2,spread:90,dmgB:.55,formation:true},
-  trident:{id:'trident',n:'三叉',short:'三叉',icon:'thorn',color:'#c9a8ff',copies:3,spread:20,dmgB:.45,formation:true}
+  keen:{id:'keen',n:'锋锐刻印',short:'锋锐',icon:'crit',color:'#ffb454',dmg:.20,mana:3},
+  swift:{id:'swift',n:'迅捷刻印',short:'迅捷',icon:'bolt',color:'#8fe3d0',spd:.15,mana:3},
+  echo:{id:'echo',n:'回响刻印',short:'回响',icon:'wave',color:'#c9a8ff',echo:.25,mana:3},
+  // 功能类：op 指定它怎样改写施放链（算子表 SIGIL_OPS 在 07-combat.js），copies/spread/dmgB 是参数
+  burst:{id:'burst',n:'二重法术',short:'二重',icon:'burst',color:'#ffd166',op:'repeat',copies:2,dmgB:.7,mana:5},
+  scatter:{id:'scatter',n:'二叉',short:'二叉',icon:'wind',color:'#ffb454',op:'fan',copies:2,spread:90,dmgB:.55,mana:5},
+  trident:{id:'trident',n:'三叉',short:'三叉',icon:'thorn',color:'#c9a8ff',op:'fan',copies:3,spread:20,dmgB:.45,mana:5}
 };
 const SIGIL_IDS=Object.keys(SIGILS);
-const SIGIL_COPIES=3;
 // 文案实时派生：改数值即改描述，避免与表漂移
 /* 刻印文案直接从 SIGILS 派生：迅捷只压整轮充能，换算成充能降幅展示（出手频率等效 +spd）。 */
 const sigilDesc=id=>{
   const s=SIGILS[id];if(!s)return CDEFS[id]&&CDEFS[id].sigil?`武器攻击：${CDEFS[id].brief}`:'';
-  return s.copies!=null?(s.repeat?`左侧相邻法术错峰连打 ${s.copies} 发，后续每发 ${Math.round(s.dmgB*100)}% 伤害`
-      :`左侧相邻法术分裂 ${s.copies} 发，±${(s.copies-1)*s.spread/2}°`)
+  const fx=s.op==='fan'?`左侧相邻法术分裂 ${s.copies} 发，±${(s.copies-1)*s.spread/2}°，总伤害 ×${(1+(s.copies-1)*s.dmgB).toFixed(2)}`
+    :s.op==='repeat'?`左侧相邻法术错峰补发 ${s.copies-1} 次，每次 ${Math.round(s.dmgB*100)}% 伤害`
     :s.dmg!=null?`武器伤害 +${Math.round(s.dmg*100)}%`
     :s.spd!=null?`武器充能时间 −${Math.round((1-1/(1+s.spd))*100)}%`
     :`武器攻击 ${Math.round(s.echo*100)}% 概率追加一次`;
+  return s.mana?`${fx} · 每发 ${s.mana} 雾能`:`${fx} · 不耗雾能`;
 };
 /* 槽位条目元信息：数值刻印 SIGILS 与法术刻印 CDEFS.sigil 共用一接口 */
 const sigilMeta=id=>{

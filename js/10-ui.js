@@ -94,13 +94,19 @@ function syncHUD(){
   // 节奏条：满=就绪；施放延迟段武器色，整轮充能段暖色；空手法杖不涨条
   if(UI.castBar){
     const canCast=w.attack!=='spell'||weaponCastSlots().length>0;
+    const cost=weaponManaCost(),starved=cost>0&&P.en<cost;
     const cd=Math.max(0,P.atkCd),max=P.atkCdMax||1;
-    const k=!canCast?0:(cd<=0?1:1-cd/max);
+    const k=!canCast||starved?0:(cd<=0?1:1-cd/max);
     UI.castFill.style.transform='scaleX('+k.toFixed(3)+')';
     const rl=canCast&&cd>0&&!!P.reload&&w.attack==='spell';
     if(UI.castBar._r!==rl){UI.castBar._r=rl;UI.castBar.classList.toggle('reload',rl);}
     const idle=!canCast;
     if(UI.castBar._i!==idle){UI.castBar._i=idle;UI.castBar.classList.toggle('idle',idle);}
+    // 雾能不足：条子清空变红，悬停说明每发要多少，玩家能立刻知道为什么打不出去
+    if(UI.castBar._s!==starved){
+      UI.castBar._s=starved;UI.castBar.classList.toggle('starved',starved);
+      UI.castBar.title=starved?`雾能不足 · 每发需要 ${cost}`:'';
+    }
   }
   const sigKey=(P.weapon||'')+'|'+(P.sigils||[]).map(c=>c&&c.uid).join(',');
   if(UI.weaponSlots._k!==sigKey){UI.weaponSlots._k=sigKey;syncSlotEls();}
@@ -352,7 +358,7 @@ const CODEX=[
      ['回复',manaRegenRate().toFixed(1)+' /秒']],
    rel:['keeper','b_nova','c_surge']},
   {id:'mana',cat:'term',name:'法力',icon:'crys',color:'#57e6ff',
-   desc:'法师转职后的施法资源。非法师仍使用雾能；基础法术对两者都消耗当前资源。',
+   desc:'法师转职后的施法资源。非法师仍使用雾能；法术牌、雾爆与武器上的刻印都从这里扣，基础攻击法术本身不耗。',
    stats:()=>[['当前上限',P.maxEn],['基础回复',P.enRegenFlat+' /秒'],['实际回复',manaRegenRate().toFixed(1)+' /秒'],
      ['1 费',MANA_UNIT+' 法力'],['雾爆消耗',String(TUNE.nova.cost)]],
    rel:['mage','spell','c_surge']},

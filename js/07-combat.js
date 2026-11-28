@@ -19,24 +19,52 @@ function weaponRechargeTime(w=weaponDef(P.weapon),casts=1){
 function weaponCastCost(w,cast){
   return cast.last?weaponRechargeTime(w,cast.n):weaponCastDelay(w);
 }
+/* 原生散布：每次施放在瞄准角上抖动 ±TUNE.weapon.spread 度，避免连发弹道完全重合。
+   走独立随机流，不消耗 Math.random——否则会连带位移刷怪与掉落的随机序列。 */
+let spreadSeed=0x2f6e2b1;
+function weaponSpreadOffset(){
+  spreadSeed^=spreadSeed<<13;spreadSeed>>>=0;
+  spreadSeed^=spreadSeed>>>17;
+  spreadSeed^=spreadSeed<<5;spreadSeed>>>=0;
+  return (spreadSeed/4294967296*2-1)*TUNE.weapon.spread*Math.PI/180;
+}
+/* 雾能开销：基础攻击法术（sig_flame 等）不计费，槽内每一张刻印按 SIGILS.mana 累加，
+   每次施放扣一次。剑没有槽内序列，但装在剑上的刻印同样计费。 */
+function weaponManaCost(){
+  let n=0;
+  for(const c of P.sigils||[]){const s=c&&SIGILS[c.id];if(s)n+=s.mana||0;}
+  return n;
+}
+function payWeaponMana(){
+  const cost=weaponManaCost();
+  if(!(cost>0))return true;
+  if(P.en<cost)return false;
+  P.en-=cost;return true;
+}
 /* 记冷却并标记本段是轮内施放延迟还是整轮充能，HUD 进度条只读这两个值。 */
 function setWeaponCd(w,cast){
   P.atkCd=weaponCastCost(w,cast);
   P.atkCdMax=Math.max(.001,P.atkCd);
   P.reload=!!cast.last;
 }
-/* 平均每发时间：只给图鉴/HUD 摘要用，战斗计时走上面两段。 */
+/* 平均每发时间：调参与回归读数用，图鉴展示走 weaponTimingStats。 */
 function weaponAttackInterval(w=weaponDef(P.weapon)){
   if(w.attack!=='spell')return weaponRechargeTime(w,1);
   const n=Math.max(1,weaponSpells(w).length);
   return ((n-1)*weaponCastDelay(w)+weaponRechargeTime(w,n))/n;
 }
 function weaponTimingStats(w=weaponDef(P.weapon)){
-  if(w.attack!=='spell')return [['攻击间隔',weaponRechargeTime(w,1).toFixed(2)+' 秒']];
-  const n=P.weapon===w.id?Math.max(1,weaponSpells(w).length):(w.slots||1);
-  return [['施放延迟',weaponCastDelay(w).toFixed(2)+' 秒'],
-    ['充能',((w.recharge||0)/P.atkSpd).toFixed(2)+' 秒'],
-    ['平均每发',(((n-1)*weaponCastDelay(w)+weaponRechargeTime(w,n))/n).toFixed(2)+' 秒']];
+  const mana=P.weapon===w.id?weaponManaCost():0;
+  let rows;
+  if(w.attack!=='spell')rows=[['攻击间隔',weaponRechargeTime(w,1).toFixed(2)+' 秒']];
+  else{
+    const n=P.weapon===w.id?Math.max(1,weaponSpells(w).length):(w.slots||1);
+    rows=[['施放延迟',weaponCastDelay(w).toFixed(2)+' 秒'],
+      ['充能',((w.recharge||0)/P.atkSpd).toFixed(2)+' 秒'],
+      ['平均每发',(((n-1)*weaponCastDelay(w)+weaponRechargeTime(w,n))/n).toFixed(2)+' 秒']];
+  }
+  if(mana>0)rows.push(['每发雾能',mana+' 点']);
+  return rows;
 }
 function sigilMods(){
   const m={dmg:1,spd:1,echo:0};
@@ -48,53 +76,55 @@ function sigilMods(){
   }
   return m;
 }
-/* 功能类刻印（多重/阵型）只作用于它左边最近的那一张法术：
-   从 slot+1 向右扫，空槽跳过、纯数值刻印跳过，遇到法术即停下。
-   扫到的功能刻印按顺序收集成链——链上多个刻印叠加到同一个法术上。 */
+/* 功能类刻印只作用于它左边最近的那一张法术：从 slot+1 向右扫，空槽跳过、
+   纯数值刻印跳过，遇到法术即停。扫到的刻印按先后收集成链，逐个作用到同一个
+   法术上——后一张在前一张算完的结果上继续算，不是各算一遍再合并。 */
 function sigilChain(slot){
   const out=[],g=P.sigils||[];
   for(let i=(slot|0)+1;i<g.length;i++){
     const c=g[i];if(!c)continue;
     const s=SIGILS[c.id];
     if(!s)break;                       // 遇到法术：链到此为止
-    if(s.copies!=null)out.push(s);     // 数值刻印不参与，也不截断链
+    if(s.op)out.push(s);               // 数值刻印不参与，也不截断链
   }
   return out;
 }
-/* 阵型叠加：份数相乘，总张角相加，再摊成「相邻两发的夹角」。
-   二叉(2 发 90°) + 三叉(3 发 40°) = 6 发 130°（每段 26°），而不是各自为政。 */
-function formationOf(slot){
-  const ch=sigilChain(slot).filter(s=>s.formation);
-  if(!ch.length)return null;
-  let copies=1,arc=0,dmgB=1;
-  for(const s of ch){
-    copies*=s.copies;
-    arc+=(s.copies-1)*(s.spread||0);
-    dmgB*=s.dmgB==null?1:s.dmgB;
+/* 功能刻印算子：吃当前弹道组，就地改完返回。
+   新增一种功能刻印 = SIGILS 加一行带 op 的数据 + 这里加一个同名算子，别处不用改。 */
+const SIGIL_OPS={
+  /* 分裂：当前每一发都绕自己的方向摊成 n 发（整段张开 spread 度），
+     这一步的总伤害 = 原来的 (1+(n-1)·dmgB) 倍，平均分给分裂后的每一发。 */
+  fan:(st,s)=>{
+    const n=Math.max(1,s.copies|0),k=s.dmgB==null?1:s.dmgB;
+    const gap=(s.spread||0)*Math.PI/180,mid=(n-1)/2,gain=(1+(n-1)*k)/n;
+    const out=[];
+    for(const p of st.shots)
+      for(let i=0;i<n;i++)out.push({off:p.off+(i-mid)*gap,mul:p.mul*gain});
+    st.shots=out;
+    return st;
+  },
+  /* 补发：同一发沿时间轴再打 n-1 次，每次 ×dmgB。 */
+  repeat:(st,s)=>{
+    const n=Math.max(1,s.copies|0),k=s.dmgB==null?1:s.dmgB;
+    st.rep.n+=n-1;st.rep.mul*=k;
+    return st;
   }
-  return{copies,arc,spread:copies>1?arc/(copies-1):0,dmgB};
+};
+/* 把一串功能刻印从左到右折进初始状态：
+   shots = 每发的偏角与伤害系数；rep = 错峰补发次数与系数。 */
+function foldCast(chain){
+  const st={shots:[{off:0,mul:1}],rep:{n:1,mul:1}};
+  for(const s of chain){const op=SIGIL_OPS[s.op];if(op)op(st,s);}
+  st.shots.sort((a,b)=>a.off-b.off);   // 统一按角度从右到左出膛，读数与画面稳定
+  return st;
 }
-/* 二重叠加：每多一张就多一次错峰补发，伤害系数连乘。 */
-function repeatOf(slot){
-  const ch=sigilChain(slot).filter(s=>s.repeat);
-  if(!ch.length)return null;
-  let n=1,dmgB=1;
-  for(const s of ch){n+=s.copies-1;dmgB*=s.dmgB==null?1:s.dmgB;}
-  return{n,dmgB};
-}
-/* 剑只有一次挥砍、没有槽内序列，阵型刻印全部作用于这一次挥砍。 */
-function swordFormation(){
+/* 法术槽：这一发的法术 + 它右侧的刻印链 */
+function castPlan(slot){return foldCast(sigilChain(slot));}
+/* 剑没有槽内序列：全部功能刻印按槽位顺序折进同一次挥砍 */
+function swordPlan(){
   const ch=[];
-  for(const c of P.sigils||[]){
-    const s=SIGILS[c&&c.id];
-    if(s&&s.formation)ch.push(s);
-  }
-  if(!ch.length)return null;
-  let copies=1,arc=0,dmgB=1;
-  for(const s of ch){
-    copies*=s.copies;arc+=(s.copies-1)*(s.spread||0);dmgB*=s.dmgB==null?1:s.dmgB;
-  }
-  return{copies,arc,spread:copies>1?arc/(copies-1):0,dmgB};
+  for(const c of P.sigils||[]){const s=SIGILS[c&&c.id];if(s&&s.op)ch.push(s);}
+  return foldCast(ch);
 }
 /* 非乱序法杖严格从左到右施放；空槽与纯数值刻印跳过，槽位变化不会让序列错位。 */
 function weaponCastSlots(w=weaponDef(P.weapon)){
@@ -127,26 +157,14 @@ function nextWeaponSpell(){
   return c?c.def:null;
 }
 let sigilEchoing=false;
-function sigilEcho(w,tgt,cast,opts){
+function sigilEcho(w,tgt,cast){
   if(sigilEchoing)return;
   const m=sigilMods();
   if(m.echo<=0||Math.random()>=m.echo)return;
   sigilEchoing=true;
-  const resource=opts&&opts.resource;
   const echo={def:cast&&cast.def,slot:cast&&cast.slot!=null?cast.slot:-1,last:true,n:1};
   try{
-    if(resource){
-      const node=tgt&&tgt.alive?tgt:nearestWeaponNode(w);
-      if(node)autoCastWeapon(w,node,echo,{echo:true,resource:node});
-      return;
-    }
-    if(tgt&&!tgt.dead){if(w.attack==='spell')autoCastWeapon(w,tgt,echo,{echo:true});else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x),{echo:true});return;}
-    let near=null,bd=1e9;
-    forFoes(P.x,P.y,weaponAttackRange(w)+1.2,f=>{
-      if(f.dead)return;
-      const d=dist(P.x,P.y,f.x,f.y);
-      if(d<=weaponAttackRange(w)+f.r&&d<bd){bd=d;near=f;}
-    });
+    const near=targetLive(tgt)?tgt:nearestTarget(w);
     if(!near)return;
     if(w.attack==='spell')autoCastWeapon(w,near,echo,{echo:true});
     else swing(Math.atan2(near.y-P.y,near.x-P.x),{echo:true});
@@ -154,144 +172,133 @@ function sigilEcho(w,tgt,cast,opts){
 }
 function autoAttack(){
   if(P.downed||P.atkCd>0)return;
-  const w=weaponDef(P.weapon),range=weaponAttackRange(w);
-  let tgt=null,bd=1e9;
-  forFoes(P.x,P.y,range+1.2,f=>{
-    if(f.dead)return;
-    const d=dist(P.x,P.y,f.x,f.y);
-    if(d<=range+f.r&&d<bd){bd=d;tgt=f;}
-  });
-  if(tgt){
-    if(w.attack==='spell'){
-      const cast=nextWeaponCast();if(!cast)return;
-      autoCastWeapon(w,tgt,cast);
-    }else swing(Math.atan2(tgt.y-P.y,tgt.x-P.x));
-    return;
-  }
-  for(const n of nodes){
-    if(!n.alive)continue;
-    const d=dist(P.x,P.y,n.x,n.y);
-    if(d<=range+.4&&d<bd){bd=d;tgt=n;}
-  }
+  const w=weaponDef(P.weapon),tgt=nearestTarget(w);
   if(!tgt)return;
   const ang=Math.atan2(tgt.y-P.y,tgt.x-P.x);
-  if(w.attack==='melee')swing(ang);
-  else {
-    const cast=nextWeaponCast();if(!cast)return;
-    // 打资源节点与打敌人走同一条施放通路，阵型/二重/回响一律生效
-    P.face=ang;
-    autoCastWeapon(w,tgt,cast,{resource:tgt});
-  }
+  if(w.attack==='melee'){swing(ang);return;}
+  const prev=P.sigCast,cast=nextWeaponCast();if(!cast)return;
+  if(!autoCastWeapon(w,tgt,cast))P.sigCast=prev;   // 雾能不足：游标退回，下帧重试
 }
-/* 二重补发的错峰队列：瞬态，不入存档；原目标已死就换最近的敌人，换不到就丢弃这一发。 */
+/* 二重补发的错峰队列：瞬态，不入存档；原目标已倒下就换最近的，换不到就丢弃这一发。 */
 const weaponRepeats=[];
-function nearestWeaponFoe(w){
-  const range=weaponAttackRange(w);let tgt=null,bd=1e9;
-  forFoes(P.x,P.y,range+1.2,f=>{
-    if(f.dead)return;
-    const d=dist(P.x,P.y,f.x,f.y);
-    if(d<=range+f.r&&d<bd){bd=d;tgt=f;}
-  });
-  return tgt;
-}
-function nearestWeaponNode(w){
-  const range=weaponAttackRange(w);let tgt=null,bd=1e9;
-  for(const n of nodes){
-    if(!n.alive)continue;
-    const d=dist(P.x,P.y,n.x,n.y);
-    if(d<=range+.4&&d<bd){bd=d;tgt=n;}
-  }
-  return tgt;
-}
 function updateWeaponRepeats(){
   if(!weaponRepeats.length)return;
   for(let i=weaponRepeats.length-1;i>=0;i--){
     const r=weaponRepeats[i];
     if(r.at>S.combatT)continue;
     weaponRepeats.splice(i,1);
-    const tgt=r.resource
-      ?(r.tgt&&r.tgt.alive?r.tgt:nearestWeaponNode(r.w))
-      :(r.tgt&&!r.tgt.dead?r.tgt:nearestWeaponFoe(r.w));
-    if(tgt)fireWeaponCast(r.w,tgt,r.cast,r.mul,r.resource?tgt:null);
+    const tgt=targetLive(r.tgt)?r.tgt:nearestTarget(r.w);
+    if(tgt)fireWeaponCast(r.w,tgt,r.cast,r.mul);
   }
 }
 function autoCastWeapon(w,tgt,cast,opts){
-  cast=cast||nextWeaponCast();if(!cast)return;
-  const echo=!!(opts&&opts.echo),resource=(opts&&opts.resource)||null;
+  cast=cast||nextWeaponCast();if(!cast)return false;
+  const echo=!!(opts&&opts.echo);
+  if(!echo&&!payWeaponMana())return false;   // 雾能不足：这一发不打，冷却也不推进
   P.face=Math.atan2(tgt.y-P.y,tgt.x-P.x);
-  if(echo){fireWeaponCast(w,tgt,cast,1,resource);return;}
+  if(echo){fireWeaponCast(w,tgt,cast,1);return true;}
   setWeaponCd(w,cast);
-  fireWeaponCast(w,tgt,cast,1,resource);
+  fireWeaponCast(w,tgt,cast,1);
   // 二重：只把刚施放的这个法术错峰再打一遍，不跨槽取下一个法术
-  const rp=repeatOf(cast.slot);
-  if(rp)for(let i=1;i<rp.n;i++)
-    weaponRepeats.push({w,cast,tgt,mul:rp.dmgB,at:S.combatT+(TUNE.weapon.repeatDelay||0)*i,resource});
-  sigilEcho(w,tgt,cast,{resource});
+  const rp=castPlan(cast.slot).rep;
+  if(rp.n>1)for(let i=1;i<rp.n;i++)
+    weaponRepeats.push({w,cast,tgt,mul:rp.mul,at:S.combatT+(TUNE.weapon.repeatDelay||0)*i});
+  sigilEcho(w,tgt,cast);
+  return true;
 }
-/* 落点附近的资源节点：阵型把弹道散开后，各发优先打自己方向上的树/矿。 */
-function nodeNear(x,y){
-  let best=null,bd=1e9;
+/* ---- 可攻击目标（统一层）----
+   敌人、资源节点以及今后任何能被打的东西，都靠下面三个函数接入武器攻击。
+   新增目标类型只需登记到 attackables()，自动索敌/索敌落点/弹道碰撞/命中结算全部生效，
+   施放链与刻印不必知道目标是什么。alive 用 dead/alive 双语义兼容两类对象。 */
+function isNode(t){return t.alive!==undefined;}
+function targetLive(t){return !!t&&!t.dead&&t.alive!==false;}
+function hitRadius(t){return isNode(t)?.4:(t.r||.3);}
+function attackables(){
+  const out=[];
+  for(const f of foes)if(!f.dead)out.push(f);
+  for(const n of nodes)if(n.alive)out.push(n);
+  return out;
+}
+/* 自动索敌：射程内敌人优先，没有敌人才选节点——这是玩法约定，
+   与"所有目标共用施放链"无关。两类目标都从这一个函数出去。 */
+function nearestTarget(w){
+  const range=weaponAttackRange(w);let best=null,bd=1e9;
+  for(const f of foes){
+    if(f.dead)continue;
+    const d=dist(P.x,P.y,f.x,f.y)-hitRadius(f);
+    if(d<=range&&d<bd){bd=d;best=f;}
+  }
+  if(best)return best;
   for(const n of nodes){
     if(!n.alive)continue;
-    const d=dist(x,y,n.x,n.y);
-    if(d<=.9&&d<bd){bd=d;best=n;}
+    const d=dist(P.x,P.y,n.x,n.y)-hitRadius(n);
+    if(d<=range&&d<bd){bd=d;best=n;}
   }
   return best;
 }
-/* 单次法术出手：阵型刻印让同一发分裂多路，复制体按 dmgB 衰减；每路各自走弹道与结算。
-   resource 非空时打的是资源节点：每发按落点找最近的存活节点，找不到就落回原节点。 */
-function fireWeaponCast(w,tgt,cast,mul,resource){
-  const def=cast.def,f=formationOf(cast.slot);
+/* 落点命中：每发弹道到达时对落点附近的所有目标结算，范围看法术自身的 shape/radius。
+   single 只打落点最近的那个，其余按 radius 覆盖全体——这是法术语义，与目标类型无关。 */
+function weaponHitAt(def,x,y,k,node){
+  const single=def.shape==='single',R=def.radius||.6,foesHit=[];
+  // 敌人按法术形状覆盖（single 只取最近一个），火焰蔓延以命中的敌人为种子
+  const targets=attackables().filter(t=>!isNode(t)&&dist(x,y,t.x,t.y)<=R+hitRadius(t));
+  if(single&&targets.length){
+    let best=targets[0],bd=dist(x,y,best.x,best.y);
+    for(const t of targets){const d=dist(x,y,t.x,t.y);if(d<bd){bd=d;best=t;}}
+    targets.length=0;targets.push(best);
+  }
+  for(const t of targets){
+    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell*sigilMods().dmg*k;
+    const crit=Math.random()<P.crit;if(crit)dmg*=2;
+    if(dmg>0)damageFoe(t,dmg,Math.atan2(t.y-P.y,t.x-P.x),crit,{noKnock:true});
+    if(def.status&&!t.dead)applyElement(t,def.elem,def.status.n,def.status.kind);
+    foesHit.push(t);
+  }
+  // 资源节点只采发射时锁定的那一处；树已倒下即打空，不溅射到邻近节点
+  if(node&&node.alive){
+    if(def.spreadFire&&node.type==='tree')spreadFire(x,y,def.radius,[]);
+    hitNode(node);
+  }
+  const hits=foesHit.concat(node&&node.alive?[node]:[]);
+  if(def.spreadFire&&foesHit.length)spreadFire(x,y,def.radius,foesHit);
+  if(hits.length)S.hitstop=Math.max(S.hitstop,.02);
+  return hits;
+}
+/* 单次法术出手：按施放链算出的弹道组逐发打出，每发各自走弹道与落点结算。 */
+function fireWeaponCast(w,tgt,cast,mul){
+  const def=cast.def,pl=castPlan(cast.slot);
   const base=Math.atan2(tgt.y-P.y,tgt.x-P.x);
   const d=Math.max(.6,dist(P.x,P.y,tgt.x,tgt.y));
-  const copies=f?f.copies:1;
-  for(let i=0;i<copies;i++){
-    const off=(i-(copies-1)/2)*(f?f.spread:0)*Math.PI/180;
-    const tx=P.x+Math.cos(base+off)*d,ty=P.y+Math.sin(base+off)*d;
-    const k=(i===0?1:(f?f.dmgB:1))*mul;
-    if(resource){
-      const node=nodeNear(tx,ty)||resource;
-      const shot=queueSpellHit(def,tx,ty,{mode:'weapon',node,resolve:(dd,x,y)=>{
-        if(!node.alive)return;                       // 树/矿已采完即打空
-        if(dd.spreadFire&&node.type==='tree')spreadFire(x,y,dd.radius,[]);
-        hitNode(node);
-      }});
-      spellFx(def,tx,ty,def.elem,[],shot);
-      continue;
+  for(const p of pl.shots){
+    // 每发各自抖一次：二叉的两路也会略微不对称，连发不会叠成一条线
+    const a=base+p.off+weaponSpreadOffset(),tx=P.x+Math.cos(a)*d,ty=P.y+Math.sin(a)*d;
+    const k=p.mul*(mul==null?1:mul);
+    // 发射时锁定这一发要采的节点：落点附近的，或瞄准的那一个。每发各锁各的，分叉就能分采不同的树。
+    let node=null;
+    if(isNode(tgt)){
+      let nd=1e9;
+      for(const n of nodes){if(!n.alive)continue;const q=dist(tx,ty,n.x,n.y);if(q<=.9&&q<nd){nd=q;node=n;}}
+      if(!node)node=tgt;
     }
-    const targets=def.shape==='single'?[tgt]:spellTargets(def,tx,ty);
-    // 投掷物有真实弹道，命中位置才是结算点；非投掷物仍按落点重新索敌（目标死了或跑出范围即打空）。
-    const shot=queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(dd,x,y,foe)=>weaponSpellHit(dd,x,y,foe,tgt,k)});
-    spellFx(def,tx,ty,def.elem,targets,shot);
+    const shot=queueSpellHit(def,tx,ty,{mode:'weapon',resolve:(dd,x,y)=>weaponHitAt(dd,x,y,k,node)});
+    spellFx(def,tx,ty,def.elem,spellTargets(def,tx,ty),shot);
   }
 }
-function weaponSpellHit(def,x,y,foe,tgt,mul){
-  const now=(def.shape==='single'
-    ? (tgt&&!tgt.dead&&dist(x,y,tgt.x,tgt.y)<=(tgt.r||.3)+.6?[tgt]:[])
-    : spellTargets(def,x,y));
-  for(const f of now){
-    if(!f||f.dead)continue;
-    let dmg=(def.dmg||0)*(P.dmg/TUNE.player.baseDmg)*TUNE.dmgMul.spell*sigilMods().dmg*(mul==null?1:mul);
-    const crit=Math.random()<P.crit;if(crit)dmg*=2;
-    if(dmg>0)damageFoe(f,dmg,Math.atan2(f.y-P.y,f.x-P.x),crit,{noKnock:true});
-    if(def.status&&!f.dead)applyElement(f,def.elem,def.status.n,def.status.kind);
-  }
-  if(def.spreadFire)spreadFire(x,y,def.radius,now);
-  if(now.length)S.hitstop=Math.max(S.hitstop,.02);
-  return now;
-}
-/* 剑同样吃阵型刻印：同一挥砍变成带角度的多段，复制段按 dmgB 衰减。 */
+/* 剑同样走施放链：全部功能刻印折进这一次挥砍，分裂成带角度的多段，
+   二重在同一帧里重打一次（剑没有弹道时间轴）。 */
 function swing(ang,opts){
   const echo=!!(opts&&opts.echo);
+  if(!echo&&!payWeaponMana())return false;   // 剑上的刻印同样计费，雾能不足就挥不动
   if(!echo)setWeaponCd(WEAPONS.sword,{last:true,n:1});
-  const f=echo?null:swordFormation(),copies=f?f.copies:1;
+  const pl=echo?null:swordPlan();
+  const shots=pl?pl.shots:[{off:0,mul:1}],rep=pl?pl.rep:{n:1,mul:1};
   P.swingT=.18;P.face=ang;
   let any=false;
-  for(let i=0;i<copies;i++){
-    const a=ang+(i-(copies-1)/2)*(f?f.spread:0)*Math.PI/180;
-    if(swingArc(a,i===0?1:(f?f.dmgB:1)))any=true;
-  }
+  for(const p of shots)
+    for(let r=0;r<rep.n;r++)
+      if(swingArc(ang+p.off,p.mul*(r===0?1:rep.mul)))any=true;
   if(any)sigilEcho(WEAPONS.sword,{x:P.x+Math.cos(ang)*.6,y:P.y+Math.sin(ang)*.6});
+  return true;
 }
 function swingArc(ang,mult){
   slashes.push({x:P.x,y:P.y,ang,t:0,R:P.range});

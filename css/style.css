@@ -99,6 +99,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   background:var(--wc,var(--mist));transition:transform .06s linear,background .18s}
 #castBar.reload #castFill{background:linear-gradient(90deg,var(--ember),var(--amber))}
 #castBar.idle{background:rgba(255,77,109,.18)}
+#castBar.starved #castFill{background:#e2504a}
+#castBar.starved{background:rgba(226,80,74,.22)}
 @keyframes slotIn{from{opacity:0;transform:translateY(-6px) scale(.82)}to{opacity:1;transform:none}}
 .wslotBox{width:62px;height:62px;border-radius:14px;display:grid;place-items:center;transition:transform .16s ease}
 .wslot.empty .wslotBox{border:1.5px dashed rgba(143,227,208,.3);background:rgba(143,227,208,.05)}
