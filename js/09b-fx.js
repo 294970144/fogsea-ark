@@ -9,7 +9,7 @@ const FX={on:false,q:1,time:0,_detN:0,_magePending:false,backend:'none'};
 const ADD=6144,ALPHA=2048,QUADS=16;
 let renderer=null,scene=null,camera=null,atlasTex=null,atlasCanvas=null,veil=null;
 let gpu=null;
-let pools=null,quads=[],projs=[],events=[];
+let pools=null,quads=[],projs=[],events=[],rockBits=[],rockBursts=[];
 let lastNow=0,wasActive=false,emaMs=16,slowT=0,deadT=0,veilOff=false;
 let vw=0,vh=0,vdpr=1;
 
@@ -68,6 +68,7 @@ function makeAtlas(){
     g.beginPath();g.moveTo(64,118);g.lineTo(51,88);g.lineTo(77,88);g.closePath();g.fill();
     g.beginPath();g.moveTo(62,16);g.lineTo(49,8);g.lineTo(49,26);g.lineTo(62,34);g.closePath();g.fill();
     g.beginPath();g.moveTo(66,16);g.lineTo(79,8);g.lineTo(79,26);g.lineTo(66,34);g.closePath();g.fill();});
+  // 投石形状现在由 2D 主画布直接绘制，不再占用 FX 图集单元
   atlasCanvas=c;
   const t=new THREE.CanvasTexture(c);t.flipY=false;return t;
 }
@@ -829,7 +830,7 @@ function projectile(o){
     x1:o.to[0],y1:o.to[1],z1:o.to[2]||8,target:o.target||null,track:o.track||null,
     birth:FX.time+(o.delay||0),dur:o.dur||.2,arc:o.arc||0,
     px:o.from[0],py:o.from[1],ph:o.from[2]||14,
-    col:o.col||'#ffffff',trail:o.trail||'fire',onArrive:o.onArrive||null,done:false});
+    col:o.col||'#ffffff',trail:o.trail||'fire',spin:o.spin||0,onArrive:o.onArrive||null,done:false});
 }
 const TRAILS={
   fire:{shape:0,shape2:1,col:'#ff7a45',col2:'#ffd166',size:7,life:.32},
@@ -837,9 +838,33 @@ const TRAILS={
   arcane:{shape:0,shape2:3,col:'#b48cff',col2:'#e0ccff',size:6,life:.3},
   meteor:{shape:0,shape2:1,col:'#ff7a45',col2:'#ffb454',size:10,life:.4},
   crystal:{shape:2,col:'#57e6ff',col2:'#dffaff',size:6,life:.3},
-  rock:{shape:6,shape2:6,col:'#c8b89a',col2:'#7d6f5a',size:5,life:.22},
   sword:{shape:2,shape2:1,col:'#8fe3d0',col2:'#dffaff',size:6,life:.26}
 };
+/* 投石碎屑走 2D 主画布，避免加色层在绿地上洗白；这里只维护物理状态。
+   参考投掷物/命中 VFX 的分层：飞行掉砂、命中短闪+裂纹环、石片/碎石/砂粒分段散开。 */
+function rockBit(x,y,z,vx,vy,vz,life,scale,kind,light,seed){
+  const grav=kind==='grit'?220:kind==='chip'?190:150;
+  rockBits.push({x,y,z,vx,vy,vz,grav,birth:FX.time,life,scale,kind,light,seed});
+}
+function rockFade(x,y,z){
+  rockBursts.push({x,y,z,birth:FX.time,life:.26,seed:R()});
+  for(let i=0;i<22;i++){
+    const a=R()*TAU2,spd=1.6+R()*2;
+    rockBit(x+Math.cos(a)*.1,y+Math.sin(a)*.1,z+(R()-.5)*2,
+      Math.cos(a)*spd,Math.sin(a)*spd,6+R()*14,
+      .18+R()*.12,.32+R()*.22,'shard',i%4===0,R());
+  }
+  for(let i=0;i<12;i++){
+    const a=R()*TAU2,spd=2+R()*2.5;
+    rockBit(x,y,z+(R()-.5)*3,Math.cos(a)*spd,Math.sin(a)*spd,8+R()*16,
+      .14+R()*.1,.16+R()*.12,'chip',i%3===0,R());
+  }
+  for(let i=0;i<26;i++){
+    const a=R()*TAU2,spd=1+R()*2;
+    rockBit(x,y,z,Math.cos(a)*spd,Math.sin(a)*spd,4+R()*12,
+      .12+R()*.1,.06+R()*.07,'grit',false,R());
+  }
+}
 function updateProj(pr){
   if(FX.time<pr.birth)return;
   if(pr.target&&!pr.target.dead){pr.x1=pr.target.x;pr.y1=pr.target.y;}
@@ -847,8 +872,14 @@ function updateProj(pr){
   let x,y;
   if(pr.track){
     // 逻辑弹道接管：位置完全取弹丸坐标，视觉不再做二次插值（否则会先慢后快、追在弹丸后面）
-    if(pr.track.dead){pr.done=true;if(!pr.track.fade&&pr.onArrive)pr.onArrive(pr.track.x,pr.track.y);return;}
-    if(FX.time-pr.birth>pr.dur*2.2){pr.done=true;return;}
+    if(pr.track.dead){
+      if(pr.trail==='rock'&&pr.track.fade)rockFade(pr.track.x,pr.track.y,pr.h||10);
+      pr.done=true;if(!pr.track.fade&&pr.onArrive)pr.onArrive(pr.track.x,pr.track.y);return;
+    }
+    if(FX.time-pr.birth>pr.dur*2.2){
+      if(pr.trail==='rock')rockFade(pr.x1,pr.y1,pr.h||pr.z1);
+      pr.done=true;return;
+    }
     x=pr.x1=pr.track.x;y=pr.y1=pr.track.y;
   }else{
     if(k>=1){pr.done=true;if(pr.onArrive)pr.onArrive(pr.x1,pr.y1);return;}
@@ -857,27 +888,33 @@ function updateProj(pr){
   // 弧高只作用在竖直分量：地面轨迹始终是逻辑弹道那条直线
   const h=pr.z0+(pr.z1-pr.z0)*k+pr.arc*Math.sin(Math.PI*k);
   pr.ix=x;pr.iy=y;pr.h=h;
-  const tr=TRAILS[pr.trail]||TRAILS.fire,col=rgb(pr.col||tr.col);
-  if(pr.trail==='fire'){
-    fireTrail(pr,x,y,h);
+  if(pr.trail==='rock'){
+    // 飞行本体由 2D 主画布绘制；这里只撒少量砂砾，避免拖出光带或烟
+    if(R()<.55)rockBit(x,y,h,(R()-.5)*.7,(R()-.5)*.7,(R()-.5)*4,
+      .14+R()*.1,.08+R()*.07,'grit',false,R());
   }else{
-    for(let i=0;i<2;i++){
-      spawn(pools.add,{x:x+(R()-.5)*.12,y:y+(R()-.5)*.12,
-        vx:(R()-.5)*.8,vy:(R()-.5)*.8,z0:h+(R()-.5)*5,vz:(R()-.5)*14,grav:20,drag:2,
-        life:tr.life*(.7+R()*.6),size:tr.size*(.5+R()*.7),
-        shape:tr.shape2!==undefined&&R()<.4?tr.shape2:tr.shape,
-        col:tr.col2&&R()<.5?rgb(tr.col2):col,
-        seed:R(),spin:(R()-.5)*5});
+    const tr=TRAILS[pr.trail]||TRAILS.fire,col=rgb(pr.col||tr.col);
+    if(pr.trail==='fire'){
+      fireTrail(pr,x,y,h);
+    }else{
+      for(let i=0;i<2;i++){
+        spawn(pools.add,{x:x+(R()-.5)*.12,y:y+(R()-.5)*.12,
+          vx:(R()-.5)*.8,vy:(R()-.5)*.8,z0:h+(R()-.5)*5,vz:(R()-.5)*14,grav:20,drag:2,
+          life:tr.life*(.7+R()*.6),size:tr.size*(.5+R()*.7),
+          shape:tr.shape2!==undefined&&R()<.4?tr.shape2:tr.shape,
+          col:tr.col2&&R()<.5?rgb(tr.col2):col,
+          seed:R(),spin:(R()-.5)*5});
+      }
     }
+    if(pr.trail==='meteor'&&R()<.7)
+      spawn(pools.alpha,{x,y,z0:h,vz:8,grav:-6,drag:1,life:.7,size:13,shape:6,col:rgb('#7d8f96')});
+    if(pr.trail==='sword'){
+      const dx=pr.x1-pr.x0,dy=pr.y1-pr.y0;
+      const sa=Math.atan2((dx+dy)*16,(dx-dy)*32);
+      spawn(pools.add,{x,y,z0:h,life:.12,size:17,shape:4,col:rgb('#dffaff'),seed:-sa/TAU2,spin:0,hold:true});
+    }
+    if(pr.trail!=='fire')spawn(pools.add,{x,y,z0:h,life:.1,size:pr.trail==='meteor'?22:14,shape:7,col});
   }
-  if(pr.trail==='meteor'&&R()<.7)
-    spawn(pools.alpha,{x,y,z0:h,vz:8,grav:-6,drag:1,life:.7,size:13,shape:6,col:rgb('#7d8f96')});
-  if(pr.trail==='sword'){
-    const dx=pr.x1-pr.x0,dy=pr.y1-pr.y0;
-    const sa=Math.atan2((dx+dy)*16,(dx-dy)*32);
-    spawn(pools.add,{x,y,z0:h,life:.12,size:17,shape:4,col:rgb('#dffaff'),seed:-sa/TAU2,spin:0,hold:true});
-  }
-  if(pr.trail!=='fire')spawn(pools.add,{x,y,z0:h,life:.1,size:pr.trail==='meteor'?22:14,shape:7,col});
   pr.px=x;pr.py=y;pr.ph=h;
 }
 
@@ -1111,7 +1148,15 @@ FX.spell=function(def,tx,ty,elem,targets,shot){
     });
     if(!ts.length)after(.1,()=>burstW(P.x,P.y,{n:20,col:ARC,spd:2,life:.4,size:4,shape:3}));
   }else if(id==='sp_rock'){
-    projectile({from:[P.x,P.y,18],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:shot?6:18,trail:'rock',col:ROCK,
+    // 抛掷起手：石屑只在脚边磕一下，不点火、不拉光带
+    const sa=Math.atan2(ty-P.y,tx-P.x);
+    for(let i=0;i<sc(4);i++){
+      const side=(R()-.5)*.7,ba=sa+Math.PI+(R()-.5)*.9;
+      rockBit(P.x+Math.cos(sa+Math.PI/2)*side,P.y+Math.sin(sa+Math.PI/2)*side,3+R()*4,
+        Math.cos(ba)*(.5+R()*.7),Math.sin(ba)*(.5+R()*.7),10+R()*12,
+        .16+R()*.12,.18+R()*.12,'chip',i%2===0,R());
+    }
+    projectile({from:[P.x,P.y,14],to:[tx,ty,8],track:shot,dur:(shot&&shot.dur)||spellFxTime(def),arc:shot?4:12,trail:'rock',col:ROCK,spin:7,
       onArrive:(x,y)=>{
         flashW(x,y,{col:'#e8dcc4',size:28,life:.16});
         ringW(x,y,{r0:.2,r1:(def.radius||1)+.4,col:ROCK,life:.3,width:.1});
@@ -1316,7 +1361,7 @@ FX.clear=function(){
     pool.cursor=0;pool.lo=0;pool.hi=pool.n-1;pool.wrap=true;pool.liveUntil=0;
   }
   for(const q of quads){q.active=false;q.mesh.visible=false;}
-  projs.length=0;events.length=0;FX._detN=0;FX._magePending=false;
+  projs.length=0;events.length=0;rockBits.length=0;rockBursts.length=0;FX._detN=0;FX._magePending=false;
   if(veil)veil.visible=false;
   wasActive=true;
 };
@@ -1349,6 +1394,8 @@ FX.frame=function(){
   for(let i=events.length-1;i>=0;i--){
     if(events[i].t<=FX.time){const e=events.splice(i,1)[0];e.fn();}
   }
+  for(let i=rockBits.length-1;i>=0;i--)if(FX.time-rockBits[i].birth>rockBits[i].life)rockBits.splice(i,1);
+  for(let i=rockBursts.length-1;i>=0;i--)if(FX.time-rockBursts[i].birth>rockBursts[i].life)rockBursts.splice(i,1);
   for(let i=projs.length-1;i>=0;i--){updateProj(projs[i]);if(projs[i].done)projs.splice(i,1);}
   for(const q of quads)if(q.active)updateQuad(q);
   if(veil&&veil.visible){
@@ -1414,7 +1461,7 @@ FX.init=async function(){
   FX.on=true;
   FX._dbg={get backend(){return FX.backend;},get pools(){return pools;},get renderer(){return renderer;},
     get gpu(){return gpu;},get scene(){return scene;},get projs(){return projs;},
-    get quads(){return quads;},get events(){return events;},
+    get quads(){return quads;},get events(){return events;},get rockBits(){return rockBits;},get rockBursts(){return rockBursts;},
     slash:(x,y,a,r,h)=>slashW(x,y,a,r,{life:.6,half:h===undefined?1.1:h})};
 };
 /* 特效入口统一保护：后端未就绪时静默跳过，不再回退 Canvas 2D。 */

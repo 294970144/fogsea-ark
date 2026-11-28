@@ -151,7 +151,7 @@ const CDEFS={
     name:'魔法飞弹',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,dmg:14,missiles:3,
     status:{kind:'mark',n:1},desc:'核心奥术法术：向最近 3 个敌人各发射 1 枚 14 伤害飞弹。',w:0},
   sp_rock:{id:'sp_rock',kind:'instant',target:'point',shape:'single',sigil:true,proj:true,fx:'sp_rock',q:2,
-    name:'投石',icon:'stone',color:'#c8b89a',cost:{},radius:1.1,dmg:52,castDelay:.9,shotSpeed:9,
+    name:'投石',icon:'stone',color:'#c8b89a',cost:{},radius:1.1,dmg:52,castDelay:.9,shotSpeed:4.5,
     desc:'投出石块，命中造成 52 点物理伤害。单发高伤，施法延迟较长。',brief:'52 物理伤害',w:10,wNonMage:6},
   manawell:{id:'manawell',kind:'build',build:'manawell',cls:'mage',
     name:'法力之井',icon:'well',color:'#57e6ff',cost:{wood:10,crys:6},

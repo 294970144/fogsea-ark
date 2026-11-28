@@ -31,6 +31,70 @@ function drawRock(n){
   ctx.fillStyle='#8b9aa1';ctx.beginPath();
   ctx.moveTo(px-10*s+sh,py-16*s);ctx.lineTo(px+2*s+sh,py-22*s);ctx.lineTo(px+6*s+sh,py-12*s);ctx.lineTo(px-6*s+sh,py-9*s);ctx.closePath();ctx.fill();
 }
+/* 投掷石不是场地石复制品：独立旋转三帧、深色包边、石灰岩色阶。
+   飞行只掉砂砾；碎裂按「短闪 + 裂纹环 + 石片/碎石/砂粒」分层爆发。 */
+const THROW_ROCK_FRAMES=[
+  {body:[[-14,1],[-10,-10],[-2,-17],[9,-15],[15,-6],[13,4],[3,8],[-9,7]],
+   face:[[-10,-10],[-2,-17],[4,-10],[-4,-6]],shade:[[4,-10],[15,-6],[13,4],[5,4]]},
+  {body:[[-15,-2],[-8,-13],[3,-17],[12,-11],[15,-1],[9,7],[-3,9],[-12,5]],
+   face:[[-8,-13],[3,-17],[7,-9],[-2,-6]],shade:[[7,-9],[15,-1],[9,7],[3,3]]},
+  {body:[[-13,3],[-12,-7],[-3,-16],[8,-15],[15,-7],[12,3],[2,8],[-8,6]],
+   face:[[-12,-7],[-3,-16],[3,-9],[-6,-4]],shade:[[3,-9],[15,-7],[12,3],[4,2]]}
+];
+function polygon(pts,fill,stroke,lw){
+  ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke();}
+}
+function drawThrowRock(x,y,z,phase,scale){
+  const p=proj(x,y),f=THROW_ROCK_FRAMES[Math.abs(Math.floor(phase))%3];
+  ctx.save();ctx.translate(p[0],p[1]-z);ctx.rotate(Math.sin(phase*2.1)*.16);ctx.scale(scale,scale);
+  polygon(f.body,'#6d7b82','#2f3b41',2);
+  polygon(f.face,'#9aa8ad',null,0);
+  polygon(f.shade,'#4f5d64',null,0);
+  ctx.restore();
+}
+function drawRockFragment(x,y,z,b){
+  const p=proj(x,y),s=b.scale,kind=b.kind;
+  ctx.save();ctx.translate(p[0],p[1]-z);ctx.rotate(b.seed*TAU);
+  if(kind==='grit'){ctx.fillStyle=b.light?'#9aa8ad':'#435158';ctx.fillRect(-s,-s*.55,s*2,s*1.1);}
+  else if(kind==='chip'){polygon([[-3*s,-2*s],[2*s,-3*s],[3*s,1*s],[-1*s,2*s]],b.light?'#8b9aa1':'#5b6970',null,0);}
+  else{polygon([[-4*s,-2*s],[-1*s,-4*s],[3*s,-2*s],[4*s,2*s],[-2*s,3*s]],b.light?'#8b9aa1':'#6d7b82','#334047',1);}
+  ctx.restore();
+}
+function drawRockBurst(b){
+  const p=proj(b.x,b.y),sx=p[0],sy=p[1]-b.z,t=(FX.time-b.birth)/b.life;
+  ctx.save();ctx.translate(sx,sy);
+  if(t<.22){const a=1-t/.22;ctx.globalAlpha=a;ctx.fillStyle='#c9d2d4';
+    ctx.beginPath();ctx.moveTo(0,-5-9*a);ctx.lineTo(4+7*a,0);ctx.lineTo(0,5+9*a);ctx.lineTo(-4-7*a,0);
+    ctx.closePath();ctx.fill();}
+  if(t>.1){const q=(t-.1)/.9,r=3+q*20;ctx.globalAlpha=(1-q)*.65;
+    ctx.strokeStyle='#9aa8ad';ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.ellipse(0,0,r,r*.46,0,0,TAU);ctx.stroke();
+    ctx.strokeStyle='#3b484f';ctx.lineWidth=1;
+    for(let i=0;i<6;i++){const a=b.seed*TAU+i*TAU/6,len=5+q*13;
+      ctx.beginPath();ctx.moveTo(Math.cos(a)*3,Math.sin(a)*1.6);
+      ctx.lineTo(Math.cos(a)*len,Math.sin(a)*len*.5);ctx.stroke();}}
+  ctx.restore();ctx.globalAlpha=1;
+}
+function drawRockShots(){
+  const dbg=typeof FX!=='undefined'?FX._dbg:null;
+  if(!dbg)return;
+  for(const pr of dbg.projs||[]){
+    if(pr.trail==='rock'&&pr.ix!==undefined)
+      drawThrowRock(pr.ix,pr.iy,pr.h||12,(FX.time-pr.birth)*11,.9);
+  }
+  for(const b of dbg.rockBursts||[])drawRockBurst(b);
+  for(const b of dbg.rockBits||[]){
+    const age=FX.time-b.birth;
+    if(age<0||age>b.life)continue;
+    const x=b.x+b.vx*age,y=b.y+b.vy*age,z=b.z+b.vz*age-.5*b.grav*age*age;
+    ctx.globalAlpha=age>b.life*.8?Math.max(0,1-(age-b.life*.8)/(b.life*.2)):1;
+    drawRockFragment(x,y,z,b);
+  }
+  ctx.globalAlpha=1;
+}
 function drawCrys(n){
   const[px,py]=proj(n.x,n.y),sh=n.shake>0?rand(-2,2):0;
   drawShadow(px,py+2,13*n.s,.25);
@@ -428,6 +492,7 @@ function render(){
     else if(s.type==='fog'){ctx.drawImage(GLOW.violet,px-9,py-21,18,18);
       ctx.fillStyle='#e0ccff';ctx.beginPath();ctx.arc(px,py-12,2.6,0,TAU);ctx.fill();}
   }
+  drawRockShots();
   for(const p of parts){
     const pr=proj(p.x,p.y),px=pr[0],py=pr[1],t=p.life/p.max;
     if(p.ring){
