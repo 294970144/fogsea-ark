@@ -313,6 +313,9 @@ function fireWeaponCast(w,tgt,cast,mul){
     }
     const ctx={mode:'weapon'};
     if(path)ctx.path=path;
+    // 锁定目标同时写进弹道上下文：飞行途中由实体自己撞节点结算，
+    // 不能只留在 resolve 闭包里——那样弹丸经过节点时检测不到，落点也不结算。
+    if(node)ctx.node=node;
     const shot=queueSpellHit(def,tx,ty,{...ctx,resolve:(dd,x,y)=>weaponHitAt(dd,x,y,k,node,pl.ember)});
     spellFx(def,tx,ty,def.elem,spellTargets(def,tx,ty),shot);
   }
