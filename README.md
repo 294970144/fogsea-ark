@@ -165,6 +165,7 @@ js/10-ui.js         HUD、图鉴
 js/11-main.js       流程、主循环、菜单视图
 tests/regression.js 隔离回归脚本
 docs/               设计文档、流程说明与审计记录
+docs/wiki/          代码 Wiki（从 docs/wiki/README.md 进入）
 ```
 
 ### 回归测试
