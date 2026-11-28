@@ -3,22 +3,27 @@
 function weaponAttackRange(w=weaponDef(P.weapon)){
   return w.attack==='spell'?TUNE.spell.range*(P.range/TUNE.player.baseRange):P.range;
 }
-/* 节奏按 Noita 语义分两段：castDelay=轮内两次施放之间，recharge=一轮法术全部打完到队列回位。
-   祝福与天赋的 atkSpd 对两段同除；迅捷刻印只压充能（见 weaponRechargeTime）。 */
-function weaponCastDelay(w=weaponDef(P.weapon)){
-  return (w.castDelay||0)/P.atkSpd;
+function cardCastDelay(def){ return ((def&&def.castDelay)||0)/P.atkSpd; }
+function weaponShowDefs(w=weaponDef(P.weapon)){
+  if(w.attack!=='spell')return [];
+  return P.weapon===w.id?weaponSpells(w):(w.startSigils||[]).map(id=>CDEFS[id]).filter(Boolean);
 }
-/* 迅捷把整轮缩短 1/spd（spd 是乘算系数，1=无迅捷），缺口全部从 recharge 扣；扣不够就到底，不动 castDelay。 */
+function roundCastDelay(w=weaponDef(P.weapon)){
+  let s=0;for(const d of weaponShowDefs(w))s+=cardCastDelay(d);return s;
+}
+function weaponCastDelay(w=weaponDef(P.weapon)){
+  const defs=weaponShowDefs(w);return defs.length?roundCastDelay(w)/defs.length:0;
+}
+/* 迅捷只压充能：整轮缩短 1/spd，缺口从 recharge 扣，不动施放延迟。 */
 function weaponRechargeTime(w=weaponDef(P.weapon),casts=1){
   const rc=(w.recharge||0)/P.atkSpd;
   const spd=sigilMods().spd;
   if(!(spd>1)||rc<=0)return rc;
-  const cycle=rc+Math.max(0,casts-1)*weaponCastDelay(w);
+  const cycle=rc+roundCastDelay(w);
   return Math.max(0,rc-cycle*(1-1/spd));
 }
 function weaponCastCost(w,cast){
-  const extra=((cast.def&&cast.def.castDelay)||0)/P.atkSpd;
-  return (cast.last?weaponRechargeTime(w,cast.n):weaponCastDelay(w))+extra;
+  return cardCastDelay(cast.def)+(cast.last?weaponRechargeTime(w,cast.n):0);
 }
 /* 原生散布：每次施放在瞄准角上抖动 ±TUNE.weapon.spread 度，避免连发弹道完全重合。
    走独立随机流，不消耗 Math.random——否则会连带位移刷怪与掉落的随机序列。 */
@@ -52,17 +57,17 @@ function setWeaponCd(w,cast){
 function weaponAttackInterval(w=weaponDef(P.weapon)){
   if(w.attack!=='spell')return weaponRechargeTime(w,1);
   const n=Math.max(1,weaponSpells(w).length);
-  return ((n-1)*weaponCastDelay(w)+weaponRechargeTime(w,n))/n;
+  return (roundCastDelay(w)+weaponRechargeTime(w,n))/n;
 }
 function weaponTimingStats(w=weaponDef(P.weapon)){
   const mana=P.weapon===w.id?weaponManaCost():0;
   let rows;
   if(w.attack!=='spell')rows=[['攻击间隔',weaponRechargeTime(w,1).toFixed(2)+' 秒']];
   else{
-    const n=P.weapon===w.id?Math.max(1,weaponSpells(w).length):(w.slots||1);
-    rows=[['施放延迟',weaponCastDelay(w).toFixed(2)+' 秒'],
+    const defs=weaponShowDefs(w),n=Math.max(1,defs.length),sum=roundCastDelay(w);
+    rows=[['施放延迟',(sum/n).toFixed(2)+' 秒'],
       ['充能',((w.recharge||0)/P.atkSpd).toFixed(2)+' 秒'],
-      ['平均每发',(((n-1)*weaponCastDelay(w)+weaponRechargeTime(w,n))/n).toFixed(2)+' 秒']];
+      ['平均每发',((sum+weaponRechargeTime(w,n))/n).toFixed(2)+' 秒']];
   }
   if(mana>0)rows.push(['每发雾能',mana+' 点']);
   return rows;

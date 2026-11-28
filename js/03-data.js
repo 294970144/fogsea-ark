@@ -127,35 +127,35 @@ const CDEFS={
   sp_arcbolt:{id:'sp_arcbolt',shape:'single',elem:'arcane',weaponAttack:true,dmg:10,
     status:{kind:'mark',n:1}},
   sp_kindling:{id:'sp_kindling',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,sigil:true,fx:'sp_fireball',
-    name:'引火术',icon:'flame',color:ELEMCOL.fire,cost:{},mana:15,radius:1.35,dmg:8,spreadFire:true,
+    name:'引火术',icon:'flame',color:ELEMCOL.fire,cost:{},mana:15,radius:1.35,dmg:8,spreadFire:true,castDelay:.55,
     status:{kind:'burn',n:1},desc:'1.35 格内造成 8 点火伤并附加灼烧，可引燃邻近敌人与树木。',w:10,wNonMage:7},
   sp_frostpatch:{id:'sp_frostpatch',kind:'instant',target:'point',shape:'point',elem:'frost',cls:'mage',basic:true,sigil:true,fx:'sp_frostbolt',
-    name:'霜痕',icon:'snow',color:ELEMCOL.frost,cost:{},mana:15,radius:1.9,dmg:8,
+    name:'霜痕',icon:'snow',color:ELEMCOL.frost,cost:{},mana:15,radius:1.9,dmg:8,castDelay:.55,
     status:{kind:'chill',n:2},desc:'1.9 格内造成 8 点冰伤并附加 2 层冰缓。',w:10,wNonMage:7},
   sp_arcaneneedle:{id:'sp_arcaneneedle',kind:'instant',target:'point',shape:'single',elem:'arcane',cls:'mage',basic:true,sigil:true,fx:'sp_arcbolt',
-    name:'奥术针',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,radius:1.1,dmg:24,
+    name:'奥术针',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,radius:1.1,dmg:24,castDelay:.60,
     status:{kind:'mark',n:1},desc:'命中落点 1.1 格内最近的敌人，造成 24 点奥术伤害并附加标记。',w:10,wNonMage:7},
   sp_emberburst:{id:'sp_emberburst',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',basic:true,sigil:true,
     name:'余烬爆发',icon:'emberburst',color:ELEMCOL.fire,cost:{},mana:30,radius:2.2,dmg:30,
     status:{kind:'burn',n:2},desc:'指定区域 2.2 格内 30 火焰伤害，附加 2 层灼烧。',w:10,wNonMage:5},
   // 烈焰冲击是天降：落点固定、垂直落下，没有水平弹道可拦，故不标 proj
   sp_flameimpact:{id:'sp_flameimpact',kind:'instant',target:'point',shape:'point',elem:'fire',cls:'mage',core:true,sigil:true,
-    name:'烈焰冲击',icon:'flame',color:ELEMCOL.fire,cost:{},mana:45,radius:1.9,dmg:55,
+    name:'烈焰冲击',icon:'flame',color:ELEMCOL.fire,cost:{},mana:45,radius:1.9,dmg:55,castDelay:1.20,
     status:{kind:'burn',n:3},desc:'核心火系法术：1.9 格内 55 火焰伤害，附加 3 层灼烧。',w:0},
   sp_flamedetonate:{id:'sp_flamedetonate',kind:'instant',target:'point',shape:'consume',elem:'fire',cls:'mage',core:true,sigil:true,
-    name:'火焰引爆',icon:'emberburst',color:ELEMCOL.fire,cost:{},mana:30,radius:2.6,dmg:12,
+    name:'火焰引爆',icon:'emberburst',color:ELEMCOL.fire,cost:{},mana:30,radius:2.6,dmg:12,castDelay:1.00,
     desc:'引爆目标身上所有灼烧层数，每层造成 12 火焰伤害。',w:0},
   sp_blizzard:{id:'sp_blizzard',kind:'instant',target:'self',shape:'global',elem:'frost',cls:'mage',core:true,sigil:true,
-    name:'暴风雪',icon:'snow',color:ELEMCOL.frost,cost:{},mana:45,dmg:26,
+    name:'暴风雪',icon:'snow',color:ELEMCOL.frost,cost:{},mana:45,dmg:26,castDelay:1.30,
     status:{kind:'chill',n:2},desc:'核心冰系法术：对所有敌人造成 26 冰霜伤害，附加 2 层冰缓。',w:0},
   sp_frostring:{id:'sp_frostring',kind:'instant',target:'self',shape:'self',elem:'frost',cls:'mage',core:true,sigil:true,
-    name:'冰封之环',icon:'snow',color:ELEMCOL.frost,cost:{},mana:30,radius:3.2,dmg:18,
+    name:'冰封之环',icon:'snow',color:ELEMCOL.frost,cost:{},mana:30,radius:3.2,dmg:18,castDelay:1.00,
     status:{kind:'freeze',n:1},desc:'核心冰系法术：冻结周围 3.2 格内敌人 1 秒并造成 18 冰霜伤害。',w:0},
   sp_magicmissile:{id:'sp_magicmissile',kind:'instant',target:'self',shape:'multi',elem:'arcane',cls:'mage',core:true,sigil:true,proj:true,
-    name:'魔法飞弹',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,dmg:14,missiles:3,
+    name:'魔法飞弹',icon:'rune',color:ELEMCOL.arcane,cost:{},mana:15,dmg:14,missiles:3,castDelay:.85,
     status:{kind:'mark',n:1},desc:'核心奥术法术：向最近 3 个敌人各发射 1 枚 14 伤害飞弹。',w:0},
   sp_rock:{id:'sp_rock',kind:'instant',target:'point',shape:'single',sigil:true,proj:true,fx:'sp_rock',q:2,
-    name:'投石',icon:'stone',color:'#c8b89a',cost:{},radius:1.1,dmg:52,castDelay:.9,shotSpeed:4.5,
+    name:'投石',icon:'stone',color:'#c8b89a',cost:{},radius:1.1,dmg:52,castDelay:.90,shotSpeed:4.5,
     desc:'投出石块，命中造成 52 点物理伤害。单发高伤，施法延迟较长。',brief:'52 物理伤害',w:10,wNonMage:6},
   manawell:{id:'manawell',kind:'build',build:'manawell',cls:'mage',
     name:'法力之井',icon:'well',color:'#57e6ff',cost:{wood:10,crys:6},
@@ -164,15 +164,15 @@ const CDEFS={
     desc:'职业启动器：转职为法师，以法力施法。生命上限降低，手牌上限提高。',w:0},
   /* ---- 熔铸产物：只能由熔铸获得，不进奖励池，也不能再次作为熔铸源 ---- */
   fuse_steam:{id:'fuse_steam',kind:'instant',target:'point',shape:'point',elem:'fire',elem2:'frost',fuseOut:true,q:2,sigil:true,fx:'sp_emberburst',
-    name:'霜火交攻',icon:'steam',color:'#9ad7e8',cost:{},mana:30,radius:2.0,dmg:34,
+    name:'霜火交攻',icon:'steam',color:'#9ad7e8',cost:{},mana:30,radius:2.0,dmg:34,castDelay:.95,
     status:{kind:'burn',n:2},status2:{kind:'chill',n:2},
     desc:'指定区域 2 格内 34 点火焰伤害，附加 2 层灼烧与 2 层冰缓。霜火相激，可引爆蒸汽爆炸。',w:0},
   fuse_ember:{id:'fuse_ember',kind:'instant',target:'point',shape:'point',elem:'fire',elem2:'arcane',fuseOut:true,q:2,sigil:true,fx:'sp_emberburst',
-    name:'烬纹',icon:'emberburst',color:'#ff9d5c',cost:{},mana:30,radius:1.8,dmg:30,
+    name:'烬纹',icon:'emberburst',color:'#ff9d5c',cost:{},mana:30,radius:1.8,dmg:30,castDelay:.90,
     status:{kind:'burn',n:2},status2:{kind:'mark',n:1},
     desc:'指定区域 1.8 格内 30 点火焰伤害，附加 2 层灼烧与 1 层奥术标记。火与奥术共鸣，可引发共鸣扩散。',w:0},
   fuse_frostarc:{id:'fuse_frostarc',kind:'instant',target:'point',shape:'point',elem:'frost',elem2:'arcane',fuseOut:true,q:2,sigil:true,fx:'sp_frostbolt',
-    name:'霜纹',icon:'snow',color:'#9ecbff',cost:{},mana:30,radius:1.8,dmg:28,
+    name:'霜纹',icon:'snow',color:'#9ecbff',cost:{},mana:30,radius:1.8,dmg:28,castDelay:.90,
     status:{kind:'chill',n:2},status2:{kind:'mark',n:1},
     desc:'指定区域 1.8 格内 28 点冰霜伤害，附加 2 层冰缓与 1 层奥术标记。冰与奥术共鸣，可引发共鸣扩散。',w:0},
   fuse_focus:{id:'fuse_focus',kind:'instant',target:'self',fuseOut:true,q:2,
@@ -196,15 +196,16 @@ const CDEFS={
 /* 法术刻印：带 sigil 标记的卡 —— 既能装入法杖槽自动施放，也能当瞬发牌拖地释放。
    效果数值从武器攻击模板派生，避免同一份数值写两处。 */
 const SIGIL_SPELLS=[
-  {id:'sig_flame',from:'sp_fireball',name:'火焰法术',short:'火焰',icon:'flame',color:ELEMCOL.fire,mana:15,w:8,wNonMage:6},
-  {id:'sig_frost',from:'sp_frostbolt',name:'冰霜法术',short:'冰霜',icon:'snow',color:ELEMCOL.frost,mana:15,w:8,wNonMage:6},
-  {id:'sig_arcane',from:'sp_arcbolt',name:'奥术法术',short:'奥术',icon:'rune',color:ELEMCOL.arcane,mana:15,w:8,wNonMage:6}
+  {id:'sig_flame',from:'sp_fireball',name:'火焰法术',short:'火焰',icon:'flame',color:ELEMCOL.fire,mana:15,castDelay:.95,w:8,wNonMage:6},
+  {id:'sig_frost',from:'sp_frostbolt',name:'冰霜法术',short:'冰霜',icon:'snow',color:ELEMCOL.frost,mana:15,castDelay:.80,w:8,wNonMage:6},
+  {id:'sig_arcane',from:'sp_arcbolt',name:'奥术法术',short:'奥术',icon:'rune',color:ELEMCOL.arcane,mana:15,castDelay:.42,w:8,wNonMage:6}
 ];
 for(const s of SIGIL_SPELLS){
   const src=CDEFS[s.from];
   CDEFS[s.id]={id:s.id,kind:'instant',target:'point',sigil:true,short:s.short,
     fx:src.fx||src.id,
     shape:src.shape,elem:src.elem,radius:src.radius,dmg:src.dmg,spreadFire:src.spreadFire,status:src.status,proj:src.proj,
+    castDelay:s.castDelay,
     name:s.name,icon:s.icon,color:s.color,cost:{},mana:s.mana,
     desc:`${src.dmg} 点${ELEMNAME[src.elem]}伤害。`,
     brief:`${src.dmg} ${ELEMNAME[src.elem]}伤害`,w:s.w,wNonMage:s.wNonMage};
@@ -279,17 +280,16 @@ function fusionRecipesOf(id){
   return FUSION_RECIPES.filter(r=>fusionSide(r,'a',id)||fusionSide(r,'b',id));
 }
 /* 武器是局前选择、局内固定的基础攻击来源；法杖复用 CDEFS 中的攻击模板。
-   节奏参照 Noita：castDelay = 同一轮内两次施放之间的冷却；recharge = 一轮内所有法术施放完后的冷却，
-   队列回到第一槽再重来。剑一轮只有一次挥砍，故 castDelay=0、整段间隔落在 recharge 上。 */
+   recharge = 一轮打完到队列回位的冷却；施放延迟由各法术卡的 castDelay 提供。 */
 const WEAPONS={
   sword:{id:'sword',name:'剑',route:'近战路线',icon:'sword',color:'#ffb454',art:'assets/weapons/sword.svg',attack:'melee',slots:3,
     castDelay:0,recharge:.42,
     desc:'挥砍、剑气、迅击。'},
-  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',castDelay:.95,recharge:1.05,slots:6,startSigils:['sig_flame'],
+  flame:{id:'flame',name:'火焰法杖',route:'火焰路线',icon:'flame',color:ELEMCOL.fire,art:'assets/weapons/flame.svg',attack:'spell',spell:'sp_fireball',castDelay:0,recharge:1.05,slots:6,startSigils:['sig_flame'],
     desc:'范围灼烧，火焰蔓延至相邻敌人和树木。'},
-  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',castDelay:.80,recharge:.88,slots:6,startSigils:['sig_frost'],
+  frost:{id:'frost',name:'冰法杖',route:'冰霜路线',icon:'snow',color:ELEMCOL.frost,art:'assets/weapons/frost.svg',attack:'spell',spell:'sp_frostbolt',castDelay:0,recharge:.88,slots:6,startSigils:['sig_frost'],
     desc:'范围冰缓，叠加减速控制敌群。'},
-  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',castDelay:.42,recharge:.46,slots:6,startSigils:['sig_arcane'],
+  arcane:{id:'arcane',name:'奥术法杖',route:'奥术路线',icon:'rune',color:ELEMCOL.arcane,art:'assets/weapons/arcane.svg',attack:'spell',spell:'sp_arcbolt',castDelay:0,recharge:.46,slots:6,startSigils:['sig_arcane'],
     desc:'高频打击单个目标，附加奥术标记。'}
 };
 const WEAPON_IDS=Object.keys(WEAPONS);

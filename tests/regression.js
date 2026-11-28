@@ -731,8 +731,13 @@ testCase('R15_weapon', () => {
   }
   { // R16_weapon_auto_attacks
     const env = makeEnv();
-    // 第三列是开局只装一张刻印时的冷却：一轮仅一发，打完直接进充能。
-    const expected = { sword: [12, 12, .42], flame: [20, 20, 1.05], frost: [11, 11, .88], arcane: [10, 0, .46] };
+    // 第三列是开局只装一张刻印时的冷却：一轮仅一发，按该卡延迟 + 充能。
+    const expected = {
+      sword: [12, 12, .42],
+      flame: [20, 20, .95 + 1.05],
+      frost: [11, 11, .80 + .88],
+      arcane: [10, 0, .42 + .46]
+    };
     const weaponIds = env.run('WEAPON_IDS');
     for (const id of weaponIds) {
       env.run(`initRun();S.mode='play';P.weapon='${id}';
@@ -1639,12 +1644,13 @@ testCase('R30_weapon', () => {
       foes.length=0;nodes.length=0;
       const seq=[];
       for(let i=0;i<4;i++){const c=nextWeaponCast();seq.push([c.slot,c.def.id,c.last,+weaponCastCost(w,c).toFixed(6)]);}
-      const cd=weaponCastDelay(w),rcBase=(w.recharge||0)/P.atkSpd,rc=weaponRechargeTime(w,3);
-      const cycle=2*cd+rc,cycleBase=2*cd+rcBase;
+      const cd0=cardCastDelay(CDEFS.sig_flame),cd1=cardCastDelay(CDEFS.sig_frost),cd2=cardCastDelay(CDEFS.sig_arcane);
+      const rcBase=(w.recharge||0)/P.atkSpd,rc=weaponRechargeTime(w,3);
+      const cycle=cd0+cd1+cd2+rc,cycleBase=cd0+cd1+cd2+rcBase;
       // 槽位变动不改变轮内顺序：抽走槽 3 后，剩余 1→4 继续
       P.sigils[3]=null;P.sigCast=1;
       const after=nextWeaponCast(),after2=nextWeaponCast();
-      // 剑：castDelay=0，整段间隔落在充能上，迅捷只压这一段
+      // 剑：无施放延迟，整段间隔落在充能上，迅捷只压这一段
       save.weapon='sword';initRun();S.mode='play';P.atkSpd=1;
       const sw=weaponDef('sword');
       P.sigils=blank(sw.slots);
@@ -1657,18 +1663,19 @@ testCase('R30_weapon', () => {
         fireCd:99,spawnCd:99,stompCd:99,px:P.x+1.1,py:P.y,stuckT:0,stuckN:0,detourT:0,detourSign:1,phaseT:0,strafe:1});
       rebuildFoeGrid();
       P.atkCd=0;autoAttack();const swordHitCd=P.atkCd;
-      return JSON.stringify({seq,cd,rc,cycle,cycleBase,
+      return JSON.stringify({seq,cd0,cd1,cd2,rc,cycle,cycleBase,
         after:[after.slot,after.def.id],after2:[after2.slot,after2.def.id],
         swordCd,swordPlain,swordSwift,swordCdSwift,swordHitCd});
     })()`);
     assert.deepEqual(out.seq.map(x => x[0]), [1, 3, 4, 1]);
     assert.deepEqual(out.seq.map(x => x[1]), ['sig_flame', 'sig_frost', 'sig_arcane', 'sig_flame']);
     assert.deepEqual(out.seq.map(x => x[2]), [false, false, true, false]);
-    // 轮内两次施放走 castDelay，末发走充能
-    assert.equal(out.seq[0][3], Number(out.cd.toFixed(6)));
-    assert.equal(out.seq[1][3], Number(out.cd.toFixed(6)));
-    assert.equal(out.seq[2][3], Number(out.rc.toFixed(6)));
-    // 迅捷只压充能：整轮缩短 1/1.15，castDelay 不动
+    // 轮内每发按各自卡的 castDelay，末发额外叠加充能
+    assert.equal(out.seq[0][3], Number(out.cd0.toFixed(6)));
+    assert.equal(out.seq[1][3], Number(out.cd1.toFixed(6)));
+    assert.equal(out.seq[2][3], Number((out.cd2 + out.rc).toFixed(6)));
+    assert.equal(out.seq[3][3], Number(out.cd0.toFixed(6)));
+    // 迅捷只压充能：整轮缩短 1/1.15，各卡施放延迟不动
     assert.ok(Math.abs(out.cycleBase / 1.15 - out.cycle) < 1e-9);
     assert.deepEqual([out.after, out.after2, out.swordCd], [[1, 'sig_flame'], [4, 'sig_arcane'], 0]);
     assert.ok(Math.abs(out.swordPlain - .42) < 1e-9);
